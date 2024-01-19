@@ -1,6 +1,12 @@
 use regex::Regex;
 
 #[derive(PartialEq, Eq, Debug)]
+pub struct SourceLocation {
+    pub line: usize,
+    pub column: usize,
+}
+
+#[derive(PartialEq, Eq, Debug)]
 pub enum TokenType {
     Identifier,
     IntegerLiteral,
@@ -10,6 +16,7 @@ pub enum TokenType {
 pub struct Token {
     pub token_type: TokenType,
     pub value: String,
+    pub location: SourceLocation,
 }
 
 pub fn tokenize(source: &str) -> Vec<Token> {
@@ -20,16 +27,36 @@ pub fn tokenize(source: &str) -> Vec<Token> {
 
     let mut current_token = String::new();
 
+    let mut line = 1;
+    let mut column = 0;
+    let mut token_start_column = 0;
+
     for c in source.chars() {
+        column += 1;
         if c.is_whitespace() {
             if current_token.len() > 0 {
                 tokens.push(Token {
                     token_type: get_token_type(&current_token, &identifier_regex, &integer_literal_regex),
                     value: current_token.clone(),
+                    location: SourceLocation {
+                        line,
+                        column: token_start_column,
+                    },
                 });
                 current_token.clear();
             }
+
+            if c == '\n' {
+                line += 1;
+                column = 0;
+            }
+
         } else {
+            // If current token is empty, set its start column here
+            if current_token.is_empty() {
+                token_start_column = column;
+            }
+
             current_token.push(c);
         }
     }
@@ -38,6 +65,10 @@ pub fn tokenize(source: &str) -> Vec<Token> {
         tokens.push(Token {
             token_type: get_token_type(&current_token, &identifier_regex, &integer_literal_regex),
             value: current_token.clone(),
+            location: SourceLocation {
+                line,
+                column: token_start_column,
+            },
         });
     }
 
@@ -58,17 +89,16 @@ fn get_token_type(
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn test_tokenize() {
-        let source = "if 3 while";
+        let source = "if 3 while\n123 123";
         let tokens = tokenize(source);
 
-        assert_eq!(tokens.len(), 3);
+        assert_eq!(tokens.len(), 5);
 
         assert_eq!(tokens[0].token_type, TokenType::Identifier);
         assert_eq!(tokens[0].value, "if");
@@ -78,5 +108,20 @@ mod tests {
 
         assert_eq!(tokens[2].token_type, TokenType::Identifier);
         assert_eq!(tokens[2].value, "while");
+
+        assert_eq!(tokens[0].location.line, 1);
+        assert_eq!(tokens[0].location.column, 1);
+
+        assert_eq!(tokens[1].location.line, 1);
+        assert_eq!(tokens[1].location.column, 4);
+
+        assert_eq!(tokens[2].location.line, 1);
+        assert_eq!(tokens[2].location.column, 6);
+
+        assert_eq!(tokens[3].location.line, 2);
+        assert_eq!(tokens[3].location.column, 1);
+
+        assert_eq!(tokens[4].location.line, 2);
+        assert_eq!(tokens[4].location.column, 5);
     }
 }

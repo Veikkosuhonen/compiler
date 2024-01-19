@@ -11,6 +11,7 @@ pub enum TokenType {
     Identifier,
     IntegerLiteral,
     Operator,
+    Punctuation,
 }
 
 #[derive(Debug)]
@@ -24,6 +25,7 @@ pub fn tokenize(source: &str) -> Vec<Token> {
     let identifier_regex: Regex = Regex::new(r"^[a-zA-Z_][a-zA-Z0-9_]*$").unwrap();
     let integer_literal_regex: Regex = Regex::new(r"^[0-9]+$").unwrap();
     let operator_regex: Regex = Regex::new(r"==|!=|<=|>=|\+|-|\*|/|=|<|>").unwrap();
+    let punctuation_regex: Regex = Regex::new(r"(|)|\{|\}|,|;").unwrap();
 
     let mut tokens: Vec<Token> = Vec::new();
 
@@ -38,7 +40,7 @@ pub fn tokenize(source: &str) -> Vec<Token> {
         if c.is_whitespace() {
             if current_token.len() > 0 {
                 tokens.push(Token {
-                    token_type: get_token_type(&current_token, &identifier_regex, &integer_literal_regex, &operator_regex),
+                    token_type: get_token_type(&current_token, &identifier_regex, &integer_literal_regex, &operator_regex, &punctuation_regex),
                     value: current_token.clone(),
                     location: SourceLocation {
                         line,
@@ -65,7 +67,7 @@ pub fn tokenize(source: &str) -> Vec<Token> {
 
     if current_token.len() > 0 {
         tokens.push(Token {
-            token_type: get_token_type(&current_token, &identifier_regex, &integer_literal_regex, &operator_regex),
+            token_type: get_token_type(&current_token, &identifier_regex, &integer_literal_regex, &operator_regex, &punctuation_regex),
             value: current_token.clone(),
             location: SourceLocation {
                 line,
@@ -82,6 +84,7 @@ fn get_token_type(
     identifier_regex: &Regex, 
     integer_literal_regex: &Regex,
     operator_regex: &Regex,
+    punctuation_regex: &Regex,
 ) -> TokenType {
     if identifier_regex.is_match(token) {
         TokenType::Identifier
@@ -89,6 +92,8 @@ fn get_token_type(
         TokenType::IntegerLiteral
     } else if operator_regex.is_match(token) {
         TokenType::Operator
+    } else if punctuation_regex.is_match(token) {
+        TokenType::Punctuation
     } else {
         panic!("Unrecognized token: {}", token);
     }
@@ -138,5 +143,15 @@ mod tests {
         assert_eq!(tokens.len(), 11);
 
         assert_eq!(tokens[10].token_type, TokenType::Operator);
+    }
+
+    #[test]
+    fn test_punctuation() {
+        let source = "( ) { } , ;";
+        let tokens: Vec<Token> = tokenize(source);
+
+        assert_eq!(tokens.len(), 6);
+
+        assert_eq!(tokens[5].token_type, TokenType::Punctuation);
     }
 }

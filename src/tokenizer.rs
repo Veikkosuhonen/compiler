@@ -27,6 +27,7 @@ fn count_line_changes(v: &str) -> usize {
 
 pub fn tokenize(source: &str) -> Vec<Token> {
     let whitespace_regex: Regex = Regex::new(r"^\s+").unwrap();
+    let multiline_comment_regex: Regex = Regex::new(r"^/\*[\s\S]*\*/").unwrap();
     let line_comment_regex: Regex = Regex::new(r"^//.*(\n|$)").unwrap();
     let identifier_regex: Regex = Regex::new(r"^[a-zA-Z_][a-zA-Z0-9_]*").unwrap();
     let integer_literal_regex: Regex = Regex::new(r"^[0-9]+").unwrap();
@@ -43,7 +44,11 @@ pub fn tokenize(source: &str) -> Vec<Token> {
         let slice = &source[current_start..];
 
         if let Some(m) = whitespace_regex.find(slice) {
-                    current_start += m.end();
+            current_start += m.end();
+            line += count_line_changes(m.as_str());
+
+        } else if let Some(m) = multiline_comment_regex.find(slice) {
+            current_start += m.end();
             line += count_line_changes(m.as_str());
 
         } else if let Some(m) = line_comment_regex.find(slice) {
@@ -168,6 +173,25 @@ mod tests {
         assert_eq!(tokens.len(), 6);
 
         assert_eq!(tokens[5].token_type, TokenType::Punctuation);
+    }
+
+    #[test]
+    fn test_multiline_comment() {
+        let mut source = "( ) { } , ; /* heyo */";
+        let mut tokens: Vec<Token> = tokenize(source);
+
+        assert_eq!(tokens.len(), 6);
+
+        assert_eq!(tokens[5].token_type, TokenType::Punctuation);
+
+        source = "( ) { } , ; /* 
+            heyo
+        */ heyo_identifier";
+        tokens = tokenize(source);
+
+        assert_eq!(tokens.len(), 7);
+
+        assert_eq!(tokens[6].token_type, TokenType::Identifier);
     }
 
     #[test]

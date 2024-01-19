@@ -1,4 +1,5 @@
-use regex::Regex;
+use lazy_static::lazy_static;
+use regex::{Match, Regex};
 
 #[derive(PartialEq, Eq, Debug)]
 pub struct SourceLocation {
@@ -6,12 +7,13 @@ pub struct SourceLocation {
     pub column: usize,
 }
 
-#[derive(PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Debug, Clone, Copy)]
 pub enum TokenType {
     Identifier,
     IntegerLiteral,
     Operator,
     Punctuation,
+    None,
 }
 
 #[derive(Debug)]
@@ -21,85 +23,75 @@ pub struct Token {
     pub location: SourceLocation,
 }
 
-fn count_line_changes(v: &str) -> usize {
-    v.chars().filter(|s| s.eq(&'\n')).count()
+lazy_static! {
+    static ref WHITESPACE_REGEX: Regex = Regex::new(r"^\s+").unwrap();
+    static ref MULTILINE_COMMENT_REGEX: Regex = Regex::new(r"^/\*[\s\S]*\*/").unwrap();
+    static ref LINE_COMMENT_REGEX: Regex = Regex::new(r"^//.*(\n|$)").unwrap();
+    static ref IDENTIFIER_REGEX: Regex = Regex::new(r"^[a-zA-Z_][a-zA-Z0-9_]*").unwrap();
+    static ref INTEGER_LITERAL_REGEX: Regex = Regex::new(r"^[0-9]+").unwrap();
+    static ref OPERATOR_REGEX: Regex = Regex::new(r"^(==|!=|<=|>=|\+|-|\*|/|=|<|>|&)").unwrap();
+    static ref PUNCTUATION_REGEX: Regex = Regex::new(r"^(\(|\)|\{|\}|,|;|:)").unwrap();
+
+    static ref TOKEN_REGEX_TO_TYPE: Vec<(Regex, TokenType)> = vec![
+        (WHITESPACE_REGEX.clone(), TokenType::None),
+        (MULTILINE_COMMENT_REGEX.clone(), TokenType::None),
+        (LINE_COMMENT_REGEX.clone(), TokenType::None),
+        (IDENTIFIER_REGEX.clone(), TokenType::Identifier),
+        (INTEGER_LITERAL_REGEX.clone(), TokenType::IntegerLiteral),
+        (OPERATOR_REGEX.clone(), TokenType::Operator),
+        (PUNCTUATION_REGEX.clone(), TokenType::Punctuation),
+    ];
+}
+
+fn match_token(source: &str) -> Option<(Match<'_>, TokenType)> {
+    TOKEN_REGEX_TO_TYPE.iter().enumerate().find_map(|(i, token_regex_to_type)| {
+        let (regex, _) = token_regex_to_type;
+        regex.find(source).map(|m| (m, TOKEN_REGEX_TO_TYPE[i].1))
+    })
+}
+
+fn count_line_column_changes(v: &str, line: usize, column: usize) -> (usize, usize) {
+    let line_change = v.chars().filter(|s| s.eq(&'\n')).count();
+    let column = match line_change {
+        0 => column + v.len(),
+        _ => v.len() - v.rfind('\n').unwrap_or(0),
+    };
+    
+    (line + line_change, column)
 }
 
 pub fn tokenize(source: &str) -> Vec<Token> {
-    let whitespace_regex: Regex = Regex::new(r"^\s+").unwrap();
-    let multiline_comment_regex: Regex = Regex::new(r"^/\*[\s\S]*\*/").unwrap();
-    let line_comment_regex: Regex = Regex::new(r"^//.*(\n|$)").unwrap();
-    let identifier_regex: Regex = Regex::new(r"^[a-zA-Z_][a-zA-Z0-9_]*").unwrap();
-    let integer_literal_regex: Regex = Regex::new(r"^[0-9]+").unwrap();
-    let operator_regex: Regex = Regex::new(r"^(==|!=|<=|>=|\+|-|\*|/|=|<|>|&)").unwrap();
-    let punctuation_regex: Regex = Regex::new(r"^(\(|\)|\{|\}|,|;|:)").unwrap();
 
     let mut tokens: Vec<Token> = Vec::new();
 
     let mut line = 1;
+    let mut column = 1;
 
     let mut current_start = 0;
 
     while current_start < source.len() {
         let slice = &source[current_start..];
 
-        if let Some(m) = whitespace_regex.find(slice) {
-            current_start += m.end();
-            line += count_line_changes(m.as_str());
+        if let Some((m, token_type)) = match_token(slice) {
 
-        } else if let Some(m) = multiline_comment_regex.find(slice) {
-            current_start += m.end();
-            line += count_line_changes(m.as_str());
-
-        } else if let Some(m) = line_comment_regex.find(slice) {
-            current_start += m.end();
-            line += count_line_changes(m.as_str());
-
-        } else if let Some(m) = identifier_regex.find(slice) {
-            tokens.push(Token {
-                value: m.as_str().to_owned(),
-                token_type: TokenType::Identifier,
-                location: SourceLocation {
-                    column: 0,
+            if token_type != TokenType::None {
+                let location = SourceLocation {
                     line,
-                }
-            });
-            current_start += m.end();
+                    column,
+                };
+                let token = Token {
+                    token_type,
+                    value: m.as_str().to_string(),
+                    location,
+                };
+                tokens.push(token);
+            }
 
-        } else if let Some(m) = integer_literal_regex.find(slice) {
-            tokens.push(Token {
-                value: m.as_str().to_owned(),
-                token_type: TokenType::IntegerLiteral,
-                location: SourceLocation {
-                    column: 0,
-                    line,
-                }
-            });
-            current_start += m.end();
+            (line, column) = count_line_column_changes(m.as_str(), line, column);
 
-        } else if let Some(m) = operator_regex.find(slice) {
-            tokens.push(Token {
-                value: m.as_str().to_owned(),
-                token_type: TokenType::Operator,
-                location: SourceLocation {
-                    column: 0,
-                    line,
-                }
-            });
-            current_start += m.end();
-
-        } else if let Some(m) = punctuation_regex.find(slice) {
-            tokens.push(Token {
-                value: m.as_str().to_owned(),
-                token_type: TokenType::Punctuation,
-                location: SourceLocation {
-                    column: 0,
-                    line,
-                }
-            });
             current_start += m.end();
         } else {
-            panic!("Unmatched string {}", slice);
+            panic!("Unexpected token at line {} column {}", line, current_start);
         }
     }
 
@@ -113,9 +105,9 @@ mod tests {
     #[test]
     fn test_integers_and_literals() {
         let source = "
-            if 3 while
-            123 123
-        ";
+if 3 while
+123 123
+";
         let tokens: Vec<Token> = tokenize(source);
 
         assert_eq!(tokens.len(), 5);
@@ -130,19 +122,19 @@ mod tests {
         assert_eq!(tokens[2].value, "while");
 
         assert_eq!(tokens[0].location.line, 2);
-        assert_eq!(tokens[0].location.column, 0);
+        assert_eq!(tokens[0].location.column, 1);
 
         assert_eq!(tokens[1].location.line, 2);
-        assert_eq!(tokens[1].location.column, 0);
+        assert_eq!(tokens[1].location.column, 4);
 
         assert_eq!(tokens[2].location.line, 2);
-        assert_eq!(tokens[2].location.column, 0);
+        assert_eq!(tokens[2].location.column, 6);
 
         assert_eq!(tokens[3].location.line, 3);
-        assert_eq!(tokens[3].location.column, 0);
+        assert_eq!(tokens[3].location.column, 1);
 
         assert_eq!(tokens[4].location.line, 3);
-        assert_eq!(tokens[4].location.column, 0);
+        assert_eq!(tokens[4].location.column, 5);
     }
 
     #[test]
@@ -185,7 +177,7 @@ mod tests {
         assert_eq!(tokens[5].token_type, TokenType::Punctuation);
 
         source = "( ) { } , ; /* 
-            heyo
+            heyo 123 
         */ heyo_identifier";
         tokens = tokenize(source);
 

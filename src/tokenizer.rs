@@ -25,7 +25,7 @@ pub struct Token {
 
 lazy_static! {
     static ref WHITESPACE_REGEX: Regex = Regex::new(r"^\s+").unwrap();
-    static ref MULTILINE_COMMENT_REGEX: Regex = Regex::new(r"^/\*[\s\S]*\*/").unwrap();
+    static ref MULTILINE_COMMENT_REGEX: Regex = Regex::new(r"^/\*[\s\S]*?\*/").unwrap();
     static ref LINE_COMMENT_REGEX: Regex = Regex::new(r"^//.*(\n|$)").unwrap();
     static ref IDENTIFIER_REGEX: Regex = Regex::new(r"^[a-zA-Z_][a-zA-Z0-9_]*").unwrap();
     static ref INTEGER_LITERAL_REGEX: Regex = Regex::new(r"^[0-9]+").unwrap();
@@ -184,6 +184,17 @@ if 3 while
         assert_eq!(tokens.len(), 7);
 
         assert_eq!(tokens[6].token_type, TokenType::Identifier);
+
+        source = "( ) { } , ; /* 
+            heyo 123 
+        */ heyo_identifier /* another
+        comment
+         */ 123";
+        tokens = tokenize(source);
+
+        assert_eq!(tokens.len(), 8);
+
+        assert_eq!(tokens[7].token_type, TokenType::IntegerLiteral);
     }
 
     #[test]

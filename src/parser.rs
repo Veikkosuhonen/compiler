@@ -255,4 +255,32 @@ mod tests {
             _ => panic!("Expected * binary expression"),
         }
     }
+
+    #[test]
+    fn test_parse_int_literal() {
+        let source = "42";
+        let tokens: Vec<Token> = tokenize(source);
+
+        let expression = parse(tokens);
+        
+        match expression {
+            Expression::Literal(literal) => {
+                assert_eq!(literal.value, "42");
+            },
+            _ => panic!("Expected literal"),
+        }
+    }
+
+    #[test]
+    fn complex_test() {
+        let source = "((1 + 2 * (3 - 4)) / (5))";
+        let tokens: Vec<Token> = tokenize(source);
+        let expression = parse(tokens);
+        match expression {
+            Expression::BinaryExpression(bin_expr) => {
+                assert_eq!(bin_expr.operator, "/");
+            },
+            _ => panic!("Expected binary expression"),
+        }
+    }
 }

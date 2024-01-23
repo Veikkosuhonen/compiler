@@ -1,23 +1,19 @@
 use crate::tokenizer::{TokenType, Token, SourceLocation};
 
 pub enum Expression {
-    Literal(Literal),
-    BinaryExpression(BinaryExpression),
+    Literal {
+        value: String,
+    },
+    Identifier {
+        value: String,
+    },
+    BinaryExpression {
+        left: Box<Expression>,
+        operator: String,
+        right: Box<Expression>,
+    },
 }
 
-pub struct Literal {
-    pub value: String,
-}
-
-pub struct Identifier {
-    pub value: String,
-}
-
-pub struct BinaryExpression {
-    pub left: Box<Expression>,
-    pub operator: String,
-    pub right: Box<Expression>,
-}
 
 struct Parser {
     tokens: Vec<Token>,
@@ -66,9 +62,9 @@ impl Parser {
         self.consume_with_values(expected_types, &[])
     }
 
-    fn parse_int_literal(&mut self) -> Literal {
+    fn parse_int_literal(&mut self) -> Expression {
         let token = self.consume(&[TokenType::IntegerLiteral]);
-        Literal {
+        Expression::Literal {
             value: token.value,
         }
     }
@@ -84,7 +80,7 @@ impl Parser {
         let token = self.peek();
 
         match token.token_type {
-            TokenType::IntegerLiteral => Expression::Literal(self.parse_int_literal()),
+            TokenType::IntegerLiteral => self.parse_int_literal(),
             TokenType::Punctuation => {
                 if token.value == "(" {
                     self.parse_parentheses()
@@ -102,11 +98,11 @@ impl Parser {
         while vec!["*", "/"].contains(&self.peek().value.as_str()) {
             let operator = self.consume(&[TokenType::Operator]);
             let right = self.parse_factor();
-            left = Expression::BinaryExpression(BinaryExpression {
+            left = Expression::BinaryExpression {
                 left: Box::new(left),
                 operator: operator.value,
                 right: Box::new(right),
-            });
+            };
         }
 
         left
@@ -118,11 +114,11 @@ impl Parser {
         while vec!["+", "-"].contains(&self.peek().value.as_str()) {
             let operator = self.consume(&[TokenType::Operator]);
             let right = self.parse_term();
-            left = Expression::BinaryExpression(BinaryExpression {
+            left = Expression::BinaryExpression {
                 left: Box::new(left),
                 operator: operator.value,
                 right: Box::new(right),
-            });
+            };
         }
 
         left
@@ -150,8 +146,8 @@ mod tests {
         let expression = parse(tokens);
         
         match expression {
-            Expression::BinaryExpression(bin_expr) => {
-                assert_eq!(bin_expr.operator, "+");
+            Expression::BinaryExpression { operator, .. } => {
+                assert_eq!(operator, "+");
             },
             _ => panic!("Expected binary expression"),
         }
@@ -165,17 +161,17 @@ mod tests {
         let expression = parse(tokens);
         
         match expression {
-            Expression::BinaryExpression(bin_expr) => {
-                assert_eq!(bin_expr.operator, "-");
-                match bin_expr.left.as_ref() {
-                    Expression::BinaryExpression(bin_expr) => {
-                        assert_eq!(bin_expr.operator, "+");
-                        match bin_expr.left.as_ref() {
-                            Expression::BinaryExpression(bin_expr) => {
-                                assert_eq!(bin_expr.operator, "-");
-                                match bin_expr.left.as_ref() {
-                                    Expression::Literal(literal) => {
-                                        assert_eq!(literal.value, "1");
+            Expression::BinaryExpression { operator, left ,.. } => {
+                assert_eq!(operator, "-");
+                match left.as_ref() {
+                    Expression::BinaryExpression { operator, left, .. } => {
+                        assert_eq!(operator, "+");
+                        match left.as_ref() {
+                            Expression::BinaryExpression { operator, left, .. } => {
+                                assert_eq!(operator, "-");
+                                match left.as_ref() {
+                                    Expression::Literal { value } => {
+                                        assert_eq!(value, "1");
                                     },
                                     _ => panic!("Expected literal 1"),
                                 }
@@ -198,20 +194,20 @@ mod tests {
         let expression = parse(tokens);
         
         match expression {
-            Expression::BinaryExpression(bin_expr) => {
-                assert_eq!(bin_expr.operator, "-");
-                match bin_expr.left.as_ref() {
-                    Expression::BinaryExpression(bin_expr) => {
-                        assert_eq!(bin_expr.operator, "+");
-                        match bin_expr.left.as_ref() {
-                            Expression::Literal(literal) => {
-                                assert_eq!(literal.value, "1");
-                                match bin_expr.right.as_ref() {
-                                    Expression::BinaryExpression(bin_expr) => {
-                                        assert_eq!(bin_expr.operator, "*");
-                                        match bin_expr.left.as_ref() {
-                                            Expression::Literal(literal) => {
-                                                assert_eq!(literal.value, "2");
+            Expression::BinaryExpression { operator, left, .. } => {
+                assert_eq!(operator, "-");
+                match left.as_ref() {
+                    Expression::BinaryExpression { operator, left, right } => {
+                        assert_eq!(operator, "+");
+                        match left.as_ref() {
+                            Expression::Literal { value, .. } => {
+                                assert_eq!(value, "1");
+                                match right.as_ref() {
+                                    Expression::BinaryExpression { operator, left, .. }  => {
+                                        assert_eq!(operator, "*");
+                                        match left.as_ref() {
+                                            Expression::Literal { value } => {
+                                                assert_eq!(value, "2");
                                             },
                                             _ => panic!("Expected literal 2"),
                                         }
@@ -237,14 +233,14 @@ mod tests {
         let expression = parse(tokens);
         
         match expression {
-            Expression::BinaryExpression(bin_expr) => {
-                assert_eq!(bin_expr.operator, "*");
-                match bin_expr.left.as_ref() {
-                    Expression::BinaryExpression(bin_expr) => {
-                        assert_eq!(bin_expr.operator, "+");
-                        match bin_expr.left.as_ref() {
-                            Expression::Literal(literal) => {
-                                assert_eq!(literal.value, "1");
+            Expression::BinaryExpression { operator, left, .. } => {
+                assert_eq!(operator, "*");
+                match left.as_ref() {
+                    Expression::BinaryExpression { operator, left,.. } => {
+                        assert_eq!(operator, "+");
+                        match left.as_ref() {
+                            Expression::Literal { value } => {
+                                assert_eq!(value, "1");
                             },
                             _ => panic!("Expected literal 1"),
                         }
@@ -264,8 +260,8 @@ mod tests {
         let expression = parse(tokens);
         
         match expression {
-            Expression::Literal(literal) => {
-                assert_eq!(literal.value, "42");
+            Expression::Literal { value, .. } => {
+                assert_eq!(value, "42");
             },
             _ => panic!("Expected literal"),
         }
@@ -277,8 +273,8 @@ mod tests {
         let tokens: Vec<Token> = tokenize(source);
         let expression = parse(tokens);
         match expression {
-            Expression::BinaryExpression(bin_expr) => {
-                assert_eq!(bin_expr.operator, "/");
+            Expression::BinaryExpression { operator, .. } => {
+                assert_eq!(operator, "/");
             },
             _ => panic!("Expected binary expression"),
         }

@@ -1,7 +1,7 @@
 use lazy_static::lazy_static;
 use regex::{Match, Regex};
 
-#[derive(PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Debug, Clone)]
 pub struct SourceLocation {
     pub line: usize,
     pub column: usize,
@@ -16,7 +16,7 @@ pub enum TokenType {
     None,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Token {
     pub token_type: TokenType,
     pub value: String,

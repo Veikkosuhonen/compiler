@@ -73,11 +73,25 @@ impl Parser {
         }
     }
 
+    fn parse_parentheses(&mut self) -> Expression {
+        self.consume_with_values(&[TokenType::Punctuation], &["(".to_string()]);
+        let expr = self.parse_expression();
+        self.consume_with_values(&[TokenType::Punctuation], &[")".to_string()]);
+        expr
+    }
+
     fn parse_factor(&mut self) -> Expression {
         let token = self.peek();
 
         match token.token_type {
             TokenType::IntegerLiteral => Expression::Literal(self.parse_int_literal()),
+            TokenType::Punctuation => {
+                if token.value == "(" {
+                    self.parse_parentheses()
+                } else {
+                    panic!("Unexpected token: {:?}", token);
+                }
+            },
             _ => panic!("Unexpected token: {:?}", token),
         }
     }
@@ -212,6 +226,33 @@ mod tests {
                 }
             },
             _ => panic!("Expected - binary expression"),
+        }
+    }
+
+    #[test]
+    fn test_parentheses() {
+        let source = "(1 + 2) * 3";
+        let tokens: Vec<Token> = tokenize(source);
+
+        let expression = parse(tokens);
+        
+        match expression {
+            Expression::BinaryExpression(bin_expr) => {
+                assert_eq!(bin_expr.operator, "*");
+                match bin_expr.left.as_ref() {
+                    Expression::BinaryExpression(bin_expr) => {
+                        assert_eq!(bin_expr.operator, "+");
+                        match bin_expr.left.as_ref() {
+                            Expression::Literal(literal) => {
+                                assert_eq!(literal.value, "1");
+                            },
+                            _ => panic!("Expected literal 1"),
+                        }
+                    },
+                    _ => panic!("Expected + binary expression"),
+                }
+            },
+            _ => panic!("Expected * binary expression"),
         }
     }
 }

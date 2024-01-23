@@ -73,13 +73,29 @@ impl Parser {
         }
     }
 
-    fn parse_term(&mut self) -> Expression {
+    fn parse_factor(&mut self) -> Expression {
         let token = self.peek();
 
         match token.token_type {
             TokenType::IntegerLiteral => Expression::Literal(self.parse_int_literal()),
             _ => panic!("Unexpected token: {:?}", token),
         }
+    }
+
+    fn parse_term(&mut self) -> Expression {
+        let mut left = self.parse_factor();
+        
+        while vec!["*", "/"].contains(&self.peek().value.as_str()) {
+            let operator = self.consume(&[TokenType::Operator]);
+            let right = self.parse_factor();
+            left = Expression::BinaryExpression(BinaryExpression {
+                left: Box::new(left),
+                operator: operator.value,
+                right: Box::new(right),
+            });
+        }
+
+        left
     }
 
     fn parse_expression(&mut self) -> Expression {
@@ -151,6 +167,45 @@ mod tests {
                                 }
                             },
                             _ => panic!("Expected - binary expression"),
+                        }
+                    },
+                    _ => panic!("Expected + binary expression"),
+                }
+            },
+            _ => panic!("Expected - binary expression"),
+        }
+    }
+
+    #[test]
+    fn test_precedence_binary_op() {
+        let source = "1 + 2 * 3 - 4";
+        let tokens: Vec<Token> = tokenize(source);
+
+        let expression = parse(tokens);
+        
+        match expression {
+            Expression::BinaryExpression(bin_expr) => {
+                assert_eq!(bin_expr.operator, "-");
+                match bin_expr.left.as_ref() {
+                    Expression::BinaryExpression(bin_expr) => {
+                        assert_eq!(bin_expr.operator, "+");
+                        match bin_expr.left.as_ref() {
+                            Expression::Literal(literal) => {
+                                assert_eq!(literal.value, "1");
+                                match bin_expr.right.as_ref() {
+                                    Expression::BinaryExpression(bin_expr) => {
+                                        assert_eq!(bin_expr.operator, "*");
+                                        match bin_expr.left.as_ref() {
+                                            Expression::Literal(literal) => {
+                                                assert_eq!(literal.value, "2");
+                                            },
+                                            _ => panic!("Expected literal 2"),
+                                        }
+                                    },
+                                    _ => panic!("Expected * binary expression"),
+                                }
+                            },
+                            _ => panic!("Expected literal 1"),
                         }
                     },
                     _ => panic!("Expected + binary expression"),

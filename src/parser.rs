@@ -13,6 +13,11 @@ pub enum Expression {
         operator: String,
         right: Box<Expression>,
     },
+    IfExpression {
+        condition: Box<Expression>,
+        then_branch: Box<Expression>,
+        else_branch: Box<Expression>,
+    },
 }
 
 
@@ -77,6 +82,20 @@ impl Parser {
         }
     }
 
+    fn parse_if_expression(&mut self) -> Expression {
+        self.consume_with_values(&[TokenType::Keyword], &["if".to_string()]);
+        let condition = self.parse_expression();
+        self.consume_with_values(&[TokenType::Keyword], &["then".to_string()]);
+        let then_branch = self.parse_expression();
+        self.consume_with_values(&[TokenType::Keyword], &["else".to_string()]);
+        let else_branch = self.parse_expression();
+        Expression::IfExpression {
+            condition: Box::new(condition),
+            then_branch: Box::new(then_branch),
+            else_branch: Box::new(else_branch),
+        }
+    }
+
     fn parse_parentheses(&mut self) -> Expression {
         self.consume_with_values(&[TokenType::Punctuation], &["(".to_string()]);
         let expr = self.parse_expression();
@@ -89,6 +108,7 @@ impl Parser {
 
         match token.token_type {
             TokenType::IntegerLiteral => self.parse_int_literal(),
+            TokenType::Keyword => self.parse_if_expression(),
             TokenType::Identifier => self.parse_identifier(),
             TokenType::Punctuation => {
                 if token.value == "(" {
@@ -161,18 +181,15 @@ mod tests {
     #[test]
     #[should_panic(expected = "Unexpected token: Token { token_type: IntegerLiteral, value: \"3\", location: SourceLocation { line: 1, column: 7 } }")]
     fn test_invalid_source() {
-        let source = "1 + 2 3 4 hähä minttuglitch";
+        let source = "1 + 2 3 4 haha minttuglitch";
         let tokens: Vec<Token> = tokenize(source);
-        println!("Tokens: {:?}", tokens);
-        let expr = parse(tokens);
-        println!("Expression: {:?}", expr);
+        parse(tokens);
     }
 
     #[test]
     fn test_parse_binary_op() {
         let source = "1 + pepejam";
         let tokens: Vec<Token> = tokenize(source);
-        println!("Tokens: {:?}", tokens);
 
         let expression = parse(tokens);
         
@@ -314,13 +331,56 @@ mod tests {
     }
 
     #[test]
-    fn complex_test() {
+    fn complex_test_1() {
         let source = "((never + gonna * (give - you)) / (up))";
         let tokens: Vec<Token> = tokenize(source);
         let expression = parse(tokens);
         match expression {
             Expression::BinaryExpression { operator, .. } => {
                 assert_eq!(operator, "/");
+            },
+            _ => panic!("Expected binary expression"),
+        }
+    }
+
+    #[test]
+    fn test_simple_if_expression() {
+        let source = "if 1 then 2 else 3";
+        let tokens: Vec<Token> = tokenize(source);
+        let expression = parse(tokens);
+        match expression {
+            Expression::IfExpression { condition, then_branch, else_branch } => {
+                match condition.as_ref() {
+                    Expression::Literal { value } => {
+                        assert_eq!(value, "1");
+                    },
+                    _ => panic!("Expected literal 1"),
+                }
+                match then_branch.as_ref() {
+                    Expression::Literal { value } => {
+                        assert_eq!(value, "2");
+                    },
+                    _ => panic!("Expected literal 2"),
+                }
+                match else_branch.as_ref() {
+                    Expression::Literal { value } => {
+                        assert_eq!(value, "3");
+                    },
+                    _ => panic!("Expected literal 3"),
+                }
+            },
+            _ => panic!("Expected if expression"),
+        }
+    }
+
+    #[test]
+    fn test_complex_if_expression() {
+        let source = "1 + 2 * if 4 then 6 else 8 / 0";
+        let tokens: Vec<Token> = tokenize(source);
+        let expression = parse(tokens);
+        match expression {
+            Expression::BinaryExpression { left, operator, right } => {
+
             },
             _ => panic!("Expected binary expression"),
         }

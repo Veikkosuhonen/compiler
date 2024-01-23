@@ -10,6 +10,7 @@ pub struct SourceLocation {
 #[derive(PartialEq, Eq, Debug, Clone, Copy)]
 pub enum TokenType {
     Identifier,
+    Keyword,
     IntegerLiteral,
     Operator,
     Punctuation,
@@ -31,11 +32,14 @@ lazy_static! {
     static ref INTEGER_LITERAL_REGEX: Regex = Regex::new(r"^[0-9]+").unwrap();
     static ref OPERATOR_REGEX: Regex = Regex::new(r"^(==|!=|<=|>=|\+|-|\*|/|=|<|>|&)").unwrap();
     static ref PUNCTUATION_REGEX: Regex = Regex::new(r"^(\(|\)|\{|\}|,|;|:)").unwrap();
+    static ref KEYWORD_REGEX: Regex = Regex::new(r"^(if|then|else)").unwrap();
 
+    // Order is significant here. The first match is the one that will be used.
     static ref TOKEN_REGEX_TO_TYPE: Vec<(Regex, TokenType)> = vec![
         (WHITESPACE_REGEX.clone(), TokenType::None),
         (MULTILINE_COMMENT_REGEX.clone(), TokenType::None),
         (LINE_COMMENT_REGEX.clone(), TokenType::None),
+        (KEYWORD_REGEX.clone(), TokenType::Keyword),
         (IDENTIFIER_REGEX.clone(), TokenType::Identifier),
         (INTEGER_LITERAL_REGEX.clone(), TokenType::IntegerLiteral),
         (OPERATOR_REGEX.clone(), TokenType::Operator),
@@ -91,7 +95,7 @@ pub fn tokenize(source: &str) -> Vec<Token> {
 
             current_start += m.end();
         } else {
-            panic!("Unexpected token at line {} column {}", line, current_start);
+            panic!("Cannot tokenize input at line {} column {}: {}", line, current_start, slice);
         }
     }
 
@@ -103,23 +107,23 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_integers_and_literals() {
+    fn test_keywords_integers_and_literals() {
         let source = "
-if 3 while
+if 3 wowowo
 123 123
 ";
         let tokens: Vec<Token> = tokenize(source);
 
         assert_eq!(tokens.len(), 5);
 
-        assert_eq!(tokens[0].token_type, TokenType::Identifier);
+        assert_eq!(tokens[0].token_type, TokenType::Keyword);
         assert_eq!(tokens[0].value, "if");
 
         assert_eq!(tokens[1].token_type, TokenType::IntegerLiteral);
         assert_eq!(tokens[1].value, "3");
 
         assert_eq!(tokens[2].token_type, TokenType::Identifier);
-        assert_eq!(tokens[2].value, "while");
+        assert_eq!(tokens[2].value, "wowowo");
 
         assert_eq!(tokens[0].location.line, 2);
         assert_eq!(tokens[0].location.column, 1);

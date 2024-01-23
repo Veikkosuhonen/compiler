@@ -1,5 +1,6 @@
 use crate::tokenizer::{TokenType, Token, SourceLocation};
 
+#[derive(Debug)]
 pub enum Expression {
     Literal {
         value: String,
@@ -88,6 +89,7 @@ impl Parser {
                     panic!("Unexpected token: {:?}", token);
                 }
             },
+            TokenType::None => panic!("Unexpected end of file"),
             _ => panic!("Unexpected token: {:?}", token),
         }
     }
@@ -129,6 +131,9 @@ impl Parser {
 pub fn parse(tokens: Vec<Token>) -> Expression {
     let mut token_list = Parser::new(tokens);
     let expr = token_list.parse_expression();
+    if token_list.current_index < token_list.tokens.len() {
+        panic!("Unexpected token: {:?}", token_list.peek());
+    }
     expr
 }
 
@@ -136,6 +141,24 @@ pub fn parse(tokens: Vec<Token>) -> Expression {
 mod tests {
     use crate::tokenizer::{tokenize, Token};
     use super::*;
+
+    #[test]
+    #[should_panic(expected = "Unexpected end of file")]
+    fn test_empty_expression() {
+        let source = "";
+        let tokens: Vec<Token> = tokenize(source);
+        parse(tokens);
+    }
+
+    #[test]
+    #[should_panic(expected = "Unexpected token: Token { token_type: IntegerLiteral, value: \"3\", location: SourceLocation { line: 1, column: 7 } }")]
+    fn test_invalid_source() {
+        let source = "1 + 2 3 4";
+        let tokens: Vec<Token> = tokenize(source);
+        println!("Tokens: {:?}", tokens);
+        let expr = parse(tokens);
+        println!("Expression: {:?}", expr);
+    }
 
     #[test]
     fn test_parse_binary_op() {

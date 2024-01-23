@@ -1,5 +1,5 @@
 pub mod tokenizer;
-
+pub mod parser;
 use std::env;
 use std::fs;
 

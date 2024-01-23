@@ -70,6 +70,13 @@ impl Parser {
         }
     }
 
+    fn parse_identifier(&mut self) -> Expression {
+        let token = self.consume(&[TokenType::Identifier]);
+        Expression::Identifier {
+            value: token.value,
+        }
+    }
+
     fn parse_parentheses(&mut self) -> Expression {
         self.consume_with_values(&[TokenType::Punctuation], &["(".to_string()]);
         let expr = self.parse_expression();
@@ -82,6 +89,7 @@ impl Parser {
 
         match token.token_type {
             TokenType::IntegerLiteral => self.parse_int_literal(),
+            TokenType::Identifier => self.parse_identifier(),
             TokenType::Punctuation => {
                 if token.value == "(" {
                     self.parse_parentheses()
@@ -153,7 +161,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "Unexpected token: Token { token_type: IntegerLiteral, value: \"3\", location: SourceLocation { line: 1, column: 7 } }")]
     fn test_invalid_source() {
-        let source = "1 + 2 3 4";
+        let source = "1 + 2 3 4 hähä minttuglitch";
         let tokens: Vec<Token> = tokenize(source);
         println!("Tokens: {:?}", tokens);
         let expr = parse(tokens);
@@ -162,7 +170,7 @@ mod tests {
 
     #[test]
     fn test_parse_binary_op() {
-        let source = "1 + 2";
+        let source = "1 + pepejam";
         let tokens: Vec<Token> = tokenize(source);
         println!("Tokens: {:?}", tokens);
 
@@ -178,7 +186,7 @@ mod tests {
 
     #[test]
     fn test_associative_binary_op() {
-        let source = "1 - 2 + 3 - 4";
+        let source = "minttujam - 2 + 3 - 4";
         let tokens: Vec<Token> = tokenize(source);
 
         let expression = parse(tokens);
@@ -193,10 +201,10 @@ mod tests {
                             Expression::BinaryExpression { operator, left, .. } => {
                                 assert_eq!(operator, "-");
                                 match left.as_ref() {
-                                    Expression::Literal { value } => {
-                                        assert_eq!(value, "1");
+                                    Expression::Identifier { value } => {
+                                        assert_eq!(value, "minttujam");
                                     },
-                                    _ => panic!("Expected literal 1"),
+                                    _ => panic!("Expected literal minttujam"),
                                 }
                             },
                             _ => panic!("Expected - binary expression"),
@@ -211,7 +219,7 @@ mod tests {
 
     #[test]
     fn test_precedence_binary_op() {
-        let source = "1 + 2 * 3 - 4";
+        let source = "1 + 2 * PI - 4";
         let tokens: Vec<Token> = tokenize(source);
 
         let expression = parse(tokens);
@@ -291,8 +299,23 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_identifier() {
+        let source = "identifieeeer";
+        let tokens: Vec<Token> = tokenize(source);
+
+        let expression = parse(tokens);
+        
+        match expression {
+            Expression::Identifier { value, .. } => {
+                assert_eq!(value, "identifieeeer");
+            },
+            _ => panic!("Expected identifier"),
+        }
+    }
+
+    #[test]
     fn complex_test() {
-        let source = "((1 + 2 * (3 - 4)) / (5))";
+        let source = "((never + gonna * (give - you)) / (up))";
         let tokens: Vec<Token> = tokenize(source);
         let expression = parse(tokens);
         match expression {

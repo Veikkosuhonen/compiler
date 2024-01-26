@@ -21,6 +21,10 @@ pub enum Expression {
         then_branch: Box<Expression>,
         else_branch: Box<Expression>,
     },
+    CallExpression {
+        callee: Box<Expression>,
+        arguments: Vec<Box<Expression>>
+    },
 }
 
 struct Parser {
@@ -37,8 +41,13 @@ impl Parser {
     }
 
     fn peek(&mut self) -> Token {
-        if self.current_index < self.tokens.len() {
-            if let Some(t) = self.tokens.get(self.current_index) {
+        self.peek_forward(0)
+    }
+
+    fn peek_forward(&mut self, lookahead: usize) -> Token {
+        let idx = self.current_index + lookahead;
+        if idx < self.tokens.len() {
+            if let Some(t) = self.tokens.get(idx) {
                 return t.clone();
             } else {
                 panic!("Unexpected end of file");
@@ -55,10 +64,10 @@ impl Parser {
         }
     }
 
-    fn consume_with_values(&mut self, expected_types: &[TokenType], expected_values: &[String]) -> Token {
+    fn consume_with_values(&mut self, expected_type: TokenType, expected_values: &[String]) -> Token {
         let token: Token = self.peek();
 
-        if expected_types.contains(&token.token_type) && (expected_values.is_empty() || expected_values.contains(&token.value)) {
+        if expected_type == token.token_type && (expected_values.is_empty() || expected_values.contains(&token.value)) {
             self.current_index += 1;
             token
         } else {
@@ -66,35 +75,57 @@ impl Parser {
         }
     }
 
-    fn consume(&mut self, expected_types: &[TokenType]) -> Token {
-        self.consume_with_values(expected_types, &[])
+    fn consume(&mut self, expected_type: TokenType) -> Token {
+        self.consume_with_values(expected_type, &[])
+    }
+
+    fn consume_with_value(&mut self, expected_type: TokenType, value: &str) -> Token {
+        self.consume_with_values(expected_type, &[value.to_string()])
     }
 
     fn parse_boolean_literal(&mut self) -> Expression {
-        let token = self.consume_with_values(&[TokenType::BooleanLiteral], &["true".to_string(), "false".to_string()]);
+        let token = self.consume_with_values(TokenType::BooleanLiteral, &["true".to_string(), "false".to_string()]);
         Expression::BooleanLiteral { value: token.value.starts_with('t') }
     }
 
     fn parse_int_literal(&mut self) -> Expression {
-        let token = self.consume(&[TokenType::IntegerLiteral]);
+        let token = self.consume(TokenType::IntegerLiteral);
         Expression::IntegerLiteral {
             value: token.value.parse().expect("Not a valid number"),
         }
     }
 
     fn parse_identifier(&mut self) -> Expression {
-        let token = self.consume(&[TokenType::Identifier]);
+        let token = self.consume(TokenType::Identifier);
         Expression::Identifier {
             value: token.value,
         }
     }
 
+    fn parse_call_expression(&mut self) -> Expression {
+        let callee = self.parse_identifier();
+        self.consume_with_value(TokenType::Punctuation, "(");
+
+        let mut arguments: Vec<Box<Expression>> = vec![];
+        loop {
+            let arg = self.parse_expression();
+            arguments.push(Box::new(arg));
+            if self.peek().value == ")" {
+                break;
+            }
+            self.consume_with_value(TokenType::Punctuation, ",");
+        }
+        self.consume_with_value(TokenType::Punctuation, ")");
+
+        Expression::CallExpression { callee: Box::new(callee), arguments }
+    }
+
     fn parse_if_expression(&mut self) -> Expression {
-        self.consume_with_values(&[TokenType::Keyword], &["if".to_string()]);
+        self.consume_with_value(TokenType::Keyword, "if");
         let condition = self.parse_expression();
-        self.consume_with_values(&[TokenType::Keyword], &["then".to_string()]);
+        self.consume_with_value(TokenType::Keyword, "then");
         let then_branch = self.parse_expression();
-        self.consume_with_values(&[TokenType::Keyword], &["else".to_string()]);
+        self.consume_with_value(TokenType::Keyword, "else");
         let else_branch = self.parse_expression();
         Expression::IfExpression {
             condition: Box::new(condition),
@@ -104,9 +135,9 @@ impl Parser {
     }
 
     fn parse_parentheses(&mut self) -> Expression {
-        self.consume_with_values(&[TokenType::Punctuation], &["(".to_string()]);
+        self.consume_with_value(TokenType::Punctuation, "(");
         let expr = self.parse_expression();
-        self.consume_with_values(&[TokenType::Punctuation], &[")".to_string()]);
+        self.consume_with_value(TokenType::Punctuation, ")");
         expr
     }
 
@@ -117,7 +148,13 @@ impl Parser {
             TokenType::IntegerLiteral => self.parse_int_literal(),
             TokenType::BooleanLiteral => self.parse_boolean_literal(),
             TokenType::Keyword => self.parse_if_expression(),
-            TokenType::Identifier => self.parse_identifier(),
+            TokenType::Identifier => {
+                if self.peek_forward(1).value == "(" {
+                    self.parse_call_expression()
+                } else {
+                    self.parse_identifier()
+                }
+            },
             TokenType::Punctuation => {
                 if token.value == "(" {
                     self.parse_parentheses()
@@ -134,7 +171,7 @@ impl Parser {
         let mut left = self.parse_factor();
         
         while vec!["*", "/", "and"].contains(&self.peek().value.as_str()) {
-            let operator = self.consume(&[TokenType::Operator]);
+            let operator = self.consume(TokenType::Operator);
             let right = self.parse_factor();
             left = Expression::BinaryExpression {
                 left: Box::new(left),
@@ -150,7 +187,7 @@ impl Parser {
         let mut left = self.parse_term();
         
         while vec!["+", "-", "or"].contains(&self.peek().value.as_str()) {
-            let operator = self.consume(&[TokenType::Operator]);
+            let operator = self.consume(TokenType::Operator);
             let right = self.parse_term();
             left = Expression::BinaryExpression {
                 left: Box::new(left),
@@ -413,6 +450,25 @@ mod tests {
         match expression {
             Expression::BooleanLiteral { value } => {
                 assert_eq!(value, true)
+            },
+            _ => panic!("Not a boolean")
+        }
+    }
+
+    #[test]
+    fn test_function_call() {
+        let source = "f(1, 2, 3)";
+        let tokens = tokenize(source);
+        let expression = parse(tokens);
+        match expression {
+            Expression::CallExpression { arguments, callee } => {
+                match *callee {
+                    Expression::Identifier { value } => {
+                        assert_eq!(value, "f");
+                    },
+                    _ => panic!("Callee not identifier")
+                }
+                assert_eq!(arguments.len(), 3)
             },
             _ => panic!("Not a boolean")
         }

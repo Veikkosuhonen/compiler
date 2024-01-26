@@ -223,4 +223,19 @@ if 3 wowowo
         assert_eq!(tokens[tokens.len() - 1].location.line, 11);
     }
 
+    #[test]
+    fn test_function_call() {
+        let source = "f(1, 2, 3)";
+        let tokens = tokenize(source);
+        assert_eq!(tokens.len(), 8);
+        assert_eq!(tokens[0].token_type, TokenType::Identifier);
+        assert_eq!(tokens[1].token_type, TokenType::Punctuation);
+        assert_eq!(tokens[2].token_type, TokenType::IntegerLiteral);
+        assert_eq!(tokens[3].token_type, TokenType::Punctuation);
+        assert_eq!(tokens[4].token_type, TokenType::IntegerLiteral);
+        assert_eq!(tokens[5].token_type, TokenType::Punctuation);
+        assert_eq!(tokens[6].token_type, TokenType::IntegerLiteral);
+        assert_eq!(tokens[7].token_type, TokenType::Punctuation);
+    }
+
 }

@@ -51,6 +51,19 @@ pub fn interpret(node: Expression) -> Value {
                 },
             }
         },
+        Expression::IfExpression { condition, then_branch, else_branch } => {
+            let condition_result = interpret(*condition);
+            match condition_result {
+                Value::BooleanValue(condition_val) => {
+                    if condition_val {
+                        interpret(*then_branch)
+                    } else {
+                        interpret(*else_branch)
+                    }
+                },
+                _ => panic!("If expression condition must be a boolean"),
+            }
+        }
         _ => panic!("Unknown expression {:?}", node)
     }
 }
@@ -92,6 +105,23 @@ mod tests {
                 assert_eq!(result, true)
             },
             _ => panic!("Wrong return value type"),
+        }
+    }
+
+    #[test]
+    fn test_interpret_if() {
+        let source = "
+        if (true and false or or true) 
+            then 42 
+            else 0 - 42";
+        let tokens: Vec<Token> = tokenize(source);
+        let expression = parse(tokens);
+        let result = interpret(expression);
+        match result {
+            Value::IntegerValue(result) => {
+                assert_eq!(result, 42)
+            },
+            _ => panic!("Wrong return value type")
         }
     }
 }

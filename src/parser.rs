@@ -64,6 +64,14 @@ impl Parser {
         }
     }
 
+    fn current_is(&mut self, value: &str) -> bool {
+        self.peek().value == value
+    }
+
+    fn next_is(&mut self, value: &str) -> bool {
+        self.peek_forward(1).value == value
+    }
+
     fn consume_with_values(&mut self, expected_type: TokenType, expected_values: &[String]) -> Token {
         let token: Token = self.peek();
 
@@ -81,6 +89,22 @@ impl Parser {
 
     fn consume_with_value(&mut self, expected_type: TokenType, value: &str) -> Token {
         self.consume_with_values(expected_type, &[value.to_string()])
+    }
+
+    fn consume_left_paren(&mut self) {
+        self.consume_with_value(TokenType::Punctuation, "(");
+    }
+
+    fn consume_right_paren(&mut self) {
+        self.consume_with_value(TokenType::Punctuation, ")");
+    }
+
+    fn consume_comma(&mut self) {
+        self.consume_with_value(TokenType::Punctuation, ",");
+    }
+
+    fn consume_keyword(&mut self, value: &str) {
+        self.consume_with_value(TokenType::Keyword, value);
     }
 
     fn parse_boolean_literal(&mut self) -> Expression {
@@ -104,28 +128,28 @@ impl Parser {
 
     fn parse_call_expression(&mut self) -> Expression {
         let callee = self.parse_identifier();
-        self.consume_with_value(TokenType::Punctuation, "(");
+        self.consume_left_paren();
 
         let mut arguments: Vec<Box<Expression>> = vec![];
         loop {
             let arg = self.parse_expression();
             arguments.push(Box::new(arg));
-            if self.peek().value == ")" {
+            if self.current_is(")") {
                 break;
             }
-            self.consume_with_value(TokenType::Punctuation, ",");
+            self.consume_comma();
         }
-        self.consume_with_value(TokenType::Punctuation, ")");
+        self.consume_right_paren();
 
         Expression::CallExpression { callee: Box::new(callee), arguments }
     }
 
     fn parse_if_expression(&mut self) -> Expression {
-        self.consume_with_value(TokenType::Keyword, "if");
+        self.consume_keyword("if");
         let condition = self.parse_expression();
-        self.consume_with_value(TokenType::Keyword, "then");
+        self.consume_keyword("then");
         let then_branch = self.parse_expression();
-        self.consume_with_value(TokenType::Keyword, "else");
+        self.consume_keyword("else");
         let else_branch = self.parse_expression();
         Expression::IfExpression {
             condition: Box::new(condition),
@@ -135,9 +159,9 @@ impl Parser {
     }
 
     fn parse_parentheses(&mut self) -> Expression {
-        self.consume_with_value(TokenType::Punctuation, "(");
+        self.consume_left_paren();
         let expr = self.parse_expression();
-        self.consume_with_value(TokenType::Punctuation, ")");
+        self.consume_right_paren();
         expr
     }
 
@@ -149,7 +173,7 @@ impl Parser {
             TokenType::BooleanLiteral => self.parse_boolean_literal(),
             TokenType::Keyword => self.parse_if_expression(),
             TokenType::Identifier => {
-                if self.peek_forward(1).value == "(" {
+                if self.next_is("(") {
                     self.parse_call_expression()
                 } else {
                     self.parse_identifier()

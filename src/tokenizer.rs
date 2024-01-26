@@ -32,7 +32,7 @@ lazy_static! {
     static ref INTEGER_LITERAL_REGEX: Regex = Regex::new(r"^[0-9]+").unwrap();
     static ref OPERATOR_REGEX: Regex = Regex::new(r"^(==|!=|<=|>=|\+|-|\*|/|=|<|>|&)").unwrap();
     static ref PUNCTUATION_REGEX: Regex = Regex::new(r"^(\(|\)|\{|\}|,|;|:)").unwrap();
-    static ref KEYWORD_REGEX: Regex = Regex::new(r"^(if|then|else)").unwrap();
+    static ref KEYWORD_REGEX: Regex = Regex::new(r"^(true|false|if|then|else)").unwrap();
 
     // Order is significant here. The first match is the one that will be used.
     static ref TOKEN_REGEX_TO_TYPE: Vec<(Regex, TokenType)> = vec![

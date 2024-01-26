@@ -48,7 +48,7 @@ pub fn interpret(node: Expression) -> Value {
                         },
                         _ => panic!("Invalid right operand for boolean operation {:?}", operator)
                     }
-                }
+                },
             }
         },
         _ => panic!("Unknown expression {:?}", node)

@@ -23,7 +23,6 @@ pub enum Expression {
     },
 }
 
-
 struct Parser {
     tokens: Vec<Token>,
     current_index: usize,
@@ -71,6 +70,11 @@ impl Parser {
         self.consume_with_values(expected_types, &[])
     }
 
+    fn parse_boolean_literal(&mut self) -> Expression {
+        let token = self.consume_with_values(&[TokenType::Keyword], &["true".to_string(), "false".to_string()]);
+        Expression::BooleanLiteral { value: token.value.starts_with('t') }
+    }
+
     fn parse_int_literal(&mut self) -> Expression {
         let token = self.consume(&[TokenType::IntegerLiteral]);
         Expression::IntegerLiteral {
@@ -111,7 +115,13 @@ impl Parser {
 
         match token.token_type {
             TokenType::IntegerLiteral => self.parse_int_literal(),
-            TokenType::Keyword => self.parse_if_expression(),
+            TokenType::Keyword => {
+                if token.value.starts_with('t') || token.value.starts_with('f') {
+                    self.parse_boolean_literal()
+                } else {
+                    self.parse_if_expression()
+                }
+            },
             TokenType::Identifier => self.parse_identifier(),
             TokenType::Punctuation => {
                 if token.value == "(" {
@@ -387,6 +397,19 @@ mod tests {
 
             },
             _ => panic!("Expected binary expression"),
+        }
+    }
+
+    #[test]
+    fn test_boolean_literal() {
+        let source = "true";
+        let tokens = tokenize(source);
+        let expression = parse(tokens);
+        match expression {
+            Expression::BooleanLiteral { value } => {
+                assert_eq!(value, true)
+            },
+            _ => panic!("Not a boolean")
         }
     }
 }

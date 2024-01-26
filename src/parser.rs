@@ -2,8 +2,11 @@ use crate::tokenizer::{TokenType, Token, SourceLocation};
 
 #[derive(Debug)]
 pub enum Expression {
-    Literal {
-        value: String,
+    IntegerLiteral {
+        value: i32,
+    },
+    BooleanLiteral {
+        value: bool,
     },
     Identifier {
         value: String,
@@ -70,8 +73,8 @@ impl Parser {
 
     fn parse_int_literal(&mut self) -> Expression {
         let token = self.consume(&[TokenType::IntegerLiteral]);
-        Expression::Literal {
-            value: token.value,
+        Expression::IntegerLiteral {
+            value: token.value.parse().expect("Not a valid number"),
         }
     }
 
@@ -167,6 +170,7 @@ pub fn parse(tokens: Vec<Token>) -> Expression {
 
 #[cfg(test)]
 mod tests {
+
     use crate::tokenizer::{tokenize, Token};
     use super::*;
 
@@ -248,14 +252,14 @@ mod tests {
                     Expression::BinaryExpression { operator, left, right } => {
                         assert_eq!(operator, "+");
                         match left.as_ref() {
-                            Expression::Literal { value, .. } => {
-                                assert_eq!(value, "1");
+                            Expression::IntegerLiteral { value, .. } => {
+                                assert_eq!(*value, 1);
                                 match right.as_ref() {
                                     Expression::BinaryExpression { operator, left, .. }  => {
                                         assert_eq!(operator, "*");
                                         match left.as_ref() {
-                                            Expression::Literal { value } => {
-                                                assert_eq!(value, "2");
+                                            Expression::IntegerLiteral { value } => {
+                                                assert_eq!(*value, 2);
                                             },
                                             _ => panic!("Expected literal 2"),
                                         }
@@ -287,8 +291,8 @@ mod tests {
                     Expression::BinaryExpression { operator, left,.. } => {
                         assert_eq!(operator, "+");
                         match left.as_ref() {
-                            Expression::Literal { value } => {
-                                assert_eq!(value, "1");
+                            Expression::IntegerLiteral { value } => {
+                                assert_eq!(*value, 1);
                             },
                             _ => panic!("Expected literal 1"),
                         }
@@ -308,8 +312,8 @@ mod tests {
         let expression = parse(tokens);
         
         match expression {
-            Expression::Literal { value, .. } => {
-                assert_eq!(value, "42");
+            Expression::IntegerLiteral { value, .. } => {
+                assert_eq!(value, 42);
             },
             _ => panic!("Expected literal"),
         }
@@ -351,20 +355,20 @@ mod tests {
         match expression {
             Expression::IfExpression { condition, then_branch, else_branch } => {
                 match condition.as_ref() {
-                    Expression::Literal { value } => {
-                        assert_eq!(value, "1");
+                    Expression::IntegerLiteral { value } => {
+                        assert_eq!(*value, 1);
                     },
                     _ => panic!("Expected literal 1"),
                 }
                 match then_branch.as_ref() {
-                    Expression::Literal { value } => {
-                        assert_eq!(value, "2");
+                    Expression::IntegerLiteral { value } => {
+                        assert_eq!(*value, 2);
                     },
                     _ => panic!("Expected literal 2"),
                 }
                 match else_branch.as_ref() {
-                    Expression::Literal { value } => {
-                        assert_eq!(value, "3");
+                    Expression::IntegerLiteral { value } => {
+                        assert_eq!(*value, 3);
                     },
                     _ => panic!("Expected literal 3"),
                 }

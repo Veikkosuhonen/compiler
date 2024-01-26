@@ -353,7 +353,7 @@ mod tests {
     }
 
     #[test]
-    fn test_simple_if_expression() {
+    fn test_if_expression() {
         let source = "if 1 then 2 else 3";
         let tokens: Vec<Token> = tokenize(source);
         let expression = parse(tokens);
@@ -384,13 +384,23 @@ mod tests {
 
     #[test]
     fn test_complex_if_expression() {
-        let source = "1 + 2 * if 4 then 6 else 8 / 0";
+        let source = "1 + (if 1 then 2 else 3) * 2";
         let tokens: Vec<Token> = tokenize(source);
         let expression = parse(tokens);
         match expression {
-            Expression::BinaryExpression { left, operator, right } => {
-
-            },
+            Expression::BinaryExpression { right , ..} => {
+                match *right {
+                    Expression::BinaryExpression { left , ..} => {
+                        match *left {
+                            Expression::IfExpression { .. } => {
+                                //
+                            }
+                            _ => panic!("Expected if expression"),
+                        }
+                    },
+                    _ => panic!("Expected binary expression"),
+                }
+            }
             _ => panic!("Expected binary expression"),
         }
     }

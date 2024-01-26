@@ -111,7 +111,7 @@ mod tests {
     #[test]
     fn test_interpret_if() {
         let source = "
-        if (true and false or or true) 
+        if (true and false or true) 
             then 42 
             else 0 - 42";
         let tokens: Vec<Token> = tokenize(source);

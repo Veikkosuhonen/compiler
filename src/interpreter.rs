@@ -2,27 +2,27 @@
 use crate::parser::Expression;
 
 pub enum Value {
-    IntegerValue(i32),
-    BooleanValue(bool),
+    Integer(i32),
+    Boolean(bool),
 }
 
 pub fn interpret(node: Expression) -> Value {
     match node {
         Expression::IntegerLiteral { value } => {
-            Value::IntegerValue(value)
+            Value::Integer(value)
         },
         Expression::BooleanLiteral { value } => {
-            Value::BooleanValue(value)
+            Value::Boolean(value)
         }
         Expression::BinaryExpression { left, operator, right } => {
             let left_result = interpret(*left);
             let right_result = interpret(*right);
 
             match left_result {
-                Value::IntegerValue(ival1) => {
+                Value::Integer(ival1) => {
                     match right_result {
-                        Value::IntegerValue(ival2) => {
-                            Value::IntegerValue(
+                        Value::Integer(ival2) => {
+                            Value::Integer(
                                 match operator.as_str() {
                                     "+" => ival1 + ival2,
                                     "-" => ival1 - ival2,
@@ -35,10 +35,10 @@ pub fn interpret(node: Expression) -> Value {
                         _ => panic!("Invalid right operand for integer operation {:?}", operator)
                     }
                 }
-                Value::BooleanValue(bval1) => {
+                Value::Boolean(bval1) => {
                     match right_result {
-                        Value::BooleanValue(bval2) => {
-                            Value::BooleanValue(
+                        Value::Boolean(bval2) => {
+                            Value::Boolean(
                                 match operator.as_str() {
                                     "or" => bval1 || bval2,
                                     "and" => bval1 && bval2,
@@ -54,7 +54,7 @@ pub fn interpret(node: Expression) -> Value {
         Expression::IfExpression { condition, then_branch, else_branch } => {
             let condition_result = interpret(*condition);
             match condition_result {
-                Value::BooleanValue(condition_val) => {
+                Value::Boolean(condition_val) => {
                     if condition_val {
                         interpret(*then_branch)
                     } else {
@@ -74,17 +74,18 @@ mod tests {
     use crate::parser::parse;
     use super::*;
 
+    fn i(src: &str) -> Value {
+        let tokens: Vec<Token> = tokenize(src);
+        let expression = parse(tokens);
+        interpret(expression)
+    }
+
     #[test]
     fn test_interpret_integers() {
-        let source = "7 + 3 * 2";
-        let tokens: Vec<Token> = tokenize(source);
-
-        let expression = parse(tokens);
-
-        let result = interpret(expression);
+        let result = i("7 + 3 * 2");
 
         match result {
-            Value::IntegerValue(result) => {
+            Value::Integer(result) => {
                 assert_eq!(result, 13)
             },
             _ => panic!("Wrong return value type"),
@@ -93,15 +94,10 @@ mod tests {
 
     #[test]
     fn test_interpret_booleans() {
-        let source = "true and false or true";
-        let tokens: Vec<Token> = tokenize(source);
-
-        let expression = parse(tokens);
-
-        let result = interpret(expression);
+        let result = i("true and false or true");
 
         match result {
-            Value::BooleanValue(result) => {
+            Value::Boolean(result) => {
                 assert_eq!(result, true)
             },
             _ => panic!("Wrong return value type"),
@@ -110,15 +106,13 @@ mod tests {
 
     #[test]
     fn test_interpret_if() {
-        let source = "
+        let result = i("
         if (true and false or true) 
             then 42 
-            else 0 - 42";
-        let tokens: Vec<Token> = tokenize(source);
-        let expression = parse(tokens);
-        let result = interpret(expression);
+            else 0 - 999");
+
         match result {
-            Value::IntegerValue(result) => {
+            Value::Integer(result) => {
                 assert_eq!(result, 42)
             },
             _ => panic!("Wrong return value type")

@@ -131,13 +131,15 @@ impl Parser {
         self.consume_left_paren();
 
         let mut arguments: Vec<Box<Expression>> = vec![];
-        loop {
-            let arg = self.parse_expression();
-            arguments.push(Box::new(arg));
-            if self.current_is(")") {
-                break;
+        if !self.current_is(")") {
+            loop {
+                let arg = self.parse_expression();
+                arguments.push(Box::new(arg));
+                if self.current_is(")") {
+                    break;
+                }
+                self.consume_comma();
             }
-            self.consume_comma();
         }
         self.consume_right_paren();
 
@@ -480,7 +482,45 @@ mod tests {
     }
 
     #[test]
-    fn test_function_call() {
+    fn test_function_call_without_args() {
+        let source = "f()";
+        let tokens = tokenize(source);
+        let expression = parse(tokens);
+        match expression {
+            Expression::CallExpression { arguments, callee } => {
+                match *callee {
+                    Expression::Identifier { value } => {
+                        assert_eq!(value, "f");
+                    },
+                    _ => panic!("Callee not identifier")
+                }
+                assert_eq!(arguments.len(), 0)
+            },
+            _ => panic!("Not a boolean")
+        }
+    }
+
+    #[test]
+    fn test_function_call_with_arg() {
+        let source = "f(1 + 1)";
+        let tokens = tokenize(source);
+        let expression = parse(tokens);
+        match expression {
+            Expression::CallExpression { arguments, callee } => {
+                match *callee {
+                    Expression::Identifier { value } => {
+                        assert_eq!(value, "f");
+                    },
+                    _ => panic!("Callee not identifier")
+                }
+                assert_eq!(arguments.len(), 1)
+            },
+            _ => panic!("Not a boolean")
+        }
+    }
+
+    #[test]
+    fn test_function_call_with_args() {
         let source = "f(1, 2, 3)";
         let tokens = tokenize(source);
         let expression = parse(tokens);

@@ -12,6 +12,7 @@ pub enum TokenType {
     Identifier,
     Keyword,
     IntegerLiteral,
+    BooleanLiteral,
     Operator,
     Punctuation,
     None,
@@ -30,9 +31,10 @@ lazy_static! {
     static ref LINE_COMMENT_REGEX: Regex = Regex::new(r"^//.*(\n|$)").unwrap();
     static ref IDENTIFIER_REGEX: Regex = Regex::new(r"^[a-zA-Z_][a-zA-Z0-9_]*").unwrap();
     static ref INTEGER_LITERAL_REGEX: Regex = Regex::new(r"^[0-9]+").unwrap();
-    static ref OPERATOR_REGEX: Regex = Regex::new(r"^(==|!=|<=|>=|\+|-|\*|/|=|<|>|&)").unwrap();
+    static ref BOOLEAN_LITERAL_REGEX: Regex = Regex::new(r"^(true|false)").unwrap();
+    static ref OPERATOR_REGEX: Regex = Regex::new(r"^(==|!=|<=|>=|\+|-|\*|/|=|<|>|and|or)").unwrap();
     static ref PUNCTUATION_REGEX: Regex = Regex::new(r"^(\(|\)|\{|\}|,|;|:)").unwrap();
-    static ref KEYWORD_REGEX: Regex = Regex::new(r"^(true|false|if|then|else)").unwrap();
+    static ref KEYWORD_REGEX: Regex = Regex::new(r"^(if|then|else)").unwrap();
 
     // Order is significant here. The first match is the one that will be used.
     static ref TOKEN_REGEX_TO_TYPE: Vec<(Regex, TokenType)> = vec![
@@ -40,9 +42,10 @@ lazy_static! {
         (MULTILINE_COMMENT_REGEX.clone(), TokenType::None),
         (LINE_COMMENT_REGEX.clone(), TokenType::None),
         (KEYWORD_REGEX.clone(), TokenType::Keyword),
+        (OPERATOR_REGEX.clone(), TokenType::Operator),
+        (BOOLEAN_LITERAL_REGEX.clone(), TokenType::BooleanLiteral),
         (IDENTIFIER_REGEX.clone(), TokenType::Identifier),
         (INTEGER_LITERAL_REGEX.clone(), TokenType::IntegerLiteral),
-        (OPERATOR_REGEX.clone(), TokenType::Operator),
         (PUNCTUATION_REGEX.clone(), TokenType::Punctuation),
     ];
 }

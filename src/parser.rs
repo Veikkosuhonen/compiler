@@ -71,7 +71,7 @@ impl Parser {
     }
 
     fn parse_boolean_literal(&mut self) -> Expression {
-        let token = self.consume_with_values(&[TokenType::Keyword], &["true".to_string(), "false".to_string()]);
+        let token = self.consume_with_values(&[TokenType::BooleanLiteral], &["true".to_string(), "false".to_string()]);
         Expression::BooleanLiteral { value: token.value.starts_with('t') }
     }
 
@@ -115,13 +115,8 @@ impl Parser {
 
         match token.token_type {
             TokenType::IntegerLiteral => self.parse_int_literal(),
-            TokenType::Keyword => {
-                if token.value.starts_with('t') || token.value.starts_with('f') {
-                    self.parse_boolean_literal()
-                } else {
-                    self.parse_if_expression()
-                }
-            },
+            TokenType::BooleanLiteral => self.parse_boolean_literal(),
+            TokenType::Keyword => self.parse_if_expression(),
             TokenType::Identifier => self.parse_identifier(),
             TokenType::Punctuation => {
                 if token.value == "(" {
@@ -138,7 +133,7 @@ impl Parser {
     fn parse_term(&mut self) -> Expression {
         let mut left = self.parse_factor();
         
-        while vec!["*", "/"].contains(&self.peek().value.as_str()) {
+        while vec!["*", "/", "and"].contains(&self.peek().value.as_str()) {
             let operator = self.consume(&[TokenType::Operator]);
             let right = self.parse_factor();
             left = Expression::BinaryExpression {
@@ -154,7 +149,7 @@ impl Parser {
     fn parse_expression(&mut self) -> Expression {
         let mut left = self.parse_term();
         
-        while vec!["+", "-"].contains(&self.peek().value.as_str()) {
+        while vec!["+", "-", "or"].contains(&self.peek().value.as_str()) {
             let operator = self.consume(&[TokenType::Operator]);
             let right = self.parse_term();
             left = Expression::BinaryExpression {

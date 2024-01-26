@@ -62,7 +62,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_interpret() {
+    fn test_interpret_integers() {
         let source = "7 + 3 * 2";
         let tokens: Vec<Token> = tokenize(source);
 
@@ -73,6 +73,23 @@ mod tests {
         match result {
             Value::IntegerValue(result) => {
                 assert_eq!(result, 13)
+            },
+            _ => panic!("Wrong return value type"),
+        }
+    }
+
+    #[test]
+    fn test_interpret_booleans() {
+        let source = "true and false or true";
+        let tokens: Vec<Token> = tokenize(source);
+
+        let expression = parse(tokens);
+
+        let result = interpret(expression);
+
+        match result {
+            Value::BooleanValue(result) => {
+                assert_eq!(result, true)
             },
             _ => panic!("Wrong return value type"),
         }

@@ -25,11 +25,11 @@ pub fn interpret(node: Expression) -> Value {
                             Value::Integer(
                                 match operator {
                                     Op::Add => ival1 + ival2,
-                                    Op::Subtract => ival1 - ival2,
-                                    Op::Multiply => ival1 * ival2,
-                                    Op::Divide => ival1 / ival2,
-                                    Op::Modulo => ival1 % ival2,
-                                    Op::Exponent => i32::pow(ival1, ival2.try_into().unwrap()),
+                                    Op::Sub => ival1 - ival2,
+                                    Op::Mul => ival1 * ival2,
+                                    Op::Div => ival1 / ival2,
+                                    Op::Mod => ival1 % ival2,
+                                    Op::Exp => i32::pow(ival1, ival2.try_into().unwrap()),
                                     _ => panic!("Unknown integer binary operator {:?}", operator)
                                 }
                             )
@@ -75,7 +75,7 @@ pub fn interpret(node: Expression) -> Value {
                 Value::Integer(ival) => {
                     Value::Integer(
                         match operator {
-                            Op::Subtract => {
+                            Op::Sub => {
                                 -ival
                             },
                             _ => panic!("Invalid integer unary operator {:?}", operator)

@@ -1,16 +1,21 @@
+use lazy_static::lazy_static;
 use crate::tokenizer::{TokenType, Token, SourceLocation};
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Op {
     Add,
-    Subtract,
-    Multiply,
-    Divide,
-    Modulo,
-    Exponent,
+    Sub,
+    Mul,
+    Div,
+    Mod,
+    Exp,
     Not,
     Equals,
     NotEquals,
+    LT,
+    GT,
+    LTE,
+    GTE,
     And,
     Or,
     Assign,
@@ -20,20 +25,41 @@ impl Op {
     fn from_str(value: &str) -> Op {
         match value {
             "+" => Op::Add,
-            "-" => Op::Subtract,
-            "*" => Op::Multiply,
-            "/" => Op::Divide,
-            "%" => Op::Modulo,
-            "**" => Op::Exponent,
+            "-" => Op::Sub,
+            "*" => Op::Mul,
+            "/" => Op::Div,
+            "%" => Op::Mod,
+            "**" => Op::Exp,
             "not" => Op::Not,
             "==" => Op::Equals,
             "!=" => Op::NotEquals,
+            "<" => Op::LT,
+            ">" => Op::GT,
+            "<=" => Op::LTE,
+            ">=" => Op::GTE,
             "and" => Op::And,
             "or" => Op::Or,
             "=" => Op::Assign,
             _ => panic!("Unknown operator {:?}", value)
         }
     }
+}
+
+lazy_static! {
+    static ref BINARY_OP_PRECEDENCE: Vec<Vec<Op>> = vec![
+        vec![Op::Assign],
+        vec![Op::And],
+        vec![Op::Or],
+        vec![Op::Equals, Op::NotEquals],
+        vec![Op::LT, Op::GT, Op::LTE, Op::GTE],
+        vec![Op::Add, Op::Sub],
+        vec![Op::Mul, Op::Div, Op::Mod],
+        vec![Op::Exp],
+    ];
+    static ref UNARY_OP_PRECEDENCE: Vec<Vec<Op>> = vec![
+        vec![Op::Not],
+        vec![Op::Sub],
+    ];
 }
 
 #[derive(Debug)]
@@ -323,7 +349,7 @@ mod tests {
         
         match expression {
             Expression::UnaryExpression { operator, .. } => {
-                assert_eq!(operator, Op::Subtract);
+                assert_eq!(operator, Op::Sub);
             },
             _ => panic!("Expected unary expression"),
         }
@@ -353,13 +379,13 @@ mod tests {
         
         match expression {
             Expression::BinaryExpression { operator, left ,.. } => {
-                assert_eq!(operator, Op::Subtract);
+                assert_eq!(operator, Op::Sub);
                 match left.as_ref() {
                     Expression::BinaryExpression { operator, left, .. } => {
                         assert_eq!(*operator, Op::Add);
                         match left.as_ref() {
                             Expression::BinaryExpression { operator, left, .. } => {
-                                assert_eq!(*operator, Op::Subtract);
+                                assert_eq!(*operator, Op::Sub);
                                 match left.as_ref() {
                                     Expression::Identifier { value } => {
                                         assert_eq!(value, "minttujam");
@@ -386,7 +412,7 @@ mod tests {
         
         match expression {
             Expression::BinaryExpression { operator, left, .. } => {
-                assert_eq!(operator, Op::Subtract);
+                assert_eq!(operator, Op::Sub);
                 match left.as_ref() {
                     Expression::BinaryExpression { operator, left, right } => {
                         assert_eq!(*operator, Op::Add);
@@ -395,7 +421,7 @@ mod tests {
                                 assert_eq!(*value, 1);
                                 match right.as_ref() {
                                     Expression::BinaryExpression { operator, left, .. }  => {
-                                        assert_eq!(*operator, Op::Multiply);
+                                        assert_eq!(*operator, Op::Mul);
                                         match left.as_ref() {
                                             Expression::IntegerLiteral { value } => {
                                                 assert_eq!(*value, 2);
@@ -425,7 +451,7 @@ mod tests {
         
         match expression {
             Expression::BinaryExpression { operator, left, .. } => {
-                assert_eq!(operator, Op::Multiply);
+                assert_eq!(operator, Op::Mul);
                 match left.as_ref() {
                     Expression::BinaryExpression { operator, left,.. } => {
                         assert_eq!(*operator, Op::Add);
@@ -480,7 +506,7 @@ mod tests {
         let expression = parse(tokens);
         match expression {
             Expression::BinaryExpression { operator, .. } => {
-                assert_eq!(operator, Op::Divide);
+                assert_eq!(operator, Op::Div);
             },
             _ => panic!("Expected binary expression"),
         }
@@ -496,10 +522,10 @@ mod tests {
                 assert_eq!(operator, Op::Add);
                 match left.as_ref() {
                     Expression::BinaryExpression { operator, right,.. } => {
-                        assert_eq!(*operator, Op::Multiply);
+                        assert_eq!(*operator, Op::Mul);
                         match right.as_ref() {
                             Expression::UnaryExpression { operator,.. } => {
-                                assert_eq!(*operator, Op::Subtract)
+                                assert_eq!(*operator, Op::Sub)
                             },
                             _ => panic!("Expected - unary expression")
                         }

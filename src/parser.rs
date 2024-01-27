@@ -52,7 +52,7 @@ impl Parser {
         let idx = self.current_index + lookahead;
         if idx < self.tokens.len() {
             if let Some(t) = self.tokens.get(idx) {
-                return t.clone();
+                t.clone()
             } else {
                 panic!("Unexpected end of file");
             }
@@ -209,14 +209,13 @@ impl Parser {
                 }
             },
             TokenType::None => panic!("Unexpected end of file"),
-            _ => panic!("Unexpected token: {:?}", token),
         }
     }
 
     fn parse_term(&mut self) -> Expression {
         let mut left = self.parse_factor();
         
-        while vec!["*", "/", "and"].contains(&self.peek().value.as_str()) {
+        while ["*", "/", "and"].contains(&self.peek().value.as_str()) {
             let operator = self.consume(TokenType::Operator);
             let right = self.parse_factor();
             left = Expression::BinaryExpression {
@@ -232,7 +231,7 @@ impl Parser {
     fn parse_expression(&mut self) -> Expression {
         let mut left = self.parse_term();
         
-        while vec!["+", "-", "or"].contains(&self.peek().value.as_str()) {
+        while ["+", "-", "or"].contains(&self.peek().value.as_str()) {
             let operator = self.consume(TokenType::Operator);
             let right = self.parse_term();
             left = Expression::BinaryExpression {

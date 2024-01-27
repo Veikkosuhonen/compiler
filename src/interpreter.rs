@@ -28,6 +28,7 @@ pub fn interpret(node: Expression) -> Value {
                                     "-" => ival1 - ival2,
                                     "*" => ival1 * ival2,
                                     "/" => ival1 / ival2,
+                                    "%" => ival1 % ival2,
                                     _ => panic!("Unknown integer binary operator {:?}", operator)
                                 }
                             )

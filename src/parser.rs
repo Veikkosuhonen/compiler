@@ -1,5 +1,41 @@
 use crate::tokenizer::{TokenType, Token, SourceLocation};
 
+#[derive(Debug, PartialEq, Eq)]
+pub enum Op {
+    Add,
+    Subtract,
+    Multiply,
+    Divide,
+    Modulo,
+    Exponent,
+    Not,
+    Equals,
+    NotEquals,
+    And,
+    Or,
+    Assign,
+}
+
+impl Op {
+    fn from_str(value: &str) -> Op {
+        match value {
+            "+" => Op::Add,
+            "-" => Op::Subtract,
+            "*" => Op::Multiply,
+            "/" => Op::Divide,
+            "%" => Op::Modulo,
+            "**" => Op::Exponent,
+            "not" => Op::Not,
+            "==" => Op::Equals,
+            "!=" => Op::NotEquals,
+            "and" => Op::And,
+            "or" => Op::Or,
+            "=" => Op::Assign,
+            _ => panic!("Unknown operator {:?}", value)
+        }
+    }
+}
+
 #[derive(Debug)]
 pub enum Expression {
     IntegerLiteral {
@@ -13,12 +49,12 @@ pub enum Expression {
     },
     BinaryExpression {
         left: Box<Expression>,
-        operator: String,
+        operator: Op,
         right: Box<Expression>,
     },
     UnaryExpression {
         operand: Box<Expression>,
-        operator: String,
+        operator: Op,
     },
     IfExpression {
         condition: Box<Expression>,
@@ -183,7 +219,7 @@ impl Parser {
     fn parse_unary_expression(&mut self) -> Expression {
         let op = self.consume(TokenType::Operator);
         let expr = self.parse_factor();
-        Expression::UnaryExpression { operand: Box::new(expr), operator: op.value }
+        Expression::UnaryExpression { operand: Box::new(expr), operator: Op::from_str(&op.value) }
     }
 
     fn parse_factor(&mut self) -> Expression {
@@ -221,7 +257,7 @@ impl Parser {
             let right = self.parse_factor();
             left = Expression::BinaryExpression {
                 left: Box::new(left),
-                operator: operator.value,
+                operator: Op::from_str(&operator.value),
                 right: Box::new(right),
             };
         }
@@ -237,7 +273,7 @@ impl Parser {
             let right = self.parse_term();
             left = Expression::BinaryExpression {
                 left: Box::new(left),
-                operator: operator.value,
+                operator: Op::from_str(&operator.value),
                 right: Box::new(right),
             };
         }
@@ -287,7 +323,7 @@ mod tests {
         
         match expression {
             Expression::UnaryExpression { operator, .. } => {
-                assert_eq!(operator, "-");
+                assert_eq!(operator, Op::Subtract);
             },
             _ => panic!("Expected unary expression"),
         }
@@ -302,7 +338,7 @@ mod tests {
         
         match expression {
             Expression::BinaryExpression { operator, .. } => {
-                assert_eq!(operator, "+");
+                assert_eq!(operator, Op::Add);
             },
             _ => panic!("Expected binary expression"),
         }
@@ -317,13 +353,13 @@ mod tests {
         
         match expression {
             Expression::BinaryExpression { operator, left ,.. } => {
-                assert_eq!(operator, "-");
+                assert_eq!(operator, Op::Subtract);
                 match left.as_ref() {
                     Expression::BinaryExpression { operator, left, .. } => {
-                        assert_eq!(operator, "+");
+                        assert_eq!(*operator, Op::Add);
                         match left.as_ref() {
                             Expression::BinaryExpression { operator, left, .. } => {
-                                assert_eq!(operator, "-");
+                                assert_eq!(*operator, Op::Subtract);
                                 match left.as_ref() {
                                     Expression::Identifier { value } => {
                                         assert_eq!(value, "minttujam");
@@ -350,16 +386,16 @@ mod tests {
         
         match expression {
             Expression::BinaryExpression { operator, left, .. } => {
-                assert_eq!(operator, "-");
+                assert_eq!(operator, Op::Subtract);
                 match left.as_ref() {
                     Expression::BinaryExpression { operator, left, right } => {
-                        assert_eq!(operator, "+");
+                        assert_eq!(*operator, Op::Add);
                         match left.as_ref() {
                             Expression::IntegerLiteral { value, .. } => {
                                 assert_eq!(*value, 1);
                                 match right.as_ref() {
                                     Expression::BinaryExpression { operator, left, .. }  => {
-                                        assert_eq!(operator, "*");
+                                        assert_eq!(*operator, Op::Multiply);
                                         match left.as_ref() {
                                             Expression::IntegerLiteral { value } => {
                                                 assert_eq!(*value, 2);
@@ -389,10 +425,10 @@ mod tests {
         
         match expression {
             Expression::BinaryExpression { operator, left, .. } => {
-                assert_eq!(operator, "*");
+                assert_eq!(operator, Op::Multiply);
                 match left.as_ref() {
                     Expression::BinaryExpression { operator, left,.. } => {
-                        assert_eq!(operator, "+");
+                        assert_eq!(*operator, Op::Add);
                         match left.as_ref() {
                             Expression::IntegerLiteral { value } => {
                                 assert_eq!(*value, 1);
@@ -444,7 +480,7 @@ mod tests {
         let expression = parse(tokens);
         match expression {
             Expression::BinaryExpression { operator, .. } => {
-                assert_eq!(operator, "/");
+                assert_eq!(operator, Op::Divide);
             },
             _ => panic!("Expected binary expression"),
         }
@@ -457,13 +493,13 @@ mod tests {
     
         match expression {
             Expression::BinaryExpression { left, operator, .. } => {
-                assert_eq!(operator, "+");
+                assert_eq!(operator, Op::Add);
                 match left.as_ref() {
                     Expression::BinaryExpression { operator, right,.. } => {
-                        assert_eq!(operator, "*");
+                        assert_eq!(*operator, Op::Multiply);
                         match right.as_ref() {
                             Expression::UnaryExpression { operator,.. } => {
-                                assert_eq!(operator, "-")
+                                assert_eq!(*operator, Op::Subtract)
                             },
                             _ => panic!("Expected - unary expression")
                         }

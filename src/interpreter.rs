@@ -1,4 +1,4 @@
-use crate::parser::Expression;
+use crate::parser::{Op,Expression};
 
 pub enum Value {
     Integer(i32),
@@ -23,13 +23,13 @@ pub fn interpret(node: Expression) -> Value {
                     match right_result {
                         Value::Integer(ival2) => {
                             Value::Integer(
-                                match operator.as_str() {
-                                    "+" => ival1 + ival2,
-                                    "-" => ival1 - ival2,
-                                    "*" => ival1 * ival2,
-                                    "/" => ival1 / ival2,
-                                    "%" => ival1 % ival2,
-                                    "**" => i32::pow(ival1, ival2.try_into().unwrap()),
+                                match operator {
+                                    Op::Add => ival1 + ival2,
+                                    Op::Subtract => ival1 - ival2,
+                                    Op::Multiply => ival1 * ival2,
+                                    Op::Divide => ival1 / ival2,
+                                    Op::Modulo => ival1 % ival2,
+                                    Op::Exponent => i32::pow(ival1, ival2.try_into().unwrap()),
                                     _ => panic!("Unknown integer binary operator {:?}", operator)
                                 }
                             )
@@ -41,9 +41,9 @@ pub fn interpret(node: Expression) -> Value {
                     match right_result {
                         Value::Boolean(bval2) => {
                             Value::Boolean(
-                                match operator.as_str() {
-                                    "or" => bval1 || bval2,
-                                    "and" => bval1 && bval2,
+                                match operator {
+                                    Op::Or => bval1 || bval2,
+                                    Op::And => bval1 && bval2,
                                     _ => panic!("Unknown boolean binary operator {:?}", operator)
                                 }
                             )
@@ -74,8 +74,8 @@ pub fn interpret(node: Expression) -> Value {
             match operand_result {
                 Value::Integer(ival) => {
                     Value::Integer(
-                        match operator.as_str() {
-                            "-" => {
+                        match operator {
+                            Op::Subtract => {
                                 -ival
                             },
                             _ => panic!("Invalid integer unary operator {:?}", operator)
@@ -84,8 +84,8 @@ pub fn interpret(node: Expression) -> Value {
                 },
                 Value::Boolean(bval) => {
                     Value::Boolean(
-                        match operator.as_str() {
-                            "not" => {
+                        match operator {
+                            Op::Not => {
                                 !bval
                             },
                             _ => panic!("Invalid boolean unary operator {:?}", operator)

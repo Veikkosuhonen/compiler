@@ -1,4 +1,3 @@
-
 use crate::parser::Expression;
 
 pub enum Value {
@@ -29,7 +28,7 @@ pub fn interpret(node: Expression) -> Value {
                                     "-" => ival1 - ival2,
                                     "*" => ival1 * ival2,
                                     "/" => ival1 / ival2,
-                                    _ => panic!("Unknown operator {:?}", operator)
+                                    _ => panic!("Unknown integer binary operator {:?}", operator)
                                 }
                             )
                         },
@@ -43,7 +42,7 @@ pub fn interpret(node: Expression) -> Value {
                                 match operator.as_str() {
                                     "or" => bval1 || bval2,
                                     "and" => bval1 && bval2,
-                                    _ => panic!("Unknown operator {:?}", operator)
+                                    _ => panic!("Unknown boolean binary operator {:?}", operator)
                                 }
                             )
                         },
@@ -66,6 +65,32 @@ pub fn interpret(node: Expression) -> Value {
                     }
                 },
                 _ => panic!("If expression condition must be a boolean"),
+            }
+        },
+        Expression::UnaryExpression { operand, operator } => {
+            let operand_result = interpret(*operand);
+            match operand_result {
+                Value::Integer(ival) => {
+                    Value::Integer(
+                        match operator.as_str() {
+                            "-" => {
+                                -ival
+                            },
+                            _ => panic!("Invalid integer unary operator {:?}", operator)
+                        }
+                    )
+                },
+                Value::Boolean(bval) => {
+                    Value::Boolean(
+                        match operator.as_str() {
+                            "not" => {
+                                !bval
+                            },
+                            _ => panic!("Invalid boolean unary operator {:?}", operator)
+                        }
+                    )
+                },
+                Value::Unit => panic!("Unary operator not permitted for Unit value")
             }
         }
         _ => panic!("Unknown expression {:?}", node)
@@ -103,6 +128,31 @@ mod tests {
         match result {
             Value::Boolean(result) => {
                 assert_eq!(result, true)
+            },
+            _ => panic!("Wrong return value type"),
+        }
+    }
+
+    #[test]
+    fn test_unary_ops() {
+        let mut result = i("not true");
+        match result {
+            Value::Boolean(result) => {
+                assert_eq!(result, false)
+            },
+            _ => panic!("Wrong return value type"),
+        }
+        result = i("not not not false");
+        match result {
+            Value::Boolean(result) => {
+                assert_eq!(result, true)
+            },
+            _ => panic!("Wrong return value type"),
+        }
+        result = i("-42");
+        match result {
+            Value::Integer(result) => {
+                assert_eq!(result, -42)
             },
             _ => panic!("Wrong return value type"),
         }

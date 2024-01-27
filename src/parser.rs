@@ -16,6 +16,10 @@ pub enum Expression {
         operator: String,
         right: Box<Expression>,
     },
+    UnaryExpression {
+        operand: Box<Expression>,
+        operator: String,
+    },
     IfExpression {
         condition: Box<Expression>,
         then_branch: Box<Expression>,
@@ -176,10 +180,17 @@ impl Parser {
         expr
     }
 
+    fn parse_unary_expression(&mut self) -> Expression {
+        let op = self.consume(TokenType::Operator);
+        let expr = self.parse_expression();
+        Expression::UnaryExpression { operand: Box::new(expr), operator: op.value }
+    }
+
     fn parse_factor(&mut self) -> Expression {
         let token = self.peek();
 
         match token.token_type {
+            TokenType::Operator => self.parse_unary_expression(),
             TokenType::IntegerLiteral => self.parse_int_literal(),
             TokenType::BooleanLiteral => self.parse_boolean_literal(),
             TokenType::Keyword => self.parse_if_expression(),
@@ -265,6 +276,21 @@ mod tests {
         let source = "1 + 2 3 4 haha minttuglitch";
         let tokens: Vec<Token> = tokenize(source);
         parse(tokens);
+    }
+
+    #[test]
+    fn test_parse_unary_op() {
+        let source = "-1";
+        let tokens: Vec<Token> = tokenize(source);
+
+        let expression = parse(tokens);
+        
+        match expression {
+            Expression::UnaryExpression { operator, .. } => {
+                assert_eq!(operator, "-");
+            },
+            _ => panic!("Expected unary expression"),
+        }
     }
 
     #[test]

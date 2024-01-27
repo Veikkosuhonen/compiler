@@ -1,9 +1,54 @@
 use crate::parser::{Op,Expression};
 
+#[derive(Debug)]
 pub enum Value {
     Integer(i32),
     Boolean(bool),
     Unit,
+}
+
+impl Op {
+    fn eval_binary_integer(&self, ival1: i32, ival2: i32) -> Value {
+        match self {
+            Op::Add =>       Value::Integer(ival1 + ival2),
+            Op::Sub =>       Value::Integer(ival1 - ival2),
+            Op::Mul =>       Value::Integer(ival1 * ival2),
+            Op::Div =>       Value::Integer(ival1 / ival2),
+            Op::Mod =>       Value::Integer(ival1 % ival2),
+            Op::Exp =>       Value::Integer(i32::pow(ival1, ival2.try_into().unwrap())),
+            Op::Equals =>    Value::Boolean(ival1 == ival2),
+            Op::NotEquals => Value::Boolean(ival1 == ival2),
+            Op::GT =>        Value::Boolean(ival1 > ival2),
+            Op::LT =>        Value::Boolean(ival1 < ival2),
+            Op::GTE =>       Value::Boolean(ival1 >= ival2),
+            Op::LTE =>       Value::Boolean(ival1 <= ival2),
+            _ => panic!("Invalid integer binary operator {:?}", &self)
+        }
+    }
+
+    fn eval_binary_boolean(&self, bval1: bool, bval2: bool) -> Value {
+        match self {
+            Op::Equals =>    Value::Boolean(bval1 == bval2),
+            Op::NotEquals => Value::Boolean(bval1 == bval2),
+            Op::And =>       Value::Boolean(bval1 && bval2),
+            Op::Or =>        Value::Boolean(bval1 || bval2),
+            _ => panic!("Invalid boolean binary operator {:?}", &self)
+        }
+    }
+
+    fn eval_unary_integer(&self, ival: i32) -> Value {
+        match self {
+            Op::Sub => Value::Integer(-ival),
+            _ => panic!("invalid integer unary operator {:?}", &self)
+        }
+    }
+
+    fn eval_unary_boolean(&self, ival: bool) -> Value {
+        match self {
+            Op::Not => Value::Boolean(!ival),
+            _ => panic!("invalid boolean unary operator {:?}", &self)
+        }
+    }
 }
 
 pub fn interpret(node: Expression) -> Value {
@@ -21,34 +66,14 @@ pub fn interpret(node: Expression) -> Value {
             match left_result {
                 Value::Integer(ival1) => {
                     match right_result {
-                        Value::Integer(ival2) => {
-                            Value::Integer(
-                                match operator {
-                                    Op::Add => ival1 + ival2,
-                                    Op::Sub => ival1 - ival2,
-                                    Op::Mul => ival1 * ival2,
-                                    Op::Div => ival1 / ival2,
-                                    Op::Mod => ival1 % ival2,
-                                    Op::Exp => i32::pow(ival1, ival2.try_into().unwrap()),
-                                    _ => panic!("Unknown integer binary operator {:?}", operator)
-                                }
-                            )
-                        },
-                        _ => panic!("Invalid right operand for integer operation {:?}", operator)
+                        Value::Integer(ival2) => operator.eval_binary_integer(ival1, ival2),
+                        _ => panic!("Invalid right operand for integer operation {:?}", right_result)
                     }
                 }
                 Value::Boolean(bval1) => {
                     match right_result {
-                        Value::Boolean(bval2) => {
-                            Value::Boolean(
-                                match operator {
-                                    Op::Or => bval1 || bval2,
-                                    Op::And => bval1 && bval2,
-                                    _ => panic!("Unknown boolean binary operator {:?}", operator)
-                                }
-                            )
-                        },
-                        _ => panic!("Invalid right operand for boolean operation {:?}", operator)
+                        Value::Boolean(bval2) => operator.eval_binary_boolean(bval1, bval2),
+                        _ => panic!("Invalid right operand for boolean operation {:?}", right_result)
                     }
                 },
                 Value::Unit => panic!("Unit used as operand in binary operation"),
@@ -72,26 +97,8 @@ pub fn interpret(node: Expression) -> Value {
         Expression::UnaryExpression { operand, operator } => {
             let operand_result = interpret(*operand);
             match operand_result {
-                Value::Integer(ival) => {
-                    Value::Integer(
-                        match operator {
-                            Op::Sub => {
-                                -ival
-                            },
-                            _ => panic!("Invalid integer unary operator {:?}", operator)
-                        }
-                    )
-                },
-                Value::Boolean(bval) => {
-                    Value::Boolean(
-                        match operator {
-                            Op::Not => {
-                                !bval
-                            },
-                            _ => panic!("Invalid boolean unary operator {:?}", operator)
-                        }
-                    )
-                },
+                Value::Integer(ival) => operator.eval_unary_integer(ival),
+                Value::Boolean(bval) => operator.eval_unary_boolean(bval),
                 Value::Unit => panic!("Unary operator not permitted for Unit value")
             }
         }

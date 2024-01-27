@@ -19,7 +19,7 @@ pub enum Expression {
     IfExpression {
         condition: Box<Expression>,
         then_branch: Box<Expression>,
-        else_branch: Box<Expression>,
+        else_branch: Option<Box<Expression>>,
     },
     CallExpression {
         callee: Box<Expression>,
@@ -151,12 +151,21 @@ impl Parser {
         let condition = self.parse_expression();
         self.consume_keyword("then");
         let then_branch = self.parse_expression();
-        self.consume_keyword("else");
-        let else_branch = self.parse_expression();
-        Expression::IfExpression {
-            condition: Box::new(condition),
-            then_branch: Box::new(then_branch),
-            else_branch: Box::new(else_branch),
+
+        if self.current_is("else") {
+            self.consume_keyword("else");
+            let else_branch = self.parse_expression();
+            Expression::IfExpression {
+                condition: Box::new(condition),
+                then_branch: Box::new(then_branch),
+                else_branch: Some(Box::new(else_branch)),
+            }
+        } else {
+            Expression::IfExpression {
+                condition: Box::new(condition),
+                then_branch: Box::new(then_branch),
+                else_branch: None,
+            }
         }
     }
 
@@ -416,7 +425,7 @@ mod tests {
     }
 
     #[test]
-    fn test_if_expression() {
+    fn test_if_else_expression() {
         let source = "if 1 then 2 else 3";
         let tokens: Vec<Token> = tokenize(source);
         let expression = parse(tokens);
@@ -434,10 +443,43 @@ mod tests {
                     },
                     _ => panic!("Expected literal 2"),
                 }
-                match else_branch.as_ref() {
-                    Expression::IntegerLiteral { value } => {
-                        assert_eq!(*value, 3);
+                match else_branch {
+                    Some(else_branch) => {
+                        match else_branch.as_ref() {
+                            Expression::IntegerLiteral { value } => {
+                                assert_eq!(*value, 3)
+                            },
+                            _ => panic!("Expected literal 3")
+                        }
                     },
+                    _ => panic!("Expected literal 3"),
+                }
+            },
+            _ => panic!("Expected if expression"),
+        }
+    }
+
+    #[test]
+    fn test_if_expression() {
+        let source = "if 1 then 2";
+        let tokens: Vec<Token> = tokenize(source);
+        let expression = parse(tokens);
+        match expression {
+            Expression::IfExpression { condition, then_branch, else_branch } => {
+                match condition.as_ref() {
+                    Expression::IntegerLiteral { value } => {
+                        assert_eq!(*value, 1);
+                    },
+                    _ => panic!("Expected literal 1"),
+                }
+                match then_branch.as_ref() {
+                    Expression::IntegerLiteral { value } => {
+                        assert_eq!(*value, 2);
+                    },
+                    _ => panic!("Expected literal 2"),
+                }
+                match else_branch {
+                    None => { },
                     _ => panic!("Expected literal 3"),
                 }
             },

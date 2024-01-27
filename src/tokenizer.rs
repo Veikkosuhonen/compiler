@@ -51,10 +51,13 @@ lazy_static! {
 }
 
 fn match_token(source: &str) -> Option<(Match<'_>, TokenType)> {
-    TOKEN_REGEX_TO_TYPE.iter().enumerate().find_map(|(i, token_regex_to_type)| {
-        let (regex, _) = token_regex_to_type;
-        regex.find(source).map(|m| (m, TOKEN_REGEX_TO_TYPE[i].1))
-    })
+    TOKEN_REGEX_TO_TYPE
+        .iter()
+        .enumerate()
+        .find_map(|(i, token_regex_to_type)| {
+            let (regex, _) = token_regex_to_type;
+            regex.find(source).map(|m| (m, TOKEN_REGEX_TO_TYPE[i].1))
+        })
 }
 
 fn count_line_column_changes(v: &str, line: usize, column: usize) -> (usize, usize) {
@@ -63,12 +66,11 @@ fn count_line_column_changes(v: &str, line: usize, column: usize) -> (usize, usi
         0 => column + v.len(),
         _ => v.len() - v.rfind('\n').unwrap_or(0),
     };
-    
+
     (line + line_change, column)
 }
 
 pub fn tokenize(source: &str) -> Vec<Token> {
-
     let mut tokens: Vec<Token> = Vec::new();
 
     let mut line = 1;
@@ -80,12 +82,8 @@ pub fn tokenize(source: &str) -> Vec<Token> {
         let slice = &source[current_start..];
 
         if let Some((m, token_type)) = match_token(slice) {
-
             if token_type != TokenType::None {
-                let location = SourceLocation {
-                    line,
-                    column,
-                };
+                let location = SourceLocation { line, column };
                 let token = Token {
                     token_type,
                     value: m.as_str().to_string(),
@@ -98,7 +96,10 @@ pub fn tokenize(source: &str) -> Vec<Token> {
 
             current_start += m.end();
         } else {
-            panic!("Cannot tokenize input at line {} column {}: {}", line, current_start, slice);
+            panic!(
+                "Cannot tokenize input at line {} column {}: {}",
+                line, current_start, slice
+            );
         }
     }
 
@@ -183,8 +184,8 @@ if 3 wowowo
 
         assert_eq!(tokens[5].token_type, TokenType::Punctuation);
 
-        source = "( ) { } , ; /* 
-            heyo 123 
+        source = "( ) { } , ; /*
+            heyo 123
         */ heyo_identifier";
         tokens = tokenize(source);
 
@@ -192,8 +193,8 @@ if 3 wowowo
 
         assert_eq!(tokens[6].token_type, TokenType::Identifier);
 
-        source = "( ) { } , ; /* 
-            heyo 123 
+        source = "( ) { } , ; /*
+            heyo 123
         */ heyo_identifier /* another
         comment
          */ 123";
@@ -237,5 +238,4 @@ if 3 wowowo
         assert_eq!(tokens[6].token_type, TokenType::IntegerLiteral);
         assert_eq!(tokens[7].token_type, TokenType::Punctuation);
     }
-
 }

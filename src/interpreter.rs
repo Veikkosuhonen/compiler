@@ -4,6 +4,7 @@ use crate::parser::Expression;
 pub enum Value {
     Integer(i32),
     Boolean(bool),
+    Unit,
 }
 
 pub fn interpret(node: Expression) -> Value {
@@ -49,6 +50,7 @@ pub fn interpret(node: Expression) -> Value {
                         _ => panic!("Invalid right operand for boolean operation {:?}", operator)
                     }
                 },
+                Value::Unit => panic!("Unit used as operand in binary operation"),
             }
         },
         Expression::IfExpression { condition, then_branch, else_branch } => {
@@ -57,8 +59,10 @@ pub fn interpret(node: Expression) -> Value {
                 Value::Boolean(condition_val) => {
                     if condition_val {
                         interpret(*then_branch)
-                    } else {
+                    } else if let Some(else_branch) = else_branch {
                         interpret(*else_branch)
+                    } else {
+                        Value::Unit
                     }
                 },
                 _ => panic!("If expression condition must be a boolean"),
@@ -106,6 +110,18 @@ mod tests {
 
     #[test]
     fn test_interpret_if() {
+        let result = i("
+        if (true and false and true) 
+            then 41");
+
+        match result {
+            Value::Unit => {},
+            _ => panic!("Wrong return value type")
+        }
+    }
+
+    #[test]
+    fn test_interpret_if_else() {
         let result = i("
         if (true and false or true) 
             then 42 

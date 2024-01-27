@@ -182,7 +182,7 @@ impl Parser {
 
     fn parse_unary_expression(&mut self) -> Expression {
         let op = self.consume(TokenType::Operator);
-        let expr = self.parse_expression();
+        let expr = self.parse_factor();
         Expression::UnaryExpression { operand: Box::new(expr), operator: op.value }
     }
 
@@ -209,6 +209,7 @@ impl Parser {
                 }
             },
             TokenType::None => panic!("Unexpected end of file"),
+            // _ => panic!("Unexpected token")
         }
     }
 
@@ -446,6 +447,32 @@ mod tests {
                 assert_eq!(operator, "/");
             },
             _ => panic!("Expected binary expression"),
+        }
+    }
+
+    #[test]
+    fn test_complex_unary() {
+        let tokens = tokenize("2 * -2 + -2");
+        let expression = parse(tokens);
+    
+        match expression {
+            Expression::BinaryExpression { left, operator, .. } => {
+                assert_eq!(operator, "+");
+                match left.as_ref() {
+                    Expression::BinaryExpression { operator, right,.. } => {
+                        assert_eq!(operator, "*");
+                        match right.as_ref() {
+                            Expression::UnaryExpression { operator,.. } => {
+                                assert_eq!(operator, "-")
+                            },
+                            _ => panic!("Expected - unary expression")
+                        }
+                    },
+                    _ => panic!("Expected * binary expression"),
+                }
+                
+            }
+            _ => panic!("Expected + binary expression")
         }
     }
 

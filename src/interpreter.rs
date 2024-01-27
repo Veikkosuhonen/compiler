@@ -159,6 +159,17 @@ mod tests {
     }
 
     #[test]
+    fn test_complex_unary() {
+        let result = i("2 * -2 + -2");
+        match result {
+            Value::Integer(result) => {
+                assert_eq!(result, -6);
+            },
+            _ => panic!("Wrong return value type")
+        }
+    }
+
+    #[test]
     fn test_interpret_if() {
         let result = i("
         if (true and false and true) 

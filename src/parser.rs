@@ -37,6 +37,10 @@ pub enum Expression {
         left: Box<Expression>,
         right: Box<Expression>,
     },
+    VariableDeclaration {
+        id: Box<Expression>,
+        init: Box<Expression>,
+    },
     BinaryExpression {
         left: Box<Expression>,
         operator: Op,
@@ -214,7 +218,7 @@ impl Parser {
                 self.consume(TokenType::Punctuation);
                 return Expression::BlockExpression { statements, result: Box::new(Expression::Unit) }
             }
-            let statement = self.parse_expression();
+            let statement = self.parse_statement();
             if self.current_is("}") {
                 self.consume(TokenType::Punctuation);
                 return Expression::BlockExpression { statements, result: Box::new(statement) }
@@ -320,11 +324,27 @@ impl Parser {
         self.parse_assignment_expression()
     }
 
+    fn parse_variable_declaration(&mut self) -> Expression {
+        self.consume_with_value(TokenType::Keyword, "var");
+        let id = self.parse_identifier();
+        self.consume_with_value(TokenType::Operator, "=");
+        let init = self.parse_expression();
+        Expression::VariableDeclaration { id: Box::new(id), init: Box::new(init) }
+    }
+
+    fn parse_statement(&mut self) -> Expression {
+        if self.current_is("var") {
+            self.parse_variable_declaration()
+        } else {
+            self.parse_expression()
+        }
+    }
+
 }
 
 pub fn parse(tokens: Vec<Token>) -> Expression {
     let mut token_list = Parser::new(tokens);
-    let expr = token_list.parse_expression();
+    let expr = token_list.parse_statement();
     if token_list.current_index < token_list.tokens.len() {
         panic!("Unexpected token: {:?}", token_list.peek());
     }

@@ -1,6 +1,6 @@
 use std::env;
 use std::fs;
-use compiler::tokenizer;
+use compiler::*;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -12,13 +12,13 @@ fn main() {
     let contents = fs::read_to_string(file_path)
         .expect("Should have been able to read the file");
 
-    let result = tokenizer::tokenize(&contents);
+    let tokens = tokenizer::tokenize(&contents);
+    let expression = parser::parse(tokens);
+    let result = interpreter::interpret(expression);
 
-    // Print tokens
-    println!("Tokens:");
-    for token in result {
-        println!("{:?}: {}", token.token_type, token.value);
+    match result {
+        interpreter::Value::Integer(i) => println!("{}", i),
+        interpreter::Value::Boolean(b) => println!("{}", b),
+        interpreter::Value::Unit => println!("Unit"),
     }
-
-    println!("With text:\n{contents}");
 }

@@ -448,3 +448,22 @@ fn test_example_blocks() {
     }
     ");
 }
+
+#[test]
+fn test_variable_declaration() {
+    let e = p("
+        var x = 42
+    ");
+    assert!(matches!(e, Expression::VariableDeclaration { .. }))
+}
+
+#[test]
+fn test_many_variable_declarations() {
+    let e = p("
+        {
+            var x = 42;
+            var x = if false then { never() } else { always() };
+        }
+    ");
+    assert!(matches!(e, Expression::BlockExpression { .. }))
+}

@@ -180,105 +180,59 @@ mod tests {
 
     #[test]
     fn test_interpret_integers() {
-        let result = i("7 + 3 * 2");
-
-        match result {
-            Value::Integer(result) => {
-                assert_eq!(result, 13)
-            },
-            _ => panic!("Wrong return value type"),
-        }
+        let res = i("7 + 3 * 2");
+        assert_eq!(13, res.try_into().expect("Not an integer!"));
     }
 
     #[test]
     fn test_interpret_booleans() {
-        let result = i("true and false or true");
-
-        match result {
-            Value::Boolean(result) => {
-                assert_eq!(result, true)
-            },
-            _ => panic!("Wrong return value type"),
-        }
+        let res = i("true and false or true");
+        assert_eq!(true, res.try_into().expect("Not a bool!"));
     }
 
     #[test]
     fn test_unary_ops() {
-        let mut result = i("not true");
-        match result {
-            Value::Boolean(result) => {
-                assert_eq!(result, false)
-            },
-            _ => panic!("Wrong return value type"),
-        }
-        result = i("not not not false");
-        match result {
-            Value::Boolean(result) => {
-                assert_eq!(result, true)
-            },
-            _ => panic!("Wrong return value type"),
-        }
-        result = i("-42");
-        match result {
-            Value::Integer(result) => {
-                assert_eq!(result, -42)
-            },
-            _ => panic!("Wrong return value type"),
-        }
+        let mut res = i("not true");
+        assert_eq!(false, res.try_into().expect("Not a bool!"));
+        res = i("not not not false");
+        assert_eq!(true, res.try_into().expect("Not a bool!"));
+        res = i("-42");
+        assert_eq!(-42, res.try_into().expect("Not an integer!"));
     }
 
     #[test]
     fn test_complex_unary() {
-        let result = i("2 * -2 + -2");
-        match result {
-            Value::Integer(result) => {
-                assert_eq!(result, -6);
-            },
-            _ => panic!("Wrong return value type")
-        }
+        let res = i("2 * -2 + -2");
+        assert_eq!(-6, res.try_into().expect("Not an integer!"));
     }
 
     #[test]
     fn test_interpret_if() {
-        let result = i("
+        let res = i("
         if (true and false and true) 
             then 41");
-
-        match result {
-            Value::Unit => {},
-            _ => panic!("Wrong return value type")
-        }
+        assert!(matches!(res, Value::Unit))
     }
 
     #[test]
     fn test_interpret_if_else() {
-        let result = i("
+        let res = i("
         if (true and false or true) 
             then 42 
             else 0 - 999");
-
-        match result {
-            Value::Integer(result) => {
-                assert_eq!(result, 42)
-            },
-            _ => panic!("Wrong return value type")
-        }
+        assert_eq!(42, res.try_into().expect("Not an integer!"));
     }
 
     #[test]
     fn block_expression() {
-        let result = i("
+        let res = i("
         {
             1 + 1;
             1 + 2;
             11 * 2 + 10 * 2
         }
         ");
-        if let Value::Integer(result) = result {
-            assert_eq!(result, 42);
-        } else {
-            panic!("Wrong!");
-        }
+        assert_eq!(42, res.try_into().expect("Not an integer!"));
     }
 
     #[test]
@@ -299,11 +253,20 @@ mod tests {
                 minttu
             }
         ");
-        if let Value::Integer(ival) = res {
-            assert_eq!(ival, 50000);
-        } else {
-            panic!("Didnt work!");
-        }
+        assert_eq!(50000, res.try_into().expect("Not an integer!"));
+    }
+
+    #[test]
+    fn outer_symbol_reference() {
+        let res = i("
+            {
+                var minttu = 50000;
+                {
+                    minttu + 1
+                }
+            }
+        ");
+        assert_eq!(50001, res.try_into().expect("Not an integer!"));
     }
 
     #[test]
@@ -328,10 +291,6 @@ mod tests {
                 }
             }
         ");
-        if let Value::Integer(ival) = res {
-            assert_eq!(ival, 90000);
-        } else {
-            panic!("Didnt work!");
-        }
+        assert_eq!(90000, res.try_into().expect("Not an integer!"));
     }
 }

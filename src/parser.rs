@@ -1,53 +1,8 @@
 use lazy_static::lazy_static;
-use crate::tokenizer::{TokenType, Token, SourceLocation};
-
-#[derive(Debug, PartialEq, Eq)]
-pub enum Op {
-    Add,
-    Sub,
-    Mul,
-    Div,
-    Mod,
-    Exp,
-    Not,
-    Equals,
-    NotEquals,
-    LT,
-    GT,
-    LTE,
-    GTE,
-    And,
-    Or,
-    Assign,
-}
-
-impl Op {
-    fn from_str(value: &str) -> Op {
-        match value {
-            "+" => Op::Add,
-            "-" => Op::Sub,
-            "*" => Op::Mul,
-            "/" => Op::Div,
-            "%" => Op::Mod,
-            "**" => Op::Exp,
-            "not" => Op::Not,
-            "==" => Op::Equals,
-            "!=" => Op::NotEquals,
-            "<" => Op::LT,
-            ">" => Op::GT,
-            "<=" => Op::LTE,
-            ">=" => Op::GTE,
-            "and" => Op::And,
-            "or" => Op::Or,
-            "=" => Op::Assign,
-            _ => panic!("Unknown operator {:?}", value)
-        }
-    }
-}
+use crate::tokenizer::{TokenType, Token, SourceLocation, Op};
 
 lazy_static! {
     static ref BINARY_OP_PRECEDENCE: Vec<Vec<Op>> = vec![
-        vec![Op::Assign],
         vec![Op::And],
         vec![Op::Or],
         vec![Op::Equals, Op::NotEquals],
@@ -242,17 +197,11 @@ impl Parser {
         expr
     }
 
-    fn parse_unary_expression(&mut self) -> Expression {
-        let op = self.consume(TokenType::Operator);
-        let expr = self.parse_factor();
-        Expression::UnaryExpression { operand: Box::new(expr), operator: Op::from_str(&op.value) }
-    }
-
     fn parse_factor(&mut self) -> Expression {
         let token = self.peek();
+        println!("factor {:?}", token.value);
 
         match token.token_type {
-            TokenType::Operator => self.parse_unary_expression(),
             TokenType::IntegerLiteral => self.parse_int_literal(),
             TokenType::BooleanLiteral => self.parse_boolean_literal(),
             TokenType::Keyword => self.parse_if_expression(),
@@ -271,40 +220,65 @@ impl Parser {
                 }
             },
             TokenType::None => panic!("Unexpected end of file"),
-            // _ => panic!("Unexpected token")
+            _ => panic!("Unexpected token {:?}", token)
         }
     }
 
-    fn parse_term(&mut self) -> Expression {
-        let mut left = self.parse_factor();
+    fn parse_unary_precedence_level(&mut self, level: usize) -> Expression {
+        if level >= UNARY_OP_PRECEDENCE.len() {
+            return self.parse_factor();
+        }
+    
+        let ops = UNARY_OP_PRECEDENCE.get(level).expect("Invalid precedence level");
+
+        if let Some(operator) = Op::try_from_str(&self.peek().value) {
+            if ops.contains(&operator) {
+                self.consume(TokenType::Operator);
+                let operand = self.parse_unary_precedence_level(level);
+                Expression::UnaryExpression { 
+                    operator,
+                    operand: Box::new(operand),
+                }
+            } else {
+                self.parse_unary_precedence_level(level + 1)
+            }
+        } else {
+            self.parse_factor()
+        }
+    } 
+
+    fn parse_binary_precedence_level(&mut self, level: usize) -> Expression {
+        if level >= BINARY_OP_PRECEDENCE.len() {
+            return self.parse_unary_precedence_level(0);
+        }
+    
+        let ops = BINARY_OP_PRECEDENCE.get(level).expect("Invalid precedence level");
+
+        let mut left = self.parse_binary_precedence_level(level + 1);
         
-        while ["*", "/", "and"].contains(&self.peek().value.as_str()) {
-            let operator = self.consume(TokenType::Operator);
-            let right = self.parse_factor();
-            left = Expression::BinaryExpression {
-                left: Box::new(left),
-                operator: Op::from_str(&operator.value),
-                right: Box::new(right),
-            };
+        // let operator = Op::try_from_str(&self.peek().value);
+        // println!("binary {:?}, left {:?}", operator, left);
+
+        loop {
+            if let Some(operator) = Op::try_from_str(&self.peek().value) {
+                if ops.contains(&operator) {
+                    self.consume(TokenType::Operator);
+                    let right = self.parse_binary_precedence_level(level + 1);
+                    println!("right {:?}", right);
+                    left = Expression::BinaryExpression { left: Box::new(left), operator, right: Box::new(right) }
+                } else {
+                    break;
+                }
+            } else {
+                break;
+            }
         }
 
         left
     }
 
     fn parse_expression(&mut self) -> Expression {
-        let mut left = self.parse_term();
-        
-        while ["+", "-", "or"].contains(&self.peek().value.as_str()) {
-            let operator = self.consume(TokenType::Operator);
-            let right = self.parse_term();
-            left = Expression::BinaryExpression {
-                left: Box::new(left),
-                operator: Op::from_str(&operator.value),
-                right: Box::new(right),
-            };
-        }
-
-        left
+        self.parse_binary_precedence_level(0)
     }
 
 }
@@ -350,6 +324,34 @@ mod tests {
         match expression {
             Expression::UnaryExpression { operator, .. } => {
                 assert_eq!(operator, Op::Sub);
+            },
+            _ => panic!("Expected unary expression"),
+        }
+    }
+
+    #[test]
+    fn test_parse_multiple_unary_op() {
+        let source = "not not not false";
+        let tokens: Vec<Token> = tokenize(source);
+
+        let expression = parse(tokens);
+        
+        match expression {
+            Expression::UnaryExpression { operator, operand } => {
+                assert_eq!(operator, Op::Not);
+                if let Expression::UnaryExpression { operand,.. } = *operand {
+                    if let Expression::UnaryExpression { operand,.. } = *operand {
+                        if let Expression::BooleanLiteral { value } = *operand {
+                            assert!(!value)
+                        } else {
+                            panic!("Perkele!")
+                        }
+                    } else {
+                        panic!("Expected unary expression")
+                    }
+                } else {
+                    panic!("Expected unary expression")
+                }
             },
             _ => panic!("Expected unary expression"),
         }

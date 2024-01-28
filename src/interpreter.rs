@@ -1,4 +1,5 @@
-use crate::parser::{Op,Expression};
+use crate::parser::Expression;
+use crate::tokenizer::Op;
 
 #[derive(Debug)]
 pub enum Value {

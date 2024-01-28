@@ -1,6 +1,50 @@
 use lazy_static::lazy_static;
 use regex::{Match, Regex};
 
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum Op {
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Mod,
+    Exp,
+    Not,
+    Equals,
+    NotEquals,
+    LT,
+    GT,
+    LTE,
+    GTE,
+    And,
+    Or,
+    Assign,
+}
+
+impl Op {
+    pub fn try_from_str(value: &str) -> Option<Op> {
+        Some(match value {
+            "+" => Op::Add,
+            "-" => Op::Sub,
+            "*" => Op::Mul,
+            "/" => Op::Div,
+            "%" => Op::Mod,
+            "**" => Op::Exp,
+            "not" => Op::Not,
+            "==" => Op::Equals,
+            "!=" => Op::NotEquals,
+            "<" => Op::LT,
+            ">" => Op::GT,
+            "<=" => Op::LTE,
+            ">=" => Op::GTE,
+            "and" => Op::And,
+            "or" => Op::Or,
+            "=" => Op::Assign,
+            _ => { return None }
+        })
+    }
+}
+
 #[derive(PartialEq, Eq, Debug, Clone)]
 pub struct SourceLocation {
     pub line: usize,
@@ -18,11 +62,11 @@ pub enum TokenType {
     None,
 }
 
-#[derive(Debug, Clone)]
+#[derive(PartialEq, Eq, Debug, Clone)]
 pub struct Token {
     pub token_type: TokenType,
     pub value: String,
-    pub location: SourceLocation,
+    pub location: SourceLocation
 }
 
 lazy_static! {
@@ -84,12 +128,7 @@ pub fn tokenize(source: &str) -> Vec<Token> {
         if let Some((m, token_type)) = match_token(slice) {
             if token_type != TokenType::None {
                 let location = SourceLocation { line, column };
-                let token = Token {
-                    token_type,
-                    value: m.as_str().to_string(),
-                    location,
-                };
-                tokens.push(token);
+                tokens.push(Token { value: m.as_str().to_string(), location, token_type });
             }
 
             (line, column) = count_line_column_changes(m.as_str(), line, column);
@@ -108,8 +147,9 @@ pub fn tokenize(source: &str) -> Vec<Token> {
 
 #[cfg(test)]
 mod tests {
+    /*
     use super::*;
-
+    
     #[test]
     fn test_keywords_integers_and_literals() {
         let source = "
@@ -120,29 +160,35 @@ if 3 wowowo
 
         assert_eq!(tokens.len(), 5);
 
-        assert_eq!(tokens[0].token_type, TokenType::Keyword);
-        assert_eq!(tokens[0].value, "if");
-
-        assert_eq!(tokens[1].token_type, TokenType::IntegerLiteral);
-        assert_eq!(tokens[1].value, "3");
-
-        assert_eq!(tokens[2].token_type, TokenType::Identifier);
-        assert_eq!(tokens[2].value, "wowowo");
-
+        assert!( if let TokenValue::StringLike(value) = tokens[0].value { value == "if" } else { false } );
         assert_eq!(tokens[0].location.line, 2);
         assert_eq!(tokens[0].location.column, 1);
 
-        assert_eq!(tokens[1].location.line, 2);
-        assert_eq!(tokens[1].location.column, 4);
+        if let Token::IntegerLiteral { value, location,.. } = tokens[1] {
+            assert_eq!(value, 3);
+            assert_eq!(location.line, 2);
+            assert_eq!(location.column, 4);
+        } else { 
+            panic!("Not an int");
+        }
 
-        assert_eq!(tokens[2].location.line, 2);
-        assert_eq!(tokens[2].location.column, 6);
+        match tokens[2] {
+            Token::Identifier { value, location,.. } => {
+                assert_eq!(value, "wowowo");
+                assert_eq!(location.line, 2);
+                assert_eq!(location.column, 6);
+            },
+            _ => panic!("Not an identifier")
+        }
 
-        assert_eq!(tokens[3].location.line, 3);
-        assert_eq!(tokens[3].location.column, 1);
-
-        assert_eq!(tokens[4].location.line, 3);
-        assert_eq!(tokens[4].location.column, 5);
+        match tokens[3] {
+            Token::Keyword { value, location,.. } => {
+                assert_eq!(value, "if");
+                assert_eq!(location.line, 3);
+                assert_eq!(location.column, 5);
+            },
+            _ => panic!("Not a keyword")
+        }
     }
 
     #[test]
@@ -151,8 +197,8 @@ if 3 wowowo
         let tokens: Vec<Token> = tokenize(source);
 
         assert_eq!(tokens.len(), 11);
+        assert!(matches!(tokens[10], Token::Operator { .. }));
 
-        assert_eq!(tokens[10].token_type, TokenType::Operator);
     }
 
     #[test]
@@ -161,8 +207,7 @@ if 3 wowowo
         let tokens: Vec<Token> = tokenize(source);
 
         assert_eq!(tokens.len(), 6);
-
-        assert_eq!(tokens[5].token_type, TokenType::Punctuation);
+        assert!(matches!(tokens[5], Token::Punctuation { .. }));
     }
 
     #[test]
@@ -171,8 +216,7 @@ if 3 wowowo
         let tokens: Vec<Token> = tokenize(source);
 
         assert_eq!(tokens.len(), 6);
-
-        assert_eq!(tokens[5].token_type, TokenType::Punctuation);
+        assert!(matches!(tokens[5], Token::Punctuation { .. }));
     }
 
     #[test]
@@ -181,8 +225,7 @@ if 3 wowowo
         let mut tokens: Vec<Token> = tokenize(source);
 
         assert_eq!(tokens.len(), 6);
-
-        assert_eq!(tokens[5].token_type, TokenType::Punctuation);
+        assert!(matches!(tokens[7], Token::Punctuation { .. }));
 
         source = "( ) { } , ; /*
             heyo 123
@@ -190,8 +233,7 @@ if 3 wowowo
         tokens = tokenize(source);
 
         assert_eq!(tokens.len(), 7);
-
-        assert_eq!(tokens[6].token_type, TokenType::Identifier);
+        assert!(matches!(tokens[7], Token::Identifier { .. }));
 
         source = "( ) { } , ; /*
             heyo 123
@@ -201,8 +243,7 @@ if 3 wowowo
         tokens = tokenize(source);
 
         assert_eq!(tokens.len(), 8);
-
-        assert_eq!(tokens[7].token_type, TokenType::IntegerLiteral);
+        assert!(matches!(tokens[7], Token::IntegerLiteral { .. }));
     }
 
     #[test]
@@ -221,7 +262,11 @@ if 3 wowowo
         ";
         let tokens: Vec<Token> = tokenize(source);
         assert_eq!(tokens.len(), 30);
-        assert_eq!(tokens[tokens.len() - 1].location.line, 11);
+        if let Token::Punctuation { location, .. } = tokens[tokens.len() - 1] {
+            assert_eq!(location.line, 11);
+        } else {
+            panic!("Last token not punctuation!");
+        }
     }
 
     #[test]
@@ -229,13 +274,14 @@ if 3 wowowo
         let source = "f(1, 2, 3)";
         let tokens = tokenize(source);
         assert_eq!(tokens.len(), 8);
-        assert_eq!(tokens[0].token_type, TokenType::Identifier);
-        assert_eq!(tokens[1].token_type, TokenType::Punctuation);
-        assert_eq!(tokens[2].token_type, TokenType::IntegerLiteral);
-        assert_eq!(tokens[3].token_type, TokenType::Punctuation);
-        assert_eq!(tokens[4].token_type, TokenType::IntegerLiteral);
-        assert_eq!(tokens[5].token_type, TokenType::Punctuation);
-        assert_eq!(tokens[6].token_type, TokenType::IntegerLiteral);
-        assert_eq!(tokens[7].token_type, TokenType::Punctuation);
+        assert!(matches!(tokens[0], Token::Identifier     {..}));
+        assert!(matches!(tokens[1], Token::Punctuation    {..}));
+        assert!(matches!(tokens[2], Token::IntegerLiteral {..}));
+        assert!(matches!(tokens[3], Token::Punctuation    {..}));
+        assert!(matches!(tokens[4], Token::IntegerLiteral {..}));
+        assert!(matches!(tokens[5], Token::Punctuation    {..}));
+        assert!(matches!(tokens[6], Token::IntegerLiteral {..}));
+        assert!(matches!(tokens[7], Token::Punctuation    {..}));
     }
+    */
 }

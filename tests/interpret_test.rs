@@ -11,3 +11,13 @@ fn basic_test() {
     }
 }
 
+#[test]
+fn basic_symbols_test() {
+    let res = interpret_file(&"./programs/basic_symbols_test.chi".to_string());
+    if let Value::Integer(ival) = res {
+        assert_eq!(ival, 42);
+    } else {
+        panic!("Did not return integer");
+    }
+}
+

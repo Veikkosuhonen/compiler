@@ -28,6 +28,10 @@ pub enum Expression {
     Identifier {
         value: String,
     },
+    AssignmentExpression {
+        left: Box<Expression>,
+        right: Box<Expression>,
+    },
     BinaryExpression {
         left: Box<Expression>,
         operator: Op,
@@ -255,9 +259,6 @@ impl Parser {
         let ops = BINARY_OP_PRECEDENCE.get(level).expect("Invalid precedence level");
 
         let mut left = self.parse_binary_precedence_level(level + 1);
-        
-        // let operator = Op::try_from_str(&self.peek().value);
-        // println!("binary {:?}, left {:?}", operator, left);
 
         loop {
             if let Some(operator) = Op::try_from_str(&self.peek().value) {
@@ -277,8 +278,23 @@ impl Parser {
         left
     }
 
+    fn parse_assignment_expression(&mut self) -> Expression {
+        let left = self.parse_binary_precedence_level(0);
+        if let Some(op) = Op::try_from_str(&self.peek().value) {
+            if let Op::Assign = op {
+                self.consume(TokenType::Operator);
+                let right = self.parse_assignment_expression();
+                Expression::AssignmentExpression { left: Box::new(left), right: Box::new(right) }
+            } else {
+                self.parse_binary_precedence_level(0)
+            }
+        } else {
+            left
+        }
+    }
+
     fn parse_expression(&mut self) -> Expression {
-        self.parse_binary_precedence_level(0)
+        self.parse_assignment_expression()
     }
 
 }
@@ -693,6 +709,19 @@ mod tests {
                 assert_eq!(arguments.len(), 3)
             },
             _ => panic!("Not a boolean")
+        }
+    }
+
+    #[test]
+    fn test_assignment() {
+        let source = "x = 42 + 58";
+        let tokens = tokenize(source);
+        let expression = parse(tokens);
+        if let Expression::AssignmentExpression { left, right } = expression {
+            assert!(matches!(*left, Expression::Identifier { .. }));
+            assert!(matches!(*right, Expression::BinaryExpression { .. }));
+        } else {
+            panic!("Wrong!")
         }
     }
 }

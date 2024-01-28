@@ -8,8 +8,31 @@ pub enum Value {
     Unit,
 }
 
+impl From<Value> for bool {
+    fn from(val: Value) -> Self {
+        if let Value::Boolean(bval) = val {
+            bval
+        } else {
+            panic!("Tried to convert non-boolean value to bool")
+        }
+    }
+}
+
+impl From<Value> for i32 {
+    fn from(val: Value) -> Self {
+        if let Value::Integer(ival) = val {
+            ival
+        } else {
+            panic!("Tried to convert non-integer value to i32")
+        }
+    }
+}
+
 impl Op {
-    fn eval_binary_integer(&self, ival1: i32, ival2: i32) -> Value {
+    fn eval_binary_integer(&self, ival1: i32, right_expr: Expression) -> Value {
+        // Integer ops have no short circuiting so just eval right here
+        let ival2: i32 = interpret(right_expr).try_into().expect("Not Value::Integer");
+
         match self {
             Op::Add =>       Value::Integer(ival1 + ival2),
             Op::Sub =>       Value::Integer(ival1 - ival2),
@@ -27,12 +50,12 @@ impl Op {
         }
     }
 
-    fn eval_binary_boolean(&self, bval1: bool, bval2: bool) -> Value {
+    fn eval_binary_boolean(&self, bval1: bool, right_expr: Expression) -> Value {
         match self {
-            Op::Equals =>    Value::Boolean(bval1 == bval2),
-            Op::NotEquals => Value::Boolean(bval1 == bval2),
-            Op::And =>       Value::Boolean(bval1 && bval2),
-            Op::Or =>        Value::Boolean(bval1 || bval2),
+            Op::Equals =>    Value::Boolean(bval1 == interpret(right_expr).try_into().expect("Not Value::Boolean")),
+            Op::NotEquals => Value::Boolean(bval1 != interpret(right_expr).try_into().expect("Not Value::Boolean")),
+            Op::And =>       Value::Boolean(bval1 && interpret(right_expr).try_into().expect("Not Value::Boolean")),
+            Op::Or =>        Value::Boolean(bval1 || interpret(right_expr).try_into().expect("Not Value::Boolean")),
             _ => panic!("Invalid boolean binary operator {:?}", &self)
         }
     }
@@ -62,21 +85,10 @@ pub fn interpret(node: Expression) -> Value {
         }
         Expression::BinaryExpression { left, operator, right } => {
             let left_result = interpret(*left);
-            let right_result = interpret(*right);
 
             match left_result {
-                Value::Integer(ival1) => {
-                    match right_result {
-                        Value::Integer(ival2) => operator.eval_binary_integer(ival1, ival2),
-                        _ => panic!("Invalid right operand for integer operation {:?}", right_result)
-                    }
-                }
-                Value::Boolean(bval1) => {
-                    match right_result {
-                        Value::Boolean(bval2) => operator.eval_binary_boolean(bval1, bval2),
-                        _ => panic!("Invalid right operand for boolean operation {:?}", right_result)
-                    }
-                },
+                Value::Integer(ival1) =>  operator.eval_binary_integer(ival1, *right),
+                Value::Boolean(bval1) => operator.eval_binary_boolean(bval1, *right),
                 Value::Unit => panic!("Unit used as operand in binary operation"),
             }
         },

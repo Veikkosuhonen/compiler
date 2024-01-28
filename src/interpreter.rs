@@ -92,6 +92,14 @@ pub fn interpret(node: Expression) -> Value {
                 Value::Unit => panic!("Unit used as operand in binary operation"),
             }
         },
+        Expression::UnaryExpression { operand, operator } => {
+            let operand_result = interpret(*operand);
+            match operand_result {
+                Value::Integer(ival) => operator.eval_unary_integer(ival),
+                Value::Boolean(bval) => operator.eval_unary_boolean(bval),
+                Value::Unit => panic!("Unary operator not permitted for Unit value")
+            }
+        }
         Expression::IfExpression { condition, then_branch, else_branch } => {
             let condition_result = interpret(*condition);
             match condition_result {
@@ -107,13 +115,11 @@ pub fn interpret(node: Expression) -> Value {
                 _ => panic!("If expression condition must be a boolean"),
             }
         },
-        Expression::UnaryExpression { operand, operator } => {
-            let operand_result = interpret(*operand);
-            match operand_result {
-                Value::Integer(ival) => operator.eval_unary_integer(ival),
-                Value::Boolean(bval) => operator.eval_unary_boolean(bval),
-                Value::Unit => panic!("Unary operator not permitted for Unit value")
+        Expression::BlockExpression { statements, result } => {
+            for expr in statements {
+                interpret(*expr);
             }
+            interpret(*result)
         }
         _ => panic!("Unknown expression {:?}", node)
     }
@@ -215,6 +221,22 @@ mod tests {
                 assert_eq!(result, 42)
             },
             _ => panic!("Wrong return value type")
+        }
+    }
+
+    #[test]
+    fn block_expression() {
+        let result = i("
+        {
+            1 + 1;
+            1 + 2;
+            11 * 2 + 10 * 2
+        }
+        ");
+        if let Value::Integer(result) = result {
+            assert_eq!(result, 42);
+        } else {
+            panic!("Wrong!");
         }
     }
 }

@@ -25,8 +25,13 @@ pub enum Expression {
     BooleanLiteral {
         value: bool,
     },
+    Unit,
     Identifier {
         value: String,
+    },
+    BlockExpression {
+        statements: Vec<Box<Expression>>,
+        result: Box<Expression>,
     },
     AssignmentExpression {
         left: Box<Expression>,
@@ -201,6 +206,24 @@ impl Parser {
         expr
     }
 
+    fn parse_block_expression(&mut self) -> Expression {
+        self.consume_with_value(TokenType::Punctuation, "{");
+        let mut statements: Vec<Box<Expression>> = vec![];
+        loop {
+            if self.current_is("}") {
+                self.consume(TokenType::Punctuation);
+                return Expression::BlockExpression { statements, result: Box::new(Expression::Unit) }
+            }
+            let statement = self.parse_expression();
+            if self.current_is("}") {
+                self.consume(TokenType::Punctuation);
+                return Expression::BlockExpression { statements, result: Box::new(statement) }
+            }
+            statements.push(Box::new(statement));
+            self.consume_with_value(TokenType::Punctuation, ";");
+        }
+    }
+
     fn parse_factor(&mut self) -> Expression {
         let token = self.peek();
         println!("factor {:?}", token.value);
@@ -217,10 +240,10 @@ impl Parser {
                 }
             },
             TokenType::Punctuation => {
-                if token.value == "(" {
-                    self.parse_parentheses()
-                } else {
-                    panic!("Unexpected token: {:?}", token);
+                match token.value.as_str() {
+                    "(" => self.parse_parentheses(),
+                    "{" => self.parse_block_expression(),
+                    _ => panic!("Unexpected token: {:?}", token),
                 }
             },
             TokenType::None => panic!("Unexpected end of file"),
@@ -313,6 +336,10 @@ mod tests {
 
     use crate::tokenizer::{tokenize, Token};
     use super::*;
+
+    fn p(source: &str) -> Expression {
+        parse(tokenize(source))
+    }
 
     #[test]
     #[should_panic(expected = "Unexpected end of file")]
@@ -723,5 +750,36 @@ mod tests {
         } else {
             panic!("Wrong!")
         }
+    }
+
+    #[test]
+    fn test_block() {
+        let e = p("{}");
+        assert!(matches!(e, Expression::BlockExpression { .. }));
+    }
+
+    #[test]
+    fn test_example_blocks() {
+        p("
+        {
+            f(a);
+            x = y;
+            f(x)
+        }");
+
+        p("
+            if f() then { // <-- the real example had a while loop, but its not yet implemented
+                x = 10;
+                y = if g(x) then {
+                    x = x + 1;
+                    x
+                } else {
+                    g(x)
+                }; // <-- (this semicolon will become optional later)
+                g(y);
+            }; // <------ (this too)
+            123
+        }
+        ");
     }
 }

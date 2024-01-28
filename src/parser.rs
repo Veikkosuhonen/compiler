@@ -230,7 +230,6 @@ impl Parser {
 
     fn parse_factor(&mut self) -> Expression {
         let token = self.peek();
-        println!("factor {:?}", token.value);
 
         match token.token_type {
             TokenType::IntegerLiteral => self.parse_int_literal(),
@@ -292,7 +291,6 @@ impl Parser {
                 if ops.contains(&operator) {
                     self.consume(TokenType::Operator);
                     let right = self.parse_binary_precedence_level(level + 1);
-                    println!("right {:?}", right);
                     left = Expression::BinaryExpression { left: Box::new(left), operator, right: Box::new(right) }
                 } else {
                     break;

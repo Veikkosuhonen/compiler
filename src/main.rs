@@ -1,9 +1,6 @@
-pub mod tokenizer;
-pub mod parser;
-pub mod interpreter;
 use std::env;
 use std::fs;
-
+use compiler::tokenizer;
 
 fn main() {
     let args: Vec<String> = env::args().collect();

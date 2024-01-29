@@ -1,9 +1,11 @@
+use std::cell::RefCell;
 use std::collections::HashMap;
+use std::rc::Rc;
 
 use crate::parser::Expression;
 use crate::tokenizer::Op;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub enum Value {
     Integer(i32),
     Boolean(bool),
@@ -31,7 +33,7 @@ impl From<Value> for i32 {
 }
 
 impl Op {
-    fn eval_binary_integer(&self, ival1: i32, right_expr: Expression, sym_table: &mut Box<SymTable>) -> Value {
+    fn eval_binary_integer(&self, ival1: i32, right_expr: Expression, sym_table: &Rc<RefCell<SymTable>>) -> Value {
         // Integer ops have no short circuiting so just eval right here
         let ival2: i32 = interpret_sym_table(right_expr, sym_table).try_into().expect("Not Value::Integer");
 
@@ -52,7 +54,7 @@ impl Op {
         }
     }
 
-    fn eval_binary_boolean(&self, bval1: bool, right_expr: Expression, sym_table: &mut Box<SymTable>) -> Value {
+    fn eval_binary_boolean(&self, bval1: bool, right_expr: Expression, sym_table: &Rc<RefCell<SymTable>>) -> Value {
         match self {
             Op::Equals =>    Value::Boolean(bval1 == interpret_sym_table(right_expr, sym_table).try_into().expect("Not Value::Boolean")),
             Op::NotEquals => Value::Boolean(bval1 != interpret_sym_table(right_expr, sym_table).try_into().expect("Not Value::Boolean")),
@@ -77,31 +79,42 @@ impl Op {
     }
 }
 
-struct SymTable<'a> {
-    symbols: HashMap<String,Value>,
-    parent: Option<&'a Box<SymTable<'a>>>,
+struct SymTable {
+    symbols: HashMap<String, Value>,
+    parent: Option<Rc<RefCell<SymTable>>>,
 }
 
-impl SymTable<'_> {
-    fn new<'a>(parent: Option<&'a Box<SymTable<'a>>>) -> Box<SymTable<'a>> {
-        Box::new(SymTable {
+impl SymTable {
+    fn new<'a>(parent: Option<Rc<RefCell<SymTable>>>) -> Rc<RefCell<SymTable>> {
+        Rc::new(RefCell::new(SymTable {
             symbols: HashMap::new(),
             parent,
-        })
+        }))
     }
 
     fn get(&self, k: &String) -> Value {
         if let Some(val) = self.symbols.get(k) {
             val.clone()
-        } else if let Some(parent) = self.parent {
-            parent.get(k)
+        } else if let Some(parent) = &self.parent {
+            parent.borrow().get(k)
         } else {
-            panic!("Access to undefined symbol '{}'", k)
+            panic!("Accessing undefined symbol '{}'", k)
+        }
+    }
+
+    fn assign(&mut self, k: &String, val: Value) -> Option<(String, Value)> {
+        if self.symbols.contains_key(k) {
+            self.symbols.insert(k.to_string(), val);
+            None
+        } else if let Some(parent) = &self.parent {
+            parent.borrow_mut().assign(k, val)
+        } else {
+            panic!("Assigning to undefined symbol '{}'", k);
         }
     }
 }
 
-fn interpret_sym_table(node: Expression, sym_table: &mut Box<SymTable>) -> Value {
+fn interpret_sym_table(node: Expression, sym_table: &Rc<RefCell<SymTable>>) -> Value {
     match node {
         Expression::IntegerLiteral { value } => {
             Value::Integer(value)
@@ -141,17 +154,28 @@ fn interpret_sym_table(node: Expression, sym_table: &mut Box<SymTable>) -> Value
             }
         },
         Expression::BlockExpression { statements, result } => {
-            let mut inner_sym_table = SymTable::new(Some(sym_table));
+            let outer_sym_table = sym_table.clone();
+            let inner_sym_table = SymTable::new(Some(outer_sym_table));
             for expr in statements {
-                interpret_sym_table(*expr, &mut inner_sym_table);
+                interpret_sym_table(*expr, &inner_sym_table);
             }
-            interpret_sym_table(*result, &mut inner_sym_table)
+            interpret_sym_table(*result, &inner_sym_table)
         },
-        Expression::Identifier { value } => sym_table.get(&value),
+        Expression::Identifier { value } => sym_table.borrow().get(&value),
+        Expression::AssignmentExpression { left, right } => {
+            if let Expression::Identifier { value: id } = *left {
+                let value = interpret_sym_table(*right, sym_table);
+                sym_table.borrow_mut().assign(&id, value);
+                // Build up the assignments to outside scope variables, and perform them when scope exited
+                value
+            } else {
+                panic!("Left side of an assignment must be an identifier");
+            }
+        },
         Expression::VariableDeclaration { id, init } => {
             if let Expression::Identifier { value } = *id {
                 let init_value = interpret_sym_table(*init, sym_table);
-                sym_table.symbols.insert(value, init_value);
+                sym_table.borrow_mut().symbols.insert(value, init_value);
                 Value::Unit
             } else {
                 panic!("Id of a variable declaration must be an identifier");
@@ -163,7 +187,7 @@ fn interpret_sym_table(node: Expression, sym_table: &mut Box<SymTable>) -> Value
 }
 
 pub fn interpret(node: Expression) -> Value {
-    interpret_sym_table(node, &mut SymTable::new(None))
+    interpret_sym_table(node, &SymTable::new(None))
 }
 
 #[cfg(test)]
@@ -270,7 +294,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Access to undefined symbol 'minttuglitch'")]
+    #[should_panic(expected = "Accessing undefined symbol 'minttuglitch'")]
     fn undefined_reference() {
         i("
             {
@@ -289,6 +313,20 @@ mod tests {
                     var minttu = 90000;
                     minttu
                 }
+            }
+        ");
+        assert_eq!(90000, res.try_into().expect("Not an integer!"));
+    }
+
+    #[test]
+    fn assign_to_outside_scope() {
+        let res = i("
+            {
+                var minttu = 50000;
+                {
+                    minttu = 90000;
+                };
+                minttu
             }
         ");
         assert_eq!(90000, res.try_into().expect("Not an integer!"));

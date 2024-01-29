@@ -17,7 +17,19 @@ pub enum BuiltIn {
     GTE,
     And,
     Or,
+    PrintInt,
     GetUnit, // Placeholder for BuiltIn function
+    GetMeaningOfLife, // Another
+}
+
+fn print_int(args: Vec<Value>) -> Value {
+    let arg = args.get(0).expect("Number of arguments to print_int should be 1");
+    if let Value::Integer(ival) = arg {
+        println!("{}", ival);
+    } else {
+        panic!("Tried to print '{:?}' which is not an integer", arg)
+    }
+    Value::Unit
 }
 
 pub fn eval_builtin_binary(builtin: BuiltIn, left: Value, eval_right: impl FnOnce() -> Value) -> Value {
@@ -72,6 +84,15 @@ pub fn eval_builtin_unary(builtin: BuiltIn, operand: Value) -> Value {
     }
 }
 
+pub fn eval_builtin_function(builtin: BuiltIn, arguments: Vec<Value>) -> Value {
+    match builtin {
+        BuiltIn::PrintInt => print_int(arguments),
+        BuiltIn::GetUnit => Value::Unit,
+        BuiltIn::GetMeaningOfLife => Value::Integer(21 + 21),
+        _ => panic!("{:?} is not a builtin function", builtin)
+    }
+}
+
 pub fn get_builtin_function_symbol_mappings() -> Vec<(Symbol, Value)> {
     let ops = vec![
         (Op::Add, BuiltIn::Add),
@@ -94,7 +115,8 @@ pub fn get_builtin_function_symbol_mappings() -> Vec<(Symbol, Value)> {
 
     let functions = vec![
         ("getUnit", BuiltIn::GetUnit),
-
+        ("getMeaningOfLife", BuiltIn::GetMeaningOfLife),
+        ("print_int", BuiltIn::PrintInt),
     ];
 
     let mapped_ops = ops.iter().map(|(op, builtin)| {

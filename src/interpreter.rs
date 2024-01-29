@@ -137,6 +137,32 @@ fn eval_unary_op(
     }
 }
 
+fn eval_call_expression(
+    callee: Box<Expression>,
+    argument_expr: Vec<Box<Expression>>,
+    sym_table: &mut Box<SymTable>
+) -> Value {
+    if let Expression::Identifier { value: function_id } = *callee {
+        let called_function = sym_table.get(&Symbol::Identifier(function_id.to_string()));
+        if let Value::Function(called_function) = called_function {
+            match called_function {
+                Function::BuiltIn(builtin) => {
+                    let mut args: Vec<Value> = vec![];
+                    for expr in argument_expr {
+                        args.push(interpret(*expr, sym_table));
+                    }
+                    eval_builtin_function(builtin, args)
+                },
+                Function::UserDefined(user_func) => panic!("Not yet implemented"),
+            }
+        } else {
+            panic!("Calling undefined function {:?}", function_id);
+        }
+    } else {
+        panic!("Callee of a call expression must be an identifier");
+    }
+}
+
 fn interpret(node: Expression, sym_table: &mut Box<SymTable>) -> Value {
     match node {
         Expression::IntegerLiteral { value } => {
@@ -191,6 +217,9 @@ fn interpret(node: Expression, sym_table: &mut Box<SymTable>) -> Value {
             } else {
                 panic!("Id of a variable declaration must be an identifier");
             }
+        },
+        Expression::CallExpression { callee, arguments } => {
+            eval_call_expression(callee, arguments, sym_table)
         },
         Expression::Unit => Value::Unit,
         _ => panic!("Unknown expression {:?}", node)
@@ -350,5 +379,23 @@ mod tests {
             }
         ");
         assert_eq!(90000, res.try_into().expect("Not an integer!"));
+    }
+
+    #[test]
+    fn call_builtin_function() {
+        let res = i("
+            {
+                getUnit()
+            }
+        ");
+        assert!(matches!(res, Value::Unit));
+        let res2 = i("
+            {
+                var x = getMeaningOfLife();
+                print_int(x);
+                x
+            }
+        ");
+        assert_eq!(42, res2.try_into().expect("Not an integer!"));
     }
 }

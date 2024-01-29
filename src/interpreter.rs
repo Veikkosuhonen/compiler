@@ -35,7 +35,7 @@ impl From<Value> for i32 {
 impl Op {
     fn eval_binary_integer(&self, ival1: i32, right_expr: Expression, sym_table: &Rc<RefCell<SymTable>>) -> Value {
         // Integer ops have no short circuiting so just eval right here
-        let ival2: i32 = interpret_sym_table(right_expr, sym_table).try_into().expect("Not Value::Integer");
+        let ival2: i32 = interpret(right_expr, sym_table).try_into().expect("Not Value::Integer");
 
         match self {
             Op::Add =>       Value::Integer(ival1 + ival2),
@@ -56,10 +56,10 @@ impl Op {
 
     fn eval_binary_boolean(&self, bval1: bool, right_expr: Expression, sym_table: &Rc<RefCell<SymTable>>) -> Value {
         match self {
-            Op::Equals =>    Value::Boolean(bval1 == interpret_sym_table(right_expr, sym_table).try_into().expect("Not Value::Boolean")),
-            Op::NotEquals => Value::Boolean(bval1 != interpret_sym_table(right_expr, sym_table).try_into().expect("Not Value::Boolean")),
-            Op::And =>       Value::Boolean(bval1 && interpret_sym_table(right_expr, sym_table).try_into().expect("Not Value::Boolean")),
-            Op::Or =>        Value::Boolean(bval1 || interpret_sym_table(right_expr, sym_table).try_into().expect("Not Value::Boolean")),
+            Op::Equals =>    Value::Boolean(bval1 == interpret(right_expr, sym_table).try_into().expect("Not Value::Boolean")),
+            Op::NotEquals => Value::Boolean(bval1 != interpret(right_expr, sym_table).try_into().expect("Not Value::Boolean")),
+            Op::And =>       Value::Boolean(bval1 && interpret(right_expr, sym_table).try_into().expect("Not Value::Boolean")),
+            Op::Or =>        Value::Boolean(bval1 || interpret(right_expr, sym_table).try_into().expect("Not Value::Boolean")),
             _ => panic!("Invalid boolean binary operator {:?}", &self)
         }
     }
@@ -120,7 +120,7 @@ impl SymTable {
     }
 }
 
-fn interpret_sym_table(node: Expression, sym_table: &Rc<RefCell<SymTable>>) -> Value {
+fn interpret(node: Expression, sym_table: &Rc<RefCell<SymTable>>) -> Value {
     match node {
         Expression::IntegerLiteral { value } => {
             Value::Integer(value)
@@ -129,7 +129,7 @@ fn interpret_sym_table(node: Expression, sym_table: &Rc<RefCell<SymTable>>) -> V
             Value::Boolean(value)
         }
         Expression::BinaryExpression { left, operator, right } => {
-            let left_result = interpret_sym_table(*left, sym_table);
+            let left_result = interpret(*left, sym_table);
             match left_result {
                 Value::Integer(ival1) =>  operator.eval_binary_integer(ival1, *right, sym_table),
                 Value::Boolean(bval1) => operator.eval_binary_boolean(bval1, *right, sym_table),
@@ -137,7 +137,7 @@ fn interpret_sym_table(node: Expression, sym_table: &Rc<RefCell<SymTable>>) -> V
             }
         },
         Expression::UnaryExpression { operand, operator } => {
-            let operand_result = interpret_sym_table(*operand, sym_table);
+            let operand_result = interpret(*operand, sym_table);
             match operand_result {
                 Value::Integer(ival) => operator.eval_unary_integer(ival),
                 Value::Boolean(bval) => operator.eval_unary_boolean(bval),
@@ -145,13 +145,13 @@ fn interpret_sym_table(node: Expression, sym_table: &Rc<RefCell<SymTable>>) -> V
             }
         }
         Expression::IfExpression { condition, then_branch, else_branch } => {
-            let condition_result = interpret_sym_table(*condition, sym_table);
+            let condition_result = interpret(*condition, sym_table);
             match condition_result {
                 Value::Boolean(condition_val) => {
                     if condition_val {
-                        interpret_sym_table(*then_branch, sym_table)
+                        interpret(*then_branch, sym_table)
                     } else if let Some(else_branch) = else_branch {
-                        interpret_sym_table(*else_branch, sym_table)
+                        interpret(*else_branch, sym_table)
                     } else {
                         Value::Unit
                     }
@@ -163,14 +163,14 @@ fn interpret_sym_table(node: Expression, sym_table: &Rc<RefCell<SymTable>>) -> V
             let outer_sym_table = sym_table.clone();
             let inner_sym_table = SymTable::new(Some(outer_sym_table));
             for expr in statements {
-                interpret_sym_table(*expr, &inner_sym_table);
+                interpret(*expr, &inner_sym_table);
             }
-            interpret_sym_table(*result, &inner_sym_table)
+            interpret(*result, &inner_sym_table)
         },
         Expression::Identifier { value } => sym_table.borrow().get(&Symbol::Identifier(value)),
         Expression::AssignmentExpression { left, right } => {
             if let Expression::Identifier { value: id } = *left {
-                let value = interpret_sym_table(*right, sym_table);
+                let value = interpret(*right, sym_table);
                 sym_table.borrow_mut().assign(Symbol::Identifier(id), value);
                 value
             } else {
@@ -179,7 +179,7 @@ fn interpret_sym_table(node: Expression, sym_table: &Rc<RefCell<SymTable>>) -> V
         },
         Expression::VariableDeclaration { id, init } => {
             if let Expression::Identifier { value } = *id {
-                let init_value = interpret_sym_table(*init, sym_table);
+                let init_value = interpret(*init, sym_table);
                 sym_table.borrow_mut().symbols.insert(Symbol::Identifier(value), init_value);
                 Value::Unit
             } else {
@@ -191,8 +191,8 @@ fn interpret_sym_table(node: Expression, sym_table: &Rc<RefCell<SymTable>>) -> V
     }
 }
 
-pub fn interpret(node: Expression) -> Value {
-    interpret_sym_table(node, &SymTable::new(None))
+pub fn interpret_program(node: Expression) -> Value {
+    interpret(node, &SymTable::new(None))
 }
 
 #[cfg(test)]
@@ -204,7 +204,7 @@ mod tests {
     fn i(src: &str) -> Value {
         let tokens: Vec<Token> = tokenize(src);
         let expression = parse(tokens);
-        interpret(expression)
+        interpret_program(expression)
     }
 
     #[test]

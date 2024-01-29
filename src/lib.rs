@@ -9,7 +9,7 @@ pub fn interpret_file(path: &String) -> interpreter::Value {
 
     let tokens = tokenizer::tokenize(&contents);
     let expression = parser::parse(tokens);
-    let result = interpreter::interpret(expression);
+    let result = interpreter::interpret_program(expression);
 
     result
 }

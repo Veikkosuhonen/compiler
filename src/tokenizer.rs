@@ -1,7 +1,7 @@
 use lazy_static::lazy_static;
 use regex::{Match, Regex};
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub enum Op {
     Add,
     Sub,

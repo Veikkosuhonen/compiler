@@ -79,8 +79,14 @@ impl Op {
     }
 }
 
+#[derive(PartialEq, Eq, Hash, Debug)]
+enum Symbol {
+    Identifier(String),
+    Operator(Op)
+}
+
 struct SymTable {
-    symbols: HashMap<String, Value>,
+    symbols: HashMap<Symbol, Value>,
     parent: Option<Rc<RefCell<SymTable>>>,
 }
 
@@ -92,24 +98,24 @@ impl SymTable {
         }))
     }
 
-    fn get(&self, k: &String) -> Value {
+    fn get(&self, k: &Symbol) -> Value {
         if let Some(val) = self.symbols.get(k) {
             val.clone()
         } else if let Some(parent) = &self.parent {
             parent.borrow().get(k)
         } else {
-            panic!("Accessing undefined symbol '{}'", k)
+            panic!("Accessing undefined symbol {:?}", k)
         }
     }
 
-    fn assign(&mut self, k: &String, val: Value) -> Option<(String, Value)> {
-        if self.symbols.contains_key(k) {
-            self.symbols.insert(k.to_string(), val);
+    fn assign(&mut self, k: Symbol, val: Value) -> Option<(String, Value)> {
+        if self.symbols.contains_key(&k) {
+            self.symbols.insert(k, val);
             None
         } else if let Some(parent) = &self.parent {
             parent.borrow_mut().assign(k, val)
         } else {
-            panic!("Assigning to undefined symbol '{}'", k);
+            panic!("Assigning to undefined symbol '{:?}'", k);
         }
     }
 }
@@ -161,12 +167,11 @@ fn interpret_sym_table(node: Expression, sym_table: &Rc<RefCell<SymTable>>) -> V
             }
             interpret_sym_table(*result, &inner_sym_table)
         },
-        Expression::Identifier { value } => sym_table.borrow().get(&value),
+        Expression::Identifier { value } => sym_table.borrow().get(&Symbol::Identifier(value)),
         Expression::AssignmentExpression { left, right } => {
             if let Expression::Identifier { value: id } = *left {
                 let value = interpret_sym_table(*right, sym_table);
-                sym_table.borrow_mut().assign(&id, value);
-                // Build up the assignments to outside scope variables, and perform them when scope exited
+                sym_table.borrow_mut().assign(Symbol::Identifier(id), value);
                 value
             } else {
                 panic!("Left side of an assignment must be an identifier");
@@ -175,7 +180,7 @@ fn interpret_sym_table(node: Expression, sym_table: &Rc<RefCell<SymTable>>) -> V
         Expression::VariableDeclaration { id, init } => {
             if let Expression::Identifier { value } = *id {
                 let init_value = interpret_sym_table(*init, sym_table);
-                sym_table.borrow_mut().symbols.insert(value, init_value);
+                sym_table.borrow_mut().symbols.insert(Symbol::Identifier(value), init_value);
                 Value::Unit
             } else {
                 panic!("Id of a variable declaration must be an identifier");
@@ -294,7 +299,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Accessing undefined symbol 'minttuglitch'")]
+    #[should_panic(expected = "Accessing undefined symbol Identifier(\"minttuglitch\")")]
     fn undefined_reference() {
         i("
             {

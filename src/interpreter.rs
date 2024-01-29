@@ -1,6 +1,7 @@
-use std::cell::RefCell;
 use std::collections::HashMap;
-use std::rc::Rc;
+use std::mem;
+use std::default::Default;
+
 
 use crate::parser::Expression;
 use crate::tokenizer::Op;
@@ -33,7 +34,7 @@ impl From<Value> for i32 {
 }
 
 impl Op {
-    fn eval_binary_integer(&self, ival1: i32, right_expr: Expression, sym_table: &Rc<RefCell<SymTable>>) -> Value {
+    fn eval_binary_integer(&self, ival1: i32, right_expr: Expression, sym_table: &mut Box<SymTable>) -> Value {
         // Integer ops have no short circuiting so just eval right here
         let ival2: i32 = interpret(right_expr, sym_table).try_into().expect("Not Value::Integer");
 
@@ -54,7 +55,7 @@ impl Op {
         }
     }
 
-    fn eval_binary_boolean(&self, bval1: bool, right_expr: Expression, sym_table: &Rc<RefCell<SymTable>>) -> Value {
+    fn eval_binary_boolean(&self, bval1: bool, right_expr: Expression, sym_table: &mut Box<SymTable>) -> Value {
         match self {
             Op::Equals =>    Value::Boolean(bval1 == interpret(right_expr, sym_table).try_into().expect("Not Value::Boolean")),
             Op::NotEquals => Value::Boolean(bval1 != interpret(right_expr, sym_table).try_into().expect("Not Value::Boolean")),
@@ -85,24 +86,25 @@ enum Symbol {
     Operator(Op)
 }
 
+#[derive(Default)]
 struct SymTable {
     symbols: HashMap<Symbol, Value>,
-    parent: Option<Rc<RefCell<SymTable>>>,
+    parent: Option<Box<SymTable>>,
 }
 
 impl SymTable {
-    fn new<'a>(parent: Option<Rc<RefCell<SymTable>>>) -> Rc<RefCell<SymTable>> {
-        Rc::new(RefCell::new(SymTable {
+    fn new<'a>(parent: Option<Box<SymTable>>) -> Box<SymTable> {
+        Box::new(SymTable {
             symbols: HashMap::new(),
             parent,
-        }))
+        })
     }
 
     fn get(&self, k: &Symbol) -> Value {
         if let Some(val) = self.symbols.get(k) {
             val.clone()
         } else if let Some(parent) = &self.parent {
-            parent.borrow().get(k)
+            parent.get(k)
         } else {
             panic!("Accessing undefined symbol {:?}", k)
         }
@@ -112,15 +114,23 @@ impl SymTable {
         if self.symbols.contains_key(&k) {
             self.symbols.insert(k, val);
             None
-        } else if let Some(parent) = &self.parent {
-            parent.borrow_mut().assign(k, val)
+        } else if let Some(parent) = &mut self.parent {
+            parent.assign(k, val)
         } else {
             panic!("Assigning to undefined symbol '{:?}'", k);
         }
     }
+
+    fn with_inner<T>(self: &mut Box<SymTable>, f: impl FnOnce(&mut Box<SymTable>) -> T) -> T {
+        let symtab = mem::replace(self, Default::default());
+        let mut inner_symtab = SymTable::new(Some(symtab));
+        let result = f(&mut inner_symtab);
+        *self = inner_symtab.parent.unwrap();
+        result
+    }
 }
 
-fn interpret(node: Expression, sym_table: &Rc<RefCell<SymTable>>) -> Value {
+fn interpret(node: Expression, sym_table: &mut Box<SymTable>) -> Value {
     match node {
         Expression::IntegerLiteral { value } => {
             Value::Integer(value)
@@ -160,18 +170,18 @@ fn interpret(node: Expression, sym_table: &Rc<RefCell<SymTable>>) -> Value {
             }
         },
         Expression::BlockExpression { statements, result } => {
-            let outer_sym_table = sym_table.clone();
-            let inner_sym_table = SymTable::new(Some(outer_sym_table));
-            for expr in statements {
-                interpret(*expr, &inner_sym_table);
-            }
-            interpret(*result, &inner_sym_table)
+            sym_table.with_inner(|inner_sym_table| {
+                for expr in statements {
+                    interpret(*expr, inner_sym_table);
+                }
+                interpret(*result, inner_sym_table)
+            })
         },
-        Expression::Identifier { value } => sym_table.borrow().get(&Symbol::Identifier(value)),
+        Expression::Identifier { value } => sym_table.get(&Symbol::Identifier(value)),
         Expression::AssignmentExpression { left, right } => {
             if let Expression::Identifier { value: id } = *left {
                 let value = interpret(*right, sym_table);
-                sym_table.borrow_mut().assign(Symbol::Identifier(id), value);
+                sym_table.assign(Symbol::Identifier(id), value);
                 value
             } else {
                 panic!("Left side of an assignment must be an identifier");
@@ -180,7 +190,7 @@ fn interpret(node: Expression, sym_table: &Rc<RefCell<SymTable>>) -> Value {
         Expression::VariableDeclaration { id, init } => {
             if let Expression::Identifier { value } = *id {
                 let init_value = interpret(*init, sym_table);
-                sym_table.borrow_mut().symbols.insert(Symbol::Identifier(value), init_value);
+                sym_table.symbols.insert(Symbol::Identifier(value), init_value);
                 Value::Unit
             } else {
                 panic!("Id of a variable declaration must be an identifier");
@@ -192,7 +202,7 @@ fn interpret(node: Expression, sym_table: &Rc<RefCell<SymTable>>) -> Value {
 }
 
 pub fn interpret_program(node: Expression) -> Value {
-    interpret(node, &SymTable::new(None))
+    interpret(node, &mut SymTable::new(None))
 }
 
 #[cfg(test)]

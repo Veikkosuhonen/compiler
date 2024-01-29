@@ -45,7 +45,7 @@ impl Op {
             Op::Mod =>       Value::Integer(ival1 % ival2),
             Op::Exp =>       Value::Integer(i32::pow(ival1, ival2.try_into().unwrap())),
             Op::Equals =>    Value::Boolean(ival1 == ival2),
-            Op::NotEquals => Value::Boolean(ival1 == ival2),
+            Op::NotEquals => Value::Boolean(ival1 != ival2),
             Op::GT =>        Value::Boolean(ival1 > ival2),
             Op::LT =>        Value::Boolean(ival1 < ival2),
             Op::GTE =>       Value::Boolean(ival1 >= ival2),

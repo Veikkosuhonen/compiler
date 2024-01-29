@@ -21,3 +21,12 @@ fn basic_symbols_test() {
     }
 }
 
+#[test]
+fn scopes_test() {
+    let res = interpret_file(&"./programs/scopes_test.chi".to_string());
+    if let Value::Integer(ival) = res {
+        assert_eq!(ival, 199);
+    } else {
+        panic!("Did not return integer");
+    }
+}

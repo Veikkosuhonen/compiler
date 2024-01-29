@@ -51,22 +51,6 @@ impl From<Value> for i32 {
     }
 }
 
-impl Op {
-    fn eval_unary_integer(&self, ival: i32) -> Value {
-        match self {
-            Op::Sub => Value::Integer(-ival),
-            _ => panic!("invalid integer unary operator {:?}", &self)
-        }
-    }
-
-    fn eval_unary_boolean(&self, ival: bool) -> Value {
-        match self {
-            Op::Not => Value::Boolean(!ival),
-            _ => panic!("invalid boolean unary operator {:?}", &self)
-        }
-    }
-}
-
 #[derive(PartialEq, Eq, Hash, Debug, Clone)]
 pub enum Symbol {
     Identifier(String),
@@ -133,7 +117,23 @@ fn eval_binary_op(
             Function::UserDefined(user_func) => panic!("Not yet implemented")
         }
     } else {
-        panic!("Undefined binary operator {:?}", operator)
+        panic!("Undefined operator {:?}", operator)
+    }
+}
+
+fn eval_unary_op(
+    operand: Box<Expression>,
+    operator: Op,
+    sym_table: &mut Box<SymTable>
+) -> Value {
+    let operand = interpret(*operand, sym_table);
+    if let Value::Function(op_function) = sym_table.get(&mut Symbol::Operator(operator)) {
+        match op_function {
+            Function::BuiltIn(builtin) => eval_builtin_unary(builtin, operand),
+            Function::UserDefined(user_func) => panic!("Not yet implemented")
+        }
+    } else {
+        panic!("Undefined operator {:?}", operator)
     }
 }
 
@@ -149,13 +149,7 @@ fn interpret(node: Expression, sym_table: &mut Box<SymTable>) -> Value {
             eval_binary_op(left, right, operator, sym_table)
         },
         Expression::UnaryExpression { operand, operator } => {
-            let operand_result = interpret(*operand, sym_table);
-            match operand_result {
-                Value::Integer(ival) => operator.eval_unary_integer(ival),
-                Value::Boolean(bval) => operator.eval_unary_boolean(bval),
-                Value::Function(_) => panic!("Unary operator not permitted for Function valuen"),
-                Value::Unit => panic!("Unary operator not permitted for Unit value")
-            }
+            eval_unary_op(operand, operator, sym_table)
         }
         Expression::IfExpression { condition, then_branch, else_branch } => {
             let condition_result = interpret(*condition, sym_table);

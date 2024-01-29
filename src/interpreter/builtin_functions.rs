@@ -20,10 +20,6 @@ pub enum BuiltIn {
     GetUnit, // Placeholder for BuiltIn function
 }
 
-pub fn eval_builtin_unary() -> Value {
-    Value::Unit
-}
-
 pub fn eval_builtin_binary(builtin: BuiltIn, left: Value, eval_right: impl FnOnce() -> Value) -> Value {
     match left {
         Value::Boolean(bval1) => {
@@ -55,6 +51,24 @@ pub fn eval_builtin_binary(builtin: BuiltIn, left: Value, eval_right: impl FnOnc
             }
         },
         _ => panic!("Invalid value for binary operation {:?}", left)
+    }
+}
+
+pub fn eval_builtin_unary(builtin: BuiltIn, operand: Value) -> Value {
+    match operand {
+        Value::Boolean(bval) => {
+            Value::Boolean(match builtin {
+                BuiltIn::Not => !bval,
+                _ => panic!("Invalid operator for boolean unary operation {:?}", builtin)
+            })
+        },
+        Value::Integer(ival) => {
+            Value::Integer(match builtin {
+                BuiltIn::Sub => -ival,
+                _ => panic!("Invalid operator for integer unary operation {:?}", builtin)
+            })
+        },
+        _ => panic!("Invalid value for unary operation {:?}", builtin)
     }
 }
 

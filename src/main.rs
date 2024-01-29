@@ -9,6 +9,7 @@ fn main() {
     match result {
         interpreter::Value::Integer(i) => println!("{}", i),
         interpreter::Value::Boolean(b) => println!("{}", b),
+        interpreter::Value::Function(_) => println!("Function"),
         interpreter::Value::Unit => println!("Unit"),
     }
 }

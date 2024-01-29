@@ -1,15 +1,32 @@
 use std::collections::HashMap;
 use std::mem;
 use std::default::Default;
-
+use std::rc::Rc;
 
 use crate::parser::Expression;
 use crate::tokenizer::Op;
 
-#[derive(Debug, Clone, Copy)]
+use self::builtin_functions::BuiltIn;
+
+mod builtin_functions;
+
+#[derive(Debug)]
+pub struct UserDefinedFunction {
+    body: Box<Expression>, // This should only be a BlockExpression
+    params: Vec<Box<Expression>>, // This should only be a vec of Identifiers
+}
+
+#[derive(Debug, Clone)]
+pub enum Function {
+    BuiltIn(BuiltIn),
+    UserDefined(Rc<UserDefinedFunction>),
+}
+
+#[derive(Debug, Clone)]
 pub enum Value {
     Integer(i32),
     Boolean(bool),
+    Function(Function),
     Unit,
 }
 
@@ -80,8 +97,8 @@ impl Op {
     }
 }
 
-#[derive(PartialEq, Eq, Hash, Debug)]
-enum Symbol {
+#[derive(PartialEq, Eq, Hash, Debug, Clone)]
+pub enum Symbol {
     Identifier(String),
     Operator(Op)
 }
@@ -110,10 +127,10 @@ impl SymTable {
         }
     }
 
-    fn assign(&mut self, k: Symbol, val: Value) -> Option<(String, Value)> {
+    fn assign(&mut self, k: Symbol, val: Value) -> Value {
         if self.symbols.contains_key(&k) {
-            self.symbols.insert(k, val);
-            None
+            self.symbols.insert(k, val.clone());
+            val
         } else if let Some(parent) = &mut self.parent {
             parent.assign(k, val)
         } else {
@@ -143,6 +160,7 @@ fn interpret(node: Expression, sym_table: &mut Box<SymTable>) -> Value {
             match left_result {
                 Value::Integer(ival1) =>  operator.eval_binary_integer(ival1, *right, sym_table),
                 Value::Boolean(bval1) => operator.eval_binary_boolean(bval1, *right, sym_table),
+                Value::Function(_) => panic!("Function used as operand in binary operation"),
                 Value::Unit => panic!("Unit used as operand in binary operation"),
             }
         },
@@ -151,6 +169,7 @@ fn interpret(node: Expression, sym_table: &mut Box<SymTable>) -> Value {
             match operand_result {
                 Value::Integer(ival) => operator.eval_unary_integer(ival),
                 Value::Boolean(bval) => operator.eval_unary_boolean(bval),
+                Value::Function(_) => panic!("Unary operator not permitted for Function valuen"),
                 Value::Unit => panic!("Unary operator not permitted for Unit value")
             }
         }
@@ -181,8 +200,7 @@ fn interpret(node: Expression, sym_table: &mut Box<SymTable>) -> Value {
         Expression::AssignmentExpression { left, right } => {
             if let Expression::Identifier { value: id } = *left {
                 let value = interpret(*right, sym_table);
-                sym_table.assign(Symbol::Identifier(id), value);
-                value
+                sym_table.assign(Symbol::Identifier(id), value)
             } else {
                 panic!("Left side of an assignment must be an identifier");
             }
@@ -201,8 +219,17 @@ fn interpret(node: Expression, sym_table: &mut Box<SymTable>) -> Value {
     }
 }
 
+fn get_toplevel_sym_table() -> Box<SymTable> {
+    let mut sym_table = SymTable::new(None);
+    let builtins = builtin_functions::get_builtin_function_symbol_mappings();
+    for (symbol, val) in builtins {
+        sym_table.symbols.insert(symbol, val);
+    }
+    sym_table
+}
+
 pub fn interpret_program(node: Expression) -> Value {
-    interpret(node, &mut SymTable::new(None))
+    interpret(node, &mut get_toplevel_sym_table())
 }
 
 #[cfg(test)]

@@ -9,6 +9,7 @@ use crate::tokenizer::Op;
 use self::builtin_functions::BuiltIn;
 
 mod builtin_functions;
+use builtin_functions::*;
 
 #[derive(Debug)]
 pub struct UserDefinedFunction {
@@ -51,37 +52,6 @@ impl From<Value> for i32 {
 }
 
 impl Op {
-    fn eval_binary_integer(&self, ival1: i32, right_expr: Expression, sym_table: &mut Box<SymTable>) -> Value {
-        // Integer ops have no short circuiting so just eval right here
-        let ival2: i32 = interpret(right_expr, sym_table).try_into().expect("Not Value::Integer");
-
-        match self {
-            Op::Add =>       Value::Integer(ival1 + ival2),
-            Op::Sub =>       Value::Integer(ival1 - ival2),
-            Op::Mul =>       Value::Integer(ival1 * ival2),
-            Op::Div =>       Value::Integer(ival1 / ival2),
-            Op::Mod =>       Value::Integer(ival1 % ival2),
-            Op::Exp =>       Value::Integer(i32::pow(ival1, ival2.try_into().unwrap())),
-            Op::Equals =>    Value::Boolean(ival1 == ival2),
-            Op::NotEquals => Value::Boolean(ival1 != ival2),
-            Op::GT =>        Value::Boolean(ival1 > ival2),
-            Op::LT =>        Value::Boolean(ival1 < ival2),
-            Op::GTE =>       Value::Boolean(ival1 >= ival2),
-            Op::LTE =>       Value::Boolean(ival1 <= ival2),
-            _ => panic!("Invalid integer binary operator {:?}", &self)
-        }
-    }
-
-    fn eval_binary_boolean(&self, bval1: bool, right_expr: Expression, sym_table: &mut Box<SymTable>) -> Value {
-        match self {
-            Op::Equals =>    Value::Boolean(bval1 == interpret(right_expr, sym_table).try_into().expect("Not Value::Boolean")),
-            Op::NotEquals => Value::Boolean(bval1 != interpret(right_expr, sym_table).try_into().expect("Not Value::Boolean")),
-            Op::And =>       Value::Boolean(bval1 && interpret(right_expr, sym_table).try_into().expect("Not Value::Boolean")),
-            Op::Or =>        Value::Boolean(bval1 || interpret(right_expr, sym_table).try_into().expect("Not Value::Boolean")),
-            _ => panic!("Invalid boolean binary operator {:?}", &self)
-        }
-    }
-
     fn eval_unary_integer(&self, ival: i32) -> Value {
         match self {
             Op::Sub => Value::Integer(-ival),
@@ -147,6 +117,26 @@ impl SymTable {
     }
 }
 
+fn eval_binary_op(
+    left_expr: Box<Expression>, 
+    right_expr: Box<Expression>, 
+    operator: Op, 
+    sym_table: &mut Box<SymTable>
+) -> Value {
+    let left_val = interpret(*left_expr, sym_table);
+
+    if let Value::Function(op_function) = sym_table.get(&mut Symbol::Operator(operator)) {
+        // Lazy eval to enable short circuiting
+        let eval_right = || { interpret(*right_expr, sym_table) };
+        match op_function {
+            Function::BuiltIn(builtin) => eval_builtin_binary(builtin, left_val, eval_right),
+            Function::UserDefined(user_func) => panic!("Not yet implemented")
+        }
+    } else {
+        panic!("Undefined binary operator {:?}", operator)
+    }
+}
+
 fn interpret(node: Expression, sym_table: &mut Box<SymTable>) -> Value {
     match node {
         Expression::IntegerLiteral { value } => {
@@ -156,13 +146,7 @@ fn interpret(node: Expression, sym_table: &mut Box<SymTable>) -> Value {
             Value::Boolean(value)
         }
         Expression::BinaryExpression { left, operator, right } => {
-            let left_result = interpret(*left, sym_table);
-            match left_result {
-                Value::Integer(ival1) =>  operator.eval_binary_integer(ival1, *right, sym_table),
-                Value::Boolean(bval1) => operator.eval_binary_boolean(bval1, *right, sym_table),
-                Value::Function(_) => panic!("Function used as operand in binary operation"),
-                Value::Unit => panic!("Unit used as operand in binary operation"),
-            }
+            eval_binary_op(left, right, operator, sym_table)
         },
         Expression::UnaryExpression { operand, operator } => {
             let operand_result = interpret(*operand, sym_table);
@@ -221,7 +205,7 @@ fn interpret(node: Expression, sym_table: &mut Box<SymTable>) -> Value {
 
 fn get_toplevel_sym_table() -> Box<SymTable> {
     let mut sym_table = SymTable::new(None);
-    let builtins = builtin_functions::get_builtin_function_symbol_mappings();
+    let builtins = get_builtin_function_symbol_mappings();
     for (symbol, val) in builtins {
         sym_table.symbols.insert(symbol, val);
     }

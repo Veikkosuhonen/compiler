@@ -2,6 +2,7 @@ use std::fs;
 pub mod tokenizer;
 pub mod parser;
 pub mod interpreter;
+pub mod ir_generator;
 
 pub fn interpret_file(path: &String) -> interpreter::Value {
     let contents = fs::read_to_string(path)

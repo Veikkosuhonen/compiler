@@ -114,7 +114,7 @@ fn eval_binary_op(
         let eval_right = || { interpret(*right_expr, sym_table) };
         match op_function {
             Function::BuiltIn(builtin) => eval_builtin_binary(builtin, left_val, eval_right),
-            Function::UserDefined(user_func) => panic!("Not yet implemented")
+            Function::UserDefined(_) => panic!("Not yet implemented")
         }
     } else {
         panic!("Undefined operator {:?}", operator)
@@ -130,7 +130,7 @@ fn eval_unary_op(
     if let Value::Function(op_function) = sym_table.get(&mut Symbol::Operator(operator)) {
         match op_function {
             Function::BuiltIn(builtin) => eval_builtin_unary(builtin, operand),
-            Function::UserDefined(user_func) => panic!("Not yet implemented")
+            Function::UserDefined(_) => panic!("Not yet implemented")
         }
     } else {
         panic!("Undefined operator {:?}", operator)
@@ -385,14 +385,15 @@ mod tests {
     fn call_builtin_function() {
         let res = i("
             {
-                getUnit()
+                print_bool(false);
             }
         ");
         assert!(matches!(res, Value::Unit));
         let res2 = i("
             {
-                var x = getMeaningOfLife();
+                var x = 42;
                 print_int(x);
+
                 x
             }
         ");

@@ -1,3 +1,5 @@
+use std::io;
+
 use super::*;
 
 #[derive(Debug, Clone, Copy)]
@@ -18,8 +20,8 @@ pub enum BuiltIn {
     And,
     Or,
     PrintInt,
-    GetUnit, // Placeholder for BuiltIn function
-    GetMeaningOfLife, // Another
+    PrintBool,
+    ReadInt,
 }
 
 fn print_int(args: Vec<Value>) -> Value {
@@ -30,6 +32,31 @@ fn print_int(args: Vec<Value>) -> Value {
         panic!("Tried to print '{:?}' which is not an integer", arg)
     }
     Value::Unit
+}
+
+fn print_bool(args: Vec<Value>) -> Value {
+    let arg = args.get(0).expect("Number of arguments to print_int should be 1");
+    if let Value::Boolean(bval) = arg {
+        println!("{}", bval);
+    } else {
+        panic!("Tried to print '{:?}' which is not a boolean", arg)
+    }
+    Value::Unit
+}
+
+fn read_int(args: Vec<Value>) -> Value {
+    if args.len() > 0 {
+        panic!("Number of arguments to read_int should be 0");
+    }
+
+    let mut input = String::new();
+    io::stdin()
+        .read_line(&mut input)
+        .expect("Failed to read input");
+
+    let ival: i32 = input.parse().expect("Input is not an integer");
+
+    Value::Integer(ival)
 }
 
 pub fn eval_builtin_binary(builtin: BuiltIn, left: Value, eval_right: impl FnOnce() -> Value) -> Value {
@@ -87,8 +114,8 @@ pub fn eval_builtin_unary(builtin: BuiltIn, operand: Value) -> Value {
 pub fn eval_builtin_function(builtin: BuiltIn, arguments: Vec<Value>) -> Value {
     match builtin {
         BuiltIn::PrintInt => print_int(arguments),
-        BuiltIn::GetUnit => Value::Unit,
-        BuiltIn::GetMeaningOfLife => Value::Integer(21 + 21),
+        BuiltIn::PrintBool => print_bool(arguments),
+        BuiltIn::ReadInt => read_int(arguments),
         _ => panic!("{:?} is not a builtin function", builtin)
     }
 }
@@ -114,9 +141,9 @@ pub fn get_builtin_function_symbol_mappings() -> Vec<(Symbol, Value)> {
     ];
 
     let functions = vec![
-        ("getUnit", BuiltIn::GetUnit),
-        ("getMeaningOfLife", BuiltIn::GetMeaningOfLife),
         ("print_int", BuiltIn::PrintInt),
+        ("print_bool", BuiltIn::PrintBool),
+        ("read_int", BuiltIn::ReadInt),
     ];
 
     let mapped_ops = ops.iter().map(|(op, builtin)| {

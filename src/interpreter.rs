@@ -1,8 +1,6 @@
-use std::collections::HashMap;
-use std::mem;
-use std::default::Default;
 use std::rc::Rc;
 
+use crate::sym_table::{SymTable, Symbol};
 use crate::parser::Expression;
 use crate::tokenizer::Op;
 
@@ -23,12 +21,12 @@ pub enum Function {
     UserDefined(Rc<UserDefinedFunction>),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub enum Value {
     Integer(i32),
     Boolean(bool),
     Function(Function),
-    Unit,
+    #[default] Unit,
 }
 
 impl From<Value> for bool {
@@ -51,61 +49,11 @@ impl From<Value> for i32 {
     }
 }
 
-#[derive(PartialEq, Eq, Hash, Debug, Clone)]
-pub enum Symbol {
-    Identifier(String),
-    Operator(Op)
-}
-
-#[derive(Default)]
-struct SymTable {
-    symbols: HashMap<Symbol, Value>,
-    parent: Option<Box<SymTable>>,
-}
-
-impl SymTable {
-    fn new<'a>(parent: Option<Box<SymTable>>) -> Box<SymTable> {
-        Box::new(SymTable {
-            symbols: HashMap::new(),
-            parent,
-        })
-    }
-
-    fn get(&self, k: &Symbol) -> Value {
-        if let Some(val) = self.symbols.get(k) {
-            val.clone()
-        } else if let Some(parent) = &self.parent {
-            parent.get(k)
-        } else {
-            panic!("Accessing undefined symbol {:?}", k)
-        }
-    }
-
-    fn assign(&mut self, k: Symbol, val: Value) -> Value {
-        if self.symbols.contains_key(&k) {
-            self.symbols.insert(k, val.clone());
-            val
-        } else if let Some(parent) = &mut self.parent {
-            parent.assign(k, val)
-        } else {
-            panic!("Assigning to undefined symbol '{:?}'", k);
-        }
-    }
-
-    fn with_inner<T>(self: &mut Box<SymTable>, f: impl FnOnce(&mut Box<SymTable>) -> T) -> T {
-        let symtab = mem::replace(self, Default::default());
-        let mut inner_symtab = SymTable::new(Some(symtab));
-        let result = f(&mut inner_symtab);
-        *self = inner_symtab.parent.unwrap();
-        result
-    }
-}
-
 fn eval_binary_op(
     left_expr: Box<Expression>, 
     right_expr: Box<Expression>, 
     operator: Op, 
-    sym_table: &mut Box<SymTable>
+    sym_table: &mut Box<SymTable<Value>>
 ) -> Value {
     let left_val = interpret(*left_expr, sym_table);
 
@@ -124,7 +72,7 @@ fn eval_binary_op(
 fn eval_unary_op(
     operand: Box<Expression>,
     operator: Op,
-    sym_table: &mut Box<SymTable>
+    sym_table: &mut Box<SymTable<Value>>
 ) -> Value {
     let operand = interpret(*operand, sym_table);
     if let Value::Function(op_function) = sym_table.get(&mut Symbol::Operator(operator)) {
@@ -140,7 +88,7 @@ fn eval_unary_op(
 fn eval_call_expression(
     callee: Box<Expression>,
     argument_expr: Vec<Box<Expression>>,
-    sym_table: &mut Box<SymTable>
+    sym_table: &mut Box<SymTable<Value>>
 ) -> Value {
     if let Expression::Identifier { value: function_id } = *callee {
         let called_function = sym_table.get(&Symbol::Identifier(function_id.to_string()));
@@ -163,7 +111,7 @@ fn eval_call_expression(
     }
 }
 
-fn interpret(node: Expression, sym_table: &mut Box<SymTable>) -> Value {
+fn interpret(node: Expression, sym_table: &mut Box<SymTable<Value>>) -> Value {
     match node {
         Expression::IntegerLiteral { value } => {
             Value::Integer(value)
@@ -226,7 +174,7 @@ fn interpret(node: Expression, sym_table: &mut Box<SymTable>) -> Value {
     }
 }
 
-fn get_toplevel_sym_table() -> Box<SymTable> {
+fn get_toplevel_sym_table() -> Box<SymTable<Value>> {
     let mut sym_table = SymTable::new(None);
     let builtins = get_builtin_function_symbol_mappings();
     for (symbol, val) in builtins {

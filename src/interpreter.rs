@@ -3,11 +3,8 @@ use std::rc::Rc;
 use crate::sym_table::{SymTable, Symbol};
 use crate::parser::Expression;
 use crate::tokenizer::Op;
+use crate::builtin_functions::*;
 
-use self::builtin_functions::BuiltIn;
-
-mod builtin_functions;
-use builtin_functions::*;
 
 #[derive(Debug)]
 pub struct UserDefinedFunction {
@@ -176,7 +173,7 @@ fn interpret(node: Expression, sym_table: &mut Box<SymTable<Value>>) -> Value {
 
 fn get_toplevel_sym_table() -> Box<SymTable<Value>> {
     let mut sym_table = SymTable::new(None);
-    let builtins = get_builtin_function_symbol_mappings();
+    let builtins = get_builtin_function_symbol_value_mappings();
     for (symbol, val) in builtins {
         sym_table.symbols.insert(symbol, val);
     }

@@ -1,8 +1,8 @@
 use std::io;
 
-use super::*;
+use crate::{interpreter::{Function, Value}, sym_table::Symbol, tokenizer::Op, type_checker::{FunctionType, Type}};
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum BuiltIn {
     Add,
     Sub,
@@ -120,7 +120,7 @@ pub fn eval_builtin_function(builtin: BuiltIn, arguments: Vec<Value>) -> Value {
     }
 }
 
-pub fn get_builtin_function_symbol_mappings() -> Vec<(Symbol, Value)> {
+pub fn get_builtin_function_symbol_value_mappings() -> Vec<(Symbol, Value)> {
     let ops = vec![
         (Op::Add, BuiltIn::Add),
         (Op::Sub, BuiltIn::Sub),
@@ -152,6 +152,96 @@ pub fn get_builtin_function_symbol_mappings() -> Vec<(Symbol, Value)> {
 
     let mapped_funcs = functions.iter().map(|(id, builtin)| {
         (Symbol::Identifier(id.to_string()), Value::Function(Function::BuiltIn(*builtin)))
+    });
+
+    mapped_ops.chain(mapped_funcs).collect()
+}
+
+pub fn get_builtin_function_symbol_type_mappings() -> Vec<(Symbol, Type)> {
+    let ops = vec![
+        (Op::Add, FunctionType {
+            param_types: vec![Type::Integer, Type::Integer],
+            return_type: Type::Integer,
+        }),
+        (Op::Sub, FunctionType {
+            param_types: vec![Type::Integer, Type::Integer],
+            return_type: Type::Integer,
+        }),
+        (Op::Mul, FunctionType {
+            param_types: vec![Type::Integer, Type::Integer],
+            return_type: Type::Integer,
+        }),
+        (Op::Div, FunctionType {
+            param_types: vec![Type::Integer, Type::Integer],
+            return_type: Type::Integer,
+        }),
+        (Op::Mod, FunctionType {
+            param_types: vec![Type::Integer, Type::Integer],
+            return_type: Type::Integer,
+        }),
+        (Op::Exp, FunctionType {
+            param_types: vec![Type::Integer, Type::Integer],
+            return_type: Type::Integer,
+        }),
+        (Op::Not, FunctionType {
+            param_types: vec![Type::Boolean],
+            return_type: Type::Boolean,
+        }),
+        (Op::Equals, FunctionType {
+            param_types: vec![Type::Integer, Type::Integer],
+            return_type: Type::Boolean,
+        }),
+        (Op::NotEquals, FunctionType {
+            param_types: vec![Type::Integer, Type::Integer],
+            return_type: Type::Boolean,
+        }),
+        (Op::LT, FunctionType {
+            param_types: vec![Type::Integer, Type::Integer],
+            return_type: Type::Boolean,
+        }),
+        (Op::GT, FunctionType {
+            param_types: vec![Type::Integer, Type::Integer],
+            return_type: Type::Boolean,
+        }),
+        (Op::LTE, FunctionType {
+            param_types: vec![Type::Integer, Type::Integer],
+            return_type: Type::Boolean,
+        }),
+        (Op::GTE, FunctionType {
+            param_types: vec![Type::Integer, Type::Integer],
+            return_type: Type::Boolean,
+        }),
+        (Op::And, FunctionType {
+            param_types: vec![Type::Boolean, Type::Boolean],
+            return_type: Type::Boolean,
+        }),
+        (Op::Or, FunctionType {
+            param_types: vec![Type::Boolean, Type::Boolean],
+            return_type: Type::Boolean,
+        }),
+    ];
+
+    let functions = vec![
+        ("print_int", FunctionType {
+            param_types: vec![Type::Integer],
+            return_type: Type::Unit,
+        }),
+        ("print_bool", FunctionType {
+            param_types: vec![Type::Boolean],
+            return_type: Type::Unit,
+        }),
+        ("read_int", FunctionType {
+            param_types: vec![],
+            return_type: Type::Integer,
+        }),
+    ];
+
+    let mapped_ops = ops.iter().map(|(op, ftype)| {
+        (Symbol::Operator(*op), Type::Function(Box::new(ftype.clone())))
+    });
+
+    let mapped_funcs = functions.iter().map(|(id, ftype)| {
+        (Symbol::Identifier(id.to_string()),  Type::Function(Box::new(ftype.clone())))
     });
 
     mapped_ops.chain(mapped_funcs).collect()

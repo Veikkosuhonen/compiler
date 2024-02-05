@@ -1,6 +1,6 @@
 use crate::builtin_functions::get_builtin_function_symbol_type_mappings;
 use crate::sym_table::{SymTable, Symbol};
-use crate::parser::Expression;
+use crate::parser::{ASTNode, Expression};
 use crate::tokenizer::Op;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -18,8 +18,8 @@ pub enum Type {
 }
 
 fn typecheck_binary_op(
-    left_expr: Box<Expression>, 
-    right_expr: Box<Expression>, 
+    left_expr: Box<ASTNode>, 
+    right_expr: Box<ASTNode>, 
     operator: Op, 
     sym_table: &mut Box<SymTable<Type>>
 ) -> Type {
@@ -34,7 +34,7 @@ fn typecheck_binary_op(
 }
 
 fn typecheck_unary_op(
-    operand: Box<Expression>,
+    operand: Box<ASTNode>,
     operator: Op,
     sym_table: &mut Box<SymTable<Type>>
 ) -> Type {
@@ -49,11 +49,11 @@ fn typecheck_unary_op(
 }
 
 fn typecheck_call_expression(
-    callee: Box<Expression>,
-    argument_expr: Vec<Box<Expression>>,
+    callee: Box<ASTNode>,
+    argument_expr: Vec<Box<ASTNode>>,
     sym_table: &mut Box<SymTable<Type>>
 ) -> Type {
-    if let Expression::Identifier { value: function_id } = *callee {
+    if let Expression::Identifier { value: function_id } = callee.expr {
         let called_function = sym_table.get(&Symbol::Identifier(function_id.to_string()));
         if let Type::Function(called_function) = called_function {
             let mut arg_types: Vec<Type> = vec![];
@@ -87,8 +87,8 @@ fn typecheck_call(
     callee.return_type
 }
 
-fn typecheck(node: Expression, sym_table: &mut Box<SymTable<Type>>) -> Type {
-    match node {
+fn typecheck(node: ASTNode, sym_table: &mut Box<SymTable<Type>>) -> Type {
+    match node.expr {
         Expression::IntegerLiteral {..} => Type::Integer,
         Expression::BooleanLiteral {..} => Type::Boolean,
         Expression::BinaryExpression { left, operator, right } => {
@@ -123,7 +123,7 @@ fn typecheck(node: Expression, sym_table: &mut Box<SymTable<Type>>) -> Type {
         },
         Expression::Identifier { value } => sym_table.get(&Symbol::Identifier(value)),
         Expression::AssignmentExpression { left, right } => {
-            if let Expression::Identifier { value: id } = *left {
+            if let Expression::Identifier { value: id } = left.expr {
                 let value = typecheck(*right, sym_table);
                 sym_table.assign(Symbol::Identifier(id), value)
             } else {
@@ -131,7 +131,7 @@ fn typecheck(node: Expression, sym_table: &mut Box<SymTable<Type>>) -> Type {
             }
         },
         Expression::VariableDeclaration { id, init } => {
-            if let Expression::Identifier { value } = *id {
+            if let Expression::Identifier { value } = id.expr {
                 let init_value = typecheck(*init, sym_table);
                 sym_table.symbols.insert(Symbol::Identifier(value), init_value);
                 Type::Unit
@@ -155,7 +155,7 @@ fn get_toplevel_sym_table() -> Box<SymTable<Type>> {
     sym_table
 }
 
-pub fn typecheck_program(node: Expression) -> Type {
+pub fn typecheck_program(node: ASTNode) -> Type {
     typecheck(node, &mut get_toplevel_sym_table())
 }
 

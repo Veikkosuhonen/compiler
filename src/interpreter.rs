@@ -1,7 +1,7 @@
 use std::rc::Rc;
 
 use crate::sym_table::{SymTable, Symbol};
-use crate::parser::Expression;
+use crate::parser::{ASTNode, Expression};
 use crate::tokenizer::Op;
 use crate::builtin_functions::*;
 
@@ -47,16 +47,16 @@ impl From<Value> for i32 {
 }
 
 fn eval_binary_op(
-    left_expr: Box<Expression>, 
-    right_expr: Box<Expression>, 
+    left_node: Box<ASTNode>, 
+    right_node: Box<ASTNode>, 
     operator: Op, 
     sym_table: &mut Box<SymTable<Value>>
 ) -> Value {
-    let left_val = interpret(*left_expr, sym_table);
+    let left_val = interpret(*left_node, sym_table);
 
     if let Value::Function(op_function) = sym_table.get(&mut Symbol::Operator(operator)) {
         // Lazy eval to enable short circuiting
-        let eval_right = || { interpret(*right_expr, sym_table) };
+        let eval_right = || { interpret(*right_node, sym_table) };
         match op_function {
             Function::BuiltIn(builtin) => eval_builtin_binary(builtin, left_val, eval_right),
             Function::UserDefined(_) => panic!("Not yet implemented")
@@ -67,7 +67,7 @@ fn eval_binary_op(
 }
 
 fn eval_unary_op(
-    operand: Box<Expression>,
+    operand: Box<ASTNode>,
     operator: Op,
     sym_table: &mut Box<SymTable<Value>>
 ) -> Value {
@@ -83,11 +83,11 @@ fn eval_unary_op(
 }
 
 fn eval_call_expression(
-    callee: Box<Expression>,
-    argument_expr: Vec<Box<Expression>>,
+    callee: Box<ASTNode>,
+    argument_expr: Vec<Box<ASTNode>>,
     sym_table: &mut Box<SymTable<Value>>
 ) -> Value {
-    if let Expression::Identifier { value: function_id } = *callee {
+    if let Expression::Identifier { value: function_id } = callee.expr {
         let called_function = sym_table.get(&Symbol::Identifier(function_id.to_string()));
         if let Value::Function(called_function) = called_function {
             match called_function {
@@ -108,8 +108,8 @@ fn eval_call_expression(
     }
 }
 
-fn interpret(node: Expression, sym_table: &mut Box<SymTable<Value>>) -> Value {
-    match node {
+fn interpret(node: ASTNode, sym_table: &mut Box<SymTable<Value>>) -> Value {
+    match node.expr {
         Expression::IntegerLiteral { value } => {
             Value::Integer(value)
         },
@@ -147,7 +147,7 @@ fn interpret(node: Expression, sym_table: &mut Box<SymTable<Value>>) -> Value {
         },
         Expression::Identifier { value } => sym_table.get(&Symbol::Identifier(value)),
         Expression::AssignmentExpression { left, right } => {
-            if let Expression::Identifier { value: id } = *left {
+            if let Expression::Identifier { value: id } = left.expr {
                 let value = interpret(*right, sym_table);
                 sym_table.assign(Symbol::Identifier(id), value)
             } else {
@@ -155,7 +155,7 @@ fn interpret(node: Expression, sym_table: &mut Box<SymTable<Value>>) -> Value {
             }
         },
         Expression::VariableDeclaration { id, init } => {
-            if let Expression::Identifier { value } = *id {
+            if let Expression::Identifier { value } = id.expr {
                 let init_value = interpret(*init, sym_table);
                 sym_table.symbols.insert(Symbol::Identifier(value), init_value);
                 Value::Unit
@@ -180,7 +180,7 @@ fn get_toplevel_sym_table() -> Box<SymTable<Value>> {
     sym_table
 }
 
-pub fn interpret_program(node: Expression) -> Value {
+pub fn interpret_program(node: ASTNode) -> Value {
     interpret(node, &mut get_toplevel_sym_table())
 }
 

@@ -1,6 +1,6 @@
 use std::fs;
 
-use parser::Expression;
+use parser::ASTNode;
 pub mod tokenizer;
 pub mod parser;
 pub mod interpreter;
@@ -15,7 +15,7 @@ fn read_file(path: &String) -> String {
     contents
 }
 
-fn parse_source(contents: String) -> Expression {
+fn parse_source(contents: String) -> ASTNode {
     let tokens = tokenizer::tokenize(&contents);
     let expression = parser::parse(tokens);
     expression

@@ -8,8 +8,8 @@ use crate::builtin_functions::*;
 
 #[derive(Debug)]
 pub struct UserDefinedFunction {
-    body: Box<Expression>, // This should only be a BlockExpression
-    params: Vec<Box<Expression>>, // This should only be a vec of Identifiers
+    body: Box<Expression<ASTNode>>, // This should only be a BlockExpression
+    params: Vec<Box<Expression<ASTNode>>>, // This should only be a vec of Identifiers
 }
 
 #[derive(Debug, Clone)]

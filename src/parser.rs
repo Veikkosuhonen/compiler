@@ -19,18 +19,18 @@ lazy_static! {
 
 #[derive(Debug)]
 pub struct ASTNode {
-    pub expr: Expression,
+    pub expr: Expression<ASTNode>,
     pub node_type: Option<Type>,
 }
 
 impl ASTNode {
-    pub fn new(expr: Expression) -> ASTNode {
+    pub fn new(expr: Expression<ASTNode>) -> ASTNode {
         ASTNode { expr, node_type: None }
     }
 }
 
 #[derive(Debug)]
-pub enum Expression {
+pub enum Expression<T> {
     IntegerLiteral {
         value: i32,
     },
@@ -42,34 +42,34 @@ pub enum Expression {
         value: String,
     },
     BlockExpression {
-        statements: Vec<Box<ASTNode>>,
-        result: Box<ASTNode>,
+        statements: Vec<Box<T>>,
+        result: Box<T>,
     },
     AssignmentExpression {
-        left: Box<ASTNode>,
-        right: Box<ASTNode>,
+        left: Box<T>,
+        right: Box<T>,
     },
     VariableDeclaration {
-        id: Box<ASTNode>,
-        init: Box<ASTNode>,
+        id: Box<T>,
+        init: Box<T>,
     },
     BinaryExpression {
-        left: Box<ASTNode>,
+        left: Box<T>,
         operator: Op,
-        right: Box<ASTNode>,
+        right: Box<T>,
     },
     UnaryExpression {
-        operand: Box<ASTNode>,
+        operand: Box<T>,
         operator: Op,
     },
     IfExpression {
-        condition: Box<ASTNode>,
-        then_branch: Box<ASTNode>,
-        else_branch: Option<Box<ASTNode>>,
+        condition: Box<T>,
+        then_branch: Box<T>,
+        else_branch: Option<Box<T>>,
     },
     CallExpression {
-        callee: Box<ASTNode>,
-        arguments: Vec<Box<ASTNode>>
+        callee: Box<T>,
+        arguments: Vec<Box<T>>
     },
 }
 

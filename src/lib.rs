@@ -29,7 +29,7 @@ pub fn interpret_file(path: &String) -> interpreter::Value {
     result
 }
 
-pub fn typecheck_file(path: &String) -> type_checker::Type {
+pub fn typecheck_file(path: &String) -> type_checker::TypedASTNode {
     let contents = read_file(path);
     let expression = parse_source(contents);
     let result = type_checker::typecheck_program(expression);

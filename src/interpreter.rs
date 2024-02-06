@@ -7,6 +7,7 @@ use crate::builtin_functions::*;
 
 
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct UserDefinedFunction {
     body: Box<Expression<ASTNode>>, // This should only be a BlockExpression
     params: Vec<Box<Expression<ASTNode>>>, // This should only be a vec of Identifiers
@@ -98,7 +99,7 @@ fn eval_call_expression(
                     }
                     eval_builtin_function(builtin, args)
                 },
-                Function::UserDefined(user_func) => panic!("Not yet implemented"),
+                Function::UserDefined(_) => panic!("Not yet implemented"),
             }
         } else {
             panic!("Calling undefined function {:?}", function_id);

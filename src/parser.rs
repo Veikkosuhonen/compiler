@@ -1,5 +1,5 @@
 use lazy_static::lazy_static;
-use crate::{tokenizer::{Op, SourceLocation, Token, TokenType}, type_checker::Type};
+use crate::tokenizer::{Op, SourceLocation, Token, TokenType};
 
 lazy_static! {
     static ref BINARY_OP_PRECEDENCE: Vec<Vec<Op>> = vec![
@@ -20,12 +20,11 @@ lazy_static! {
 #[derive(Debug)]
 pub struct ASTNode {
     pub expr: Expression<ASTNode>,
-    pub node_type: Option<Type>,
 }
 
 impl ASTNode {
     pub fn new(expr: Expression<ASTNode>) -> ASTNode {
-        ASTNode { expr, node_type: None }
+        ASTNode { expr }
     }
 }
 

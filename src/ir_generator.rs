@@ -24,12 +24,13 @@ impl IRVar {
 
 struct IRVarTable {
     vars: HashMap<String, IRVar>,
-    var_idx: usize
+    var_idx: usize,
+    label_idx: usize,
 }
 
 impl IRVarTable {
     fn new() -> IRVarTable {
-        IRVarTable { vars: HashMap::new(), var_idx: 0 }
+        IRVarTable { vars: HashMap::new(), var_idx: 0, label_idx: 0 }
     }
 
     fn init_var(&mut self, id: String, var_type: Type) -> IRVar {
@@ -47,11 +48,12 @@ impl IRVarTable {
     fn get(&self, name: &String) -> IRVar {
         self.vars.get(name).expect(&format!("IRVar '{}' should be defined", name)).clone()
     }
-}
 
-#[derive(Debug)]
-pub struct Label {
-    name: String,
+    fn create_label(&mut self) -> String {
+        let label = format!("L{}", self.label_idx);
+        self.label_idx += 1;
+        label
+    }
 }
 
 #[derive(Debug)]
@@ -60,9 +62,10 @@ pub enum Instruction {
     LoadBoolConst { value: bool, dest: Box<IRVar> },
     Copy { source: Box<IRVar>, dest: Box<IRVar> },
     Call { fun: Box<IRVar>, args: Vec<Box<IRVar>>, dest: Box<IRVar> },
-    Jump { label: Box<Label> },
-    CondJump { cond: Box<IRVar>, then_label: Box<Label>, else_label: Box<Label> },
-    Label(Box<Label>),
+    Jump(String),
+    CondJump { cond: Box<IRVar>, then_label: String, else_label: String },
+    Label(String),
+    Return,
 }
 
 #[derive(Debug)]
@@ -74,7 +77,10 @@ pub struct IREntry {
 impl IREntry {
     fn to_string(&self) -> String {
         match &self.instruction {
-            Instruction::Label(label) => format!(".{}", label.name.clone()),
+            Instruction::Return => String::from("Return()"),
+            Instruction::Label(label) => format!("\nLabel({})", label.clone()),
+            Instruction::Jump(label) => format!("Jump({})", label.clone()),
+            Instruction::CondJump { cond, else_label, then_label } => format!("CondJump({}, {}, {})", cond.to_string(), then_label.clone(), else_label.clone()),
             Instruction::LoadIntConst { value, dest } => format!("LoadIntConst({}, {})", value, dest.to_string()),
             Instruction::LoadBoolConst { value, dest } => format!("LoadBoolConst({}, {})", value, dest.to_string()),
             Instruction::Copy { source, dest } => format!("Copy({}, {})", source.to_string(), dest.to_string()),
@@ -90,11 +96,15 @@ pub fn generate_ir_code(ir: Vec<IREntry>) -> String {
 
 pub fn generate_ir(node: TypedASTNode) -> Vec<IREntry> {
     let mut instructions: Vec<IREntry> = vec![];
+    instructions.push(IREntry { instruction: Instruction::Label(String::from("start")) });
+
     let mut var_table = IRVarTable::new();
     for (name, var) in get_builtin_function_ir_vars() {
         var_table.vars.insert(name, var);
     }
+
     generate(node, &mut instructions, &mut var_table);
+    instructions.push(IREntry { instruction: Instruction::Return });
     instructions
 }
 
@@ -206,11 +216,56 @@ fn generate(node: TypedASTNode, instructions: &mut Vec<IREntry>, var_table: &mut
             generate(*result, instructions, var_table)
         },
         Expression::IfExpression { condition, then_branch, else_branch } => {
-            // instructions.push(Instruction::CondJump);
-            todo!("stuff")
+            let then_label = var_table.create_label();
+            let end_label = var_table.create_label();
+            let else_label = if else_branch.is_some() { var_table.create_label() } else { end_label.clone() };
+            let dest = var_table.create(node.node_type);
+
+            let condition = generate(*condition, instructions, var_table);
+            instructions.push(IREntry { instruction: Instruction::CondJump { 
+                cond: Box::new(condition), 
+                then_label: then_label.clone(),
+                else_label: else_label.clone(),
+            }});
+
+            instructions.push(IREntry { instruction: Instruction::Label(then_label) });
+            let then_branch = generate(*then_branch, instructions, var_table);
+            instructions.push(IREntry { instruction: Instruction::Copy { source: Box::new(then_branch.clone()), dest: Box::new(dest.clone()) } });
+
+            if let Some(else_branch) = else_branch {
+                instructions.push(IREntry { instruction: Instruction::Jump(end_label.clone()) });
+                instructions.push(IREntry { instruction: Instruction::Label(else_label) });
+                let else_branch = generate(*else_branch, instructions, var_table);
+                instructions.push(IREntry { instruction: Instruction::Copy { source: Box::new(else_branch.clone()), dest: Box::new(dest.clone()) } });
+            }
+
+            instructions.push(IREntry { instruction: Instruction::Label(end_label) });
+
+            dest
         },
         Expression::WhileExpression { condition, body } => {
-            todo!("stuff")
+            let while_label = var_table.create_label();
+            let do_label = var_table.create_label();
+            let end_label = var_table.create_label();
+            let dest = var_table.create(node.node_type);
+
+            instructions.push(IREntry { instruction: Instruction::Label(while_label.clone()) });
+
+            let condition = generate(*condition, instructions, var_table);
+            instructions.push(IREntry { instruction: Instruction::CondJump { 
+                cond: Box::new(condition), 
+                then_label: do_label.clone(),
+                else_label: end_label.clone(),
+            }});
+
+            instructions.push(IREntry { instruction: Instruction::Label(do_label) });
+            let body = generate(*body, instructions, var_table);
+            instructions.push(IREntry { instruction: Instruction::Copy { source: Box::new(body.clone()), dest: Box::new(dest.clone()) } });
+            instructions.push(IREntry { instruction: Instruction::Jump(while_label) });
+
+            instructions.push(IREntry { instruction: Instruction::Label(end_label) });
+
+            dest
         }
     }
 }

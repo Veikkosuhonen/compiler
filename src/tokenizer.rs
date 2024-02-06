@@ -43,6 +43,26 @@ impl Op {
             _ => { return None }
         })
     }
+    pub fn to_string(&self) -> String {
+        String::from(match self {
+            Op::Add =>       "+",
+            Op::Sub =>       "-",
+            Op::Mul =>       "*",
+            Op::Div =>       "/",
+            Op::Mod =>       "%",
+            Op::Exp =>       "**",
+            Op::Not =>       "!",
+            Op::Equals =>    "==",
+            Op::NotEquals => "!=",
+            Op::LT =>        "<",
+            Op::GT =>        ">",
+            Op::LTE =>       "<=",
+            Op::GTE =>       ">=",
+            Op::And =>       "and",
+            Op::Or =>        "or",
+            Op::Assign =>    "=",
+        })
+    }
 }
 
 #[derive(PartialEq, Eq, Debug, Clone)]

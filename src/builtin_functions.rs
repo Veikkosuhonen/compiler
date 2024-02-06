@@ -1,6 +1,6 @@
 use std::io;
 
-use crate::{interpreter::{Function, Value}, sym_table::Symbol, tokenizer::Op, type_checker::{FunctionType, Type}};
+use crate::{interpreter::{Function, Value}, ir_generator::IRVar, sym_table::Symbol, tokenizer::Op, type_checker::{FunctionType, Type}};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum BuiltIn {
@@ -245,4 +245,11 @@ pub fn get_builtin_function_symbol_type_mappings() -> Vec<(Symbol, Type)> {
     });
 
     mapped_ops.chain(mapped_funcs).collect()
+}
+
+pub fn get_builtin_function_ir_vars() -> Vec<(String, IRVar)> {
+    let ops = get_builtin_function_symbol_type_mappings();
+    ops.iter().map(|(symbol, var_type)| 
+        (symbol.to_string(), IRVar { name: symbol.to_string(), var_type: var_type.clone() })
+    ).collect()
 }

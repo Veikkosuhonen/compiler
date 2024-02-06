@@ -8,6 +8,15 @@ pub enum Symbol {
     Operator(Op)
 }
 
+impl Symbol {
+    pub fn to_string(&self) -> String {
+        match &self {
+            Symbol::Identifier(name) => name.clone(),
+            Symbol::Operator(op) => op.to_string(),
+        }
+    }
+}
+
 #[derive(Default)]
 pub struct SymTable<T> {
     pub symbols: HashMap<Symbol, T>,

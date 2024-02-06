@@ -1,11 +1,11 @@
 use std::collections::HashMap;
 
-use crate::{parser::Expression, type_checker::{Type, TypedASTNode}};
+use crate::{builtin_functions::get_builtin_function_ir_vars, parser::Expression, type_checker::{Type, TypedASTNode}};
 
 #[derive(Clone, Debug)]
 pub struct IRVar {
-    name: String,
-    var_type: Type
+    pub name: String,
+    pub var_type: Type
 }
 
 impl IRVar {
@@ -15,6 +15,10 @@ impl IRVar {
 
     fn unit() -> IRVar {
         IRVar { name: String::from("U"), var_type: Type::Unit }
+    }
+
+    fn to_string(&self) -> String {
+        self.name.clone()
     }
 }
 
@@ -39,11 +43,15 @@ impl IRVarTable {
         self.var_idx += 1;
         var
     }
+
+    fn get(&self, name: &String) -> IRVar {
+        self.vars.get(name).expect(&format!("IRVar '{}' should be defined", name)).clone()
+    }
 }
 
 #[derive(Debug)]
 pub struct Label {
-    name: str,
+    name: String,
 }
 
 #[derive(Debug)]
@@ -63,9 +71,30 @@ pub struct IREntry {
     instruction: Instruction
 }
 
+impl IREntry {
+    fn to_string(&self) -> String {
+        match &self.instruction {
+            Instruction::Label(label) => format!(".{}", label.name.clone()),
+            Instruction::LoadIntConst { value, dest } => format!("LoadIntConst({}, {})", value, dest.to_string()),
+            Instruction::LoadBoolConst { value, dest } => format!("LoadBoolConst({}, {})", value, dest.to_string()),
+            Instruction::Copy { source, dest } => format!("Copy({}, {})", source.to_string(), dest.to_string()),
+            Instruction::Call { fun, args, dest } => format!("Call({}, [{}], {})", fun.to_string(), args.iter().map(|arg| arg.to_string()).collect::<Vec<String>>().join(","), dest.to_string()),
+            _ => todo!("stufferoni")
+        }
+    }
+}
+
+pub fn generate_ir_code(ir: Vec<IREntry>) -> String {
+    ir.iter().map(|ir| ir.to_string()).collect::<Vec<String>>().join("\n")
+}
+
 pub fn generate_ir(node: TypedASTNode) -> Vec<IREntry> {
     let mut instructions: Vec<IREntry> = vec![];
-    generate(node, &mut instructions, &mut IRVarTable::new());
+    let mut var_table = IRVarTable::new();
+    for (name, var) in get_builtin_function_ir_vars() {
+        var_table.vars.insert(name, var);
+    }
+    generate(node, &mut instructions, &mut var_table);
     instructions
 }
 
@@ -95,7 +124,7 @@ fn generate(node: TypedASTNode, instructions: &mut Vec<IREntry>, var_table: &mut
             dest
         },
         Expression::Identifier { value } => {
-            var_table.vars.get(&value).unwrap().clone()
+            var_table.get(&value)
         },
         Expression::VariableDeclaration { id, init } => {
             let init = generate(*init, instructions, var_table);
@@ -110,39 +139,65 @@ fn generate(node: TypedASTNode, instructions: &mut Vec<IREntry>, var_table: &mut
             }
         },
         Expression::UnaryExpression { operand, operator } => {
-            /* let operand = generate(*operand, instructions, var_table);
+            let operand = generate(*operand, instructions, var_table);
             let dest = var_table.create(node.node_type);
+            let fun = var_table.get(&operator.to_string());
+
             instructions.push(IREntry { 
                 // location: , 
                 instruction: Instruction::Call { 
-                    fun: Box::new(IRVar { name: Symbol::Operator(operator) }), 
+                    fun: Box::new(fun), 
                     args: vec![Box::new(operand)], 
                     dest: Box::new(dest.clone()),
                 }
             });
-            dest */
-            todo!("stuff")
+            dest
         },
         Expression::BinaryExpression { left, operator, right } => {
-            /* let left = generate(*left, instructions, var_idx);
-            let right = generate(*right, instructions, var_idx);
-            let dest = IRVar::new(var_idx);
+            let left = generate(*left, instructions, var_table);
+            let right = generate(*right, instructions, var_table);
+            let dest = var_table.create(node.node_type);
+            let fun = var_table.get(&operator.to_string());
+
             instructions.push(IREntry { 
                 // location: , 
                 instruction: Instruction::Call { 
-                    fun: Box::new(IRVar { name: Symbol::Operator(operator) }), 
+                    fun: Box::new(fun), 
                     args: vec![Box::new(left), Box::new(right)], 
                     dest: Box::new(dest.clone()),
                 }
             });
-            dest */
-            todo!("stuff")
+            dest
         },
         Expression::CallExpression { callee, arguments } => {
-            todo!("stuff")
+            if let Expression::Identifier { value } = callee.expr {
+                let mut argument_vars: Vec<Box<IRVar>> = vec![];
+                for arg in arguments {
+                    argument_vars.push(Box::new(generate(*arg, instructions, var_table)));
+                }
+                let dest = var_table.create(node.node_type);
+                let fun = var_table.get(&value);
+
+                instructions.push(IREntry { 
+                    // location: , 
+                    instruction: Instruction::Call { 
+                        fun: Box::new(fun), 
+                        args: argument_vars, 
+                        dest: Box::new(dest.clone()),
+                    }
+                });
+                dest
+            } else {
+                panic!("Callee must be an identifier");
+            }
         },
         Expression::AssignmentExpression { left, right } => {
-            todo!("stuff")
+            let left = generate(*left, instructions, var_table);
+            let right = generate(*right, instructions, var_table);
+            instructions.push(IREntry {
+                instruction: Instruction::Copy { source: Box::new(right.clone()), dest: Box::new(left)  }
+            });
+            right
         },
         Expression::BlockExpression { statements, result } => {
             for stmnt in statements {

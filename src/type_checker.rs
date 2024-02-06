@@ -58,6 +58,24 @@ fn typecheck_if_expression(
     }
 }
 
+fn typecheck_while_expression(
+    condition: Box<ASTNode>, 
+    body: Box<ASTNode>, 
+    sym_table: &mut Box<SymTable<Type>>
+) -> TypedASTNode {
+    let condition = Box::new(typecheck(*condition, sym_table));
+    if condition.node_type != Type::Boolean {
+        panic!("If expression condition must be a {:?}, got {:?}", Type::Boolean, condition.node_type)
+    }
+    let body = Box::new(typecheck(*body, sym_table));
+    let node_type = body.node_type.clone();
+
+    TypedASTNode {
+        expr: Expression::WhileExpression { condition, body },
+        node_type,
+    }
+}
+
 fn typecheck_binary_op(
     left_expr: Box<ASTNode>, 
     right_expr: Box<ASTNode>, 
@@ -158,6 +176,9 @@ fn typecheck(node: ASTNode, sym_table: &mut Box<SymTable<Type>>) -> TypedASTNode
         Expression::IfExpression { condition, then_branch, else_branch } => {
             typecheck_if_expression(condition, then_branch, else_branch, sym_table)
         },
+        Expression::WhileExpression { condition, body } => {
+            typecheck_while_expression(condition, body, sym_table)
+        },
         Expression::BlockExpression { statements, result } => {
             sym_table.with_inner(|inner_sym_table| {
                 for expr in statements {
@@ -188,7 +209,6 @@ fn typecheck(node: ASTNode, sym_table: &mut Box<SymTable<Type>>) -> TypedASTNode
         Expression::CallExpression { callee, arguments } => {
             typecheck_call_expression(callee, arguments, sym_table)
         },
-        _ => todo!("Not yet implemented")
     }
 }
 
@@ -263,5 +283,16 @@ mod tests {
         } else {
             panic!("Wrong, got {:?}", node.expr)
         }
+    }
+
+    #[test]
+    fn while_expr() {
+        let node = t("
+            while true do {
+                100
+            }
+        ");
+
+        assert_eq!(node.node_type, Type::Integer);
     }
 }

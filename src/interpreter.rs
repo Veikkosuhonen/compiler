@@ -174,7 +174,6 @@ fn interpret(node: &ASTNode, sym_table: &mut Box<SymTable<Value>>) -> Value {
             eval_call_expression(callee, arguments, sym_table)
         },
         Expression::Unit => Value::Unit,
-        _ => panic!("Unknown expression {:?}", node)
     }
 }
 

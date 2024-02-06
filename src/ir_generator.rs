@@ -285,15 +285,15 @@ mod tests {
     #[test]
     fn literals() {
         let ir = i("789");
-        assert!(matches!(&ir[0].instruction, Instruction::LoadIntConst { value: 789, .. }));
+        assert!(matches!(&ir[1].instruction, Instruction::LoadIntConst { value: 789, .. }));
         let ir2 = i("true");
-        assert!(matches!(&ir2[0].instruction, Instruction::LoadBoolConst { value: true, .. }))
+        assert!(matches!(&ir2[1].instruction, Instruction::LoadBoolConst { value: true, .. }))
     }
 
     #[test]
     fn var_declaration() {
         let ir = i("{ var x = 789 }");
         println!("{:?}", ir);
-        assert!(matches!(&ir[0].instruction, Instruction::LoadIntConst { value: 789, .. }));
+        assert!(matches!(&ir[1].instruction, Instruction::LoadIntConst { value: 789, .. }));
     }
 }

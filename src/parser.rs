@@ -67,6 +67,10 @@ pub enum Expression<T> {
         then_branch: Box<T>,
         else_branch: Option<Box<T>>,
     },
+    WhileExpression {
+        condition: Box<T>,
+        body: Box<T>,
+    },
     CallExpression {
         callee: Box<T>,
         arguments: Vec<Box<T>>
@@ -215,6 +219,18 @@ impl Parser {
         }
     }
 
+    fn parse_while_expression(&mut self) -> ASTNode {
+        self.consume_keyword("while");
+        let condition = self.parse_expression();
+        self.consume_keyword("do");
+        let body = self.parse_expression();
+
+        ASTNode::new(Expression::WhileExpression {
+            condition: Box::new(condition),
+            body: Box::new(body),
+        })
+    }
+
     fn parse_parentheses(&mut self) -> ASTNode {
         self.consume_left_paren();
         let expr = self.parse_expression();
@@ -240,13 +256,23 @@ impl Parser {
         }
     }
 
+    fn parse_keywordy_factor(&mut self) -> ASTNode {
+        if self.current_is("if") {
+            self.parse_if_expression()
+        } else if self.current_is("while") {
+            self.parse_while_expression()
+        } else {
+            panic!("Unknown keyword {:?}", self.peek())
+        }
+    }
+
     fn parse_factor(&mut self) -> ASTNode {
         let token = self.peek();
 
         match token.token_type {
             TokenType::IntegerLiteral => self.parse_int_literal(),
             TokenType::BooleanLiteral => self.parse_boolean_literal(),
-            TokenType::Keyword => self.parse_if_expression(),
+            TokenType::Keyword => self.parse_keywordy_factor(),
             TokenType::Identifier => {
                 if self.next_is("(") {
                     self.parse_call_expression()

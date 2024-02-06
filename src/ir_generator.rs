@@ -1,4 +1,4 @@
-use crate::{parser::{ASTNode, Expression}, tokenizer::SourceLocation};
+use crate::{parser::Expression, tokenizer::SourceLocation, type_checker::TypedASTNode};
 
 pub struct IRVar {
     name: str,
@@ -23,7 +23,7 @@ pub struct IREntry {
     instruction: Instruction
 }
 
-fn generate(node: Expression<ASTNode>, mut instructions: Vec<IREntry>) -> Vec<IREntry> {
+fn generate(node: Expression<TypedASTNode>, mut instructions: Vec<IREntry>) -> Vec<IREntry> {
     match node {
         Expression::IfExpression { condition, then_branch, else_branch } => {
             // instructions.push(Instruction::CondJump);
@@ -33,7 +33,7 @@ fn generate(node: Expression<ASTNode>, mut instructions: Vec<IREntry>) -> Vec<IR
     instructions
 }
 
-pub fn generate_ir(node: Expression<ASTNode>) -> Vec<IREntry> {
+pub fn generate_ir(node: Expression<TypedASTNode>) -> Vec<IREntry> {
     let mut instructions: Vec<IREntry> = vec![];
     generate(node, instructions)
 }

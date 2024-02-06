@@ -24,7 +24,7 @@ fn parse_source(contents: String) -> ASTNode {
 pub fn interpret_file(path: &String) -> interpreter::Value {
     let contents = read_file(path);
     let expression = parse_source(contents);
-    let result = interpreter::interpret_program(expression);
+    let result = interpreter::interpret_program(&expression);
 
     result
 }

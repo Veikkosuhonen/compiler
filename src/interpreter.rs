@@ -47,16 +47,16 @@ impl From<Value> for i32 {
 }
 
 fn eval_binary_op(
-    left_node: Box<ASTNode>, 
-    right_node: Box<ASTNode>, 
-    operator: Op, 
+    left_node: &Box<ASTNode>, 
+    right_node: &Box<ASTNode>, 
+    operator: &Op, 
     sym_table: &mut Box<SymTable<Value>>
 ) -> Value {
-    let left_val = interpret(*left_node, sym_table);
+    let left_val = interpret(&left_node, sym_table);
 
-    if let Value::Function(op_function) = sym_table.get(&mut Symbol::Operator(operator)) {
+    if let Value::Function(op_function) = sym_table.get(&mut Symbol::Operator(*operator)) {
         // Lazy eval to enable short circuiting
-        let eval_right = || { interpret(*right_node, sym_table) };
+        let eval_right = || { interpret(&right_node, sym_table) };
         match op_function {
             Function::BuiltIn(builtin) => eval_builtin_binary(builtin, left_val, eval_right),
             Function::UserDefined(_) => panic!("Not yet implemented")
@@ -67,12 +67,12 @@ fn eval_binary_op(
 }
 
 fn eval_unary_op(
-    operand: Box<ASTNode>,
-    operator: Op,
+    operand: &Box<ASTNode>,
+    operator: &Op,
     sym_table: &mut Box<SymTable<Value>>
 ) -> Value {
-    let operand = interpret(*operand, sym_table);
-    if let Value::Function(op_function) = sym_table.get(&mut Symbol::Operator(operator)) {
+    let operand = interpret(&operand, sym_table);
+    if let Value::Function(op_function) = sym_table.get(&mut Symbol::Operator(*operator)) {
         match op_function {
             Function::BuiltIn(builtin) => eval_builtin_unary(builtin, operand),
             Function::UserDefined(_) => panic!("Not yet implemented")
@@ -83,18 +83,18 @@ fn eval_unary_op(
 }
 
 fn eval_call_expression(
-    callee: Box<ASTNode>,
-    argument_expr: Vec<Box<ASTNode>>,
+    callee: &Box<ASTNode>,
+    argument_expr: &Vec<Box<ASTNode>>,
     sym_table: &mut Box<SymTable<Value>>
 ) -> Value {
-    if let Expression::Identifier { value: function_id } = callee.expr {
+    if let Expression::Identifier { value: function_id } = &callee.expr {
         let called_function = sym_table.get(&Symbol::Identifier(function_id.to_string()));
         if let Value::Function(called_function) = called_function {
             match called_function {
                 Function::BuiltIn(builtin) => {
                     let mut args: Vec<Value> = vec![];
                     for expr in argument_expr {
-                        args.push(interpret(*expr, sym_table));
+                        args.push(interpret(&expr, sym_table));
                     }
                     eval_builtin_function(builtin, args)
                 },
@@ -108,13 +108,13 @@ fn eval_call_expression(
     }
 }
 
-fn interpret(node: ASTNode, sym_table: &mut Box<SymTable<Value>>) -> Value {
-    match node.expr {
+fn interpret(node: &ASTNode, sym_table: &mut Box<SymTable<Value>>) -> Value {
+    match &node.expr {
         Expression::IntegerLiteral { value } => {
-            Value::Integer(value)
+            Value::Integer(*value)
         },
         Expression::BooleanLiteral { value } => {
-            Value::Boolean(value)
+            Value::Boolean(*value)
         }
         Expression::BinaryExpression { left, operator, right } => {
             eval_binary_op(left, right, operator, sym_table)
@@ -123,13 +123,13 @@ fn interpret(node: ASTNode, sym_table: &mut Box<SymTable<Value>>) -> Value {
             eval_unary_op(operand, operator, sym_table)
         }
         Expression::IfExpression { condition, then_branch, else_branch } => {
-            let condition_result = interpret(*condition, sym_table);
+            let condition_result = interpret(&condition, sym_table);
             match condition_result {
                 Value::Boolean(condition_val) => {
                     if condition_val {
-                        interpret(*then_branch, sym_table)
+                        interpret(&then_branch, sym_table)
                     } else if let Some(else_branch) = else_branch {
-                        interpret(*else_branch, sym_table)
+                        interpret(&else_branch, sym_table)
                     } else {
                         Value::Unit
                     }
@@ -137,27 +137,34 @@ fn interpret(node: ASTNode, sym_table: &mut Box<SymTable<Value>>) -> Value {
                 _ => panic!("If expression condition must be a boolean"),
             }
         },
+        Expression::WhileExpression { condition, body } => {
+            let mut value = Value::Unit;
+            while interpret(&condition, sym_table).try_into().expect("While expression condition must return a boolean") {
+                value = interpret(&body, sym_table);
+            }
+            value
+        },
         Expression::BlockExpression { statements, result } => {
             sym_table.with_inner(|inner_sym_table| {
                 for expr in statements {
-                    interpret(*expr, inner_sym_table);
+                    interpret(&expr, inner_sym_table);
                 }
-                interpret(*result, inner_sym_table)
+                interpret(&result, inner_sym_table)
             })
         },
-        Expression::Identifier { value } => sym_table.get(&Symbol::Identifier(value)),
+        Expression::Identifier { value } => sym_table.get(&Symbol::Identifier(value.clone())),
         Expression::AssignmentExpression { left, right } => {
-            if let Expression::Identifier { value: id } = left.expr {
-                let value = interpret(*right, sym_table);
-                sym_table.assign(Symbol::Identifier(id), value)
+            if let Expression::Identifier { value: id } = &left.expr {
+                let value = interpret(&right, sym_table);
+                sym_table.assign(Symbol::Identifier(id.clone()), value)
             } else {
                 panic!("Left side of an assignment must be an identifier");
             }
         },
         Expression::VariableDeclaration { id, init } => {
-            if let Expression::Identifier { value } = id.expr {
-                let init_value = interpret(*init, sym_table);
-                sym_table.symbols.insert(Symbol::Identifier(value), init_value);
+            if let Expression::Identifier { value } = &id.expr {
+                let init_value = interpret(&init, sym_table);
+                sym_table.symbols.insert(Symbol::Identifier(value.clone()), init_value);
                 Value::Unit
             } else {
                 panic!("Id of a variable declaration must be an identifier");
@@ -180,7 +187,7 @@ fn get_toplevel_sym_table() -> Box<SymTable<Value>> {
     sym_table
 }
 
-pub fn interpret_program(node: ASTNode) -> Value {
+pub fn interpret_program(node: &ASTNode) -> Value {
     interpret(node, &mut get_toplevel_sym_table())
 }
 
@@ -193,7 +200,7 @@ mod tests {
     fn i(src: &str) -> Value {
         let tokens: Vec<Token> = tokenize(src);
         let expression = parse(tokens);
-        interpret_program(expression)
+        interpret_program(&expression)
     }
 
     #[test]
@@ -239,6 +246,19 @@ mod tests {
             then 42 
             else 0 - 999");
         assert_eq!(42, res.try_into().expect("Not an integer!"));
+    }
+
+    #[test]
+    fn interpret_while() {
+        let res = i("
+        {
+            var x = 0;
+            while (x < 10) do {
+                x = x + 1;
+            };
+            x
+        }");
+        assert_eq!(10, res.try_into().expect("Not an integer!"));
     }
 
     #[test]

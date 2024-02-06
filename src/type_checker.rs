@@ -188,7 +188,7 @@ fn typecheck(node: ASTNode, sym_table: &mut Box<SymTable<Type>>) -> TypedASTNode
         Expression::CallExpression { callee, arguments } => {
             typecheck_call_expression(callee, arguments, sym_table)
         },
-        
+        _ => todo!("Not yet implemented")
     }
 }
 

@@ -1,7 +1,5 @@
 {
 
-while true do {
-  
-}
+var x = 1;
 
 }

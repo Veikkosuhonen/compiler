@@ -33,12 +33,6 @@ impl IRVarTable {
         IRVarTable { vars: HashMap::new(), var_idx: 0, label_idx: 0 }
     }
 
-    fn init_var(&mut self, id: String, var_type: Type) -> IRVar {
-        let var = self.create(var_type);
-        self.vars.insert(id, var.clone());
-        var
-    }
-
     fn create(&mut self, var_type: Type) -> IRVar {
         let var = IRVar::new(self.var_idx, var_type);
         self.var_idx += 1;
@@ -85,7 +79,6 @@ impl IREntry {
             Instruction::LoadBoolConst { value, dest } => format!("LoadBoolConst({}, {})", value, dest.to_string()),
             Instruction::Copy { source, dest } => format!("Copy({}, {})", source.to_string(), dest.to_string()),
             Instruction::Call { fun, args, dest } => format!("Call({}, [{}], {})", fun.to_string(), args.iter().map(|arg| arg.to_string()).collect::<Vec<String>>().join(","), dest.to_string()),
-            _ => todo!("stufferoni")
         }
     }
 }
@@ -139,11 +132,8 @@ fn generate(node: TypedASTNode, instructions: &mut Vec<IREntry>, var_table: &mut
         Expression::VariableDeclaration { id, init } => {
             let init = generate(*init, instructions, var_table);
             if let Expression::Identifier { value } = id.expr {
-                let dest = var_table.init_var(value, init.var_type.clone());
-                instructions.push(IREntry {
-                    instruction: Instruction::Copy { source: Box::new(init), dest: Box::new(dest)  }
-                });
-                IRVar::unit()
+                var_table.vars.insert(value, init.clone());
+                init
             } else {
                 panic!("Id of a variable declaration must be an Identifier")
             }

@@ -1,5 +1,5 @@
 use std::env;
-use compiler::{ir_generator::{generate_ir, generate_ir_code}, *};
+use compiler::{asm_generator::generate_asm, ir_generator::{generate_ir, generate_ir_code}, *};
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -24,6 +24,12 @@ fn main() {
             let code = generate_ir_code(ir);
             println!("{}", code);
         },
+        "asm" => {
+            let typed_ast = typecheck_file(path);
+            let ir = generate_ir(typed_ast);
+            let asm = generate_asm(ir);
+            println!("{}", asm);
+        }
         _ => panic!("Unknown command {}", cmd)
     }
 }

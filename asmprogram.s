@@ -5,6 +5,7 @@
         .extern scanf
 
         .section .text  # Begins code and data
+
 # Label that marks beginning of main function
 main:
         # Function stack setup

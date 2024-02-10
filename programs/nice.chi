@@ -1,5 +1,12 @@
 {
 
-var x = 1;
+var x = false;
+var y = if x then {
+    1
+} else {
+    2
+};
+
+y
 
 }

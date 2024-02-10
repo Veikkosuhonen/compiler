@@ -40,27 +40,27 @@ impl Op {
             "and" => Op::And,
             "or" => Op::Or,
             "=" => Op::Assign,
-            _ => { return None }
+            _ => return None,
         })
     }
     pub fn to_string(&self) -> String {
         String::from(match self {
-            Op::Add =>       "+",
-            Op::Sub =>       "-",
-            Op::Mul =>       "*",
-            Op::Div =>       "/",
-            Op::Mod =>       "%",
-            Op::Exp =>       "**",
-            Op::Not =>       "!",
-            Op::Equals =>    "==",
+            Op::Add => "+",
+            Op::Sub => "-",
+            Op::Mul => "*",
+            Op::Div => "/",
+            Op::Mod => "%",
+            Op::Exp => "**",
+            Op::Not => "!",
+            Op::Equals => "==",
             Op::NotEquals => "!=",
-            Op::LT =>        "<",
-            Op::GT =>        ">",
-            Op::LTE =>       "<=",
-            Op::GTE =>       ">=",
-            Op::And =>       "and",
-            Op::Or =>        "or",
-            Op::Assign =>    "=",
+            Op::LT => "<",
+            Op::GT => ">",
+            Op::LTE => "<=",
+            Op::GTE => ">=",
+            Op::And => "and",
+            Op::Or => "or",
+            Op::Assign => "=",
         })
     }
 }
@@ -86,7 +86,7 @@ pub enum TokenType {
 pub struct Token {
     pub token_type: TokenType,
     pub value: String,
-    pub location: SourceLocation
+    pub location: SourceLocation,
 }
 
 lazy_static! {
@@ -148,7 +148,11 @@ pub fn tokenize(source: &str) -> Vec<Token> {
         if let Some((m, token_type)) = match_token(slice) {
             if token_type != TokenType::None {
                 let location = SourceLocation { line, column };
-                tokens.push(Token { value: m.as_str().to_string(), location, token_type });
+                tokens.push(Token {
+                    value: m.as_str().to_string(),
+                    location,
+                    token_type,
+                });
             }
 
             (line, column) = count_line_column_changes(m.as_str(), line, column);
@@ -168,98 +172,102 @@ pub fn tokenize(source: &str) -> Vec<Token> {
 #[cfg(test)]
 mod tests {
     /*
-    use super::*;
-    
-    #[test]
-    fn test_keywords_integers_and_literals() {
-        let source = "
-if 3 wowowo
-123 123
-";
-        let tokens: Vec<Token> = tokenize(source);
+        use super::*;
 
-        assert_eq!(tokens.len(), 5);
+        #[test]
+        fn test_keywords_integers_and_literals() {
+            let source = "
+    if 3 wowowo
+    123 123
+    ";
+            let tokens: Vec<Token> = tokenize(source);
 
-        assert!( if let TokenValue::StringLike(value) = tokens[0].value { value == "if" } else { false } );
-        assert_eq!(tokens[0].location.line, 2);
-        assert_eq!(tokens[0].location.column, 1);
+            assert_eq!(tokens.len(), 5);
 
-        if let Token::IntegerLiteral { value, location,.. } = tokens[1] {
-            assert_eq!(value, 3);
-            assert_eq!(location.line, 2);
-            assert_eq!(location.column, 4);
-        } else { 
-            panic!("Not an int");
-        }
+            assert!( if let TokenValue::StringLike(value) = tokens[0].value { value == "if" } else { false } );
+            assert_eq!(tokens[0].location.line, 2);
+            assert_eq!(tokens[0].location.column, 1);
 
-        match tokens[2] {
-            Token::Identifier { value, location,.. } => {
-                assert_eq!(value, "wowowo");
+            if let Token::IntegerLiteral { value, location,.. } = tokens[1] {
+                assert_eq!(value, 3);
                 assert_eq!(location.line, 2);
-                assert_eq!(location.column, 6);
-            },
-            _ => panic!("Not an identifier")
+                assert_eq!(location.column, 4);
+            } else {
+                panic!("Not an int");
+            }
+
+            match tokens[2] {
+                Token::Identifier { value, location,.. } => {
+                    assert_eq!(value, "wowowo");
+                    assert_eq!(location.line, 2);
+                    assert_eq!(location.column, 6);
+                },
+                _ => panic!("Not an identifier")
+            }
+
+            match tokens[3] {
+                Token::Keyword { value, location,.. } => {
+                    assert_eq!(value, "if");
+                    assert_eq!(location.line, 3);
+                    assert_eq!(location.column, 5);
+                },
+                _ => panic!("Not a keyword")
+            }
         }
 
-        match tokens[3] {
-            Token::Keyword { value, location,.. } => {
-                assert_eq!(value, "if");
-                assert_eq!(location.line, 3);
-                assert_eq!(location.column, 5);
-            },
-            _ => panic!("Not a keyword")
+        #[test]
+        fn test_operators() {
+            let source = "+ - * / = == != < <= > >=";
+            let tokens: Vec<Token> = tokenize(source);
+
+            assert_eq!(tokens.len(), 11);
+            assert!(matches!(tokens[10], Token::Operator { .. }));
+
         }
-    }
 
-    #[test]
-    fn test_operators() {
-        let source = "+ - * / = == != < <= > >=";
-        let tokens: Vec<Token> = tokenize(source);
+        #[test]
+        fn test_punctuation() {
+            let source = "( ) { } , ;";
+            let tokens: Vec<Token> = tokenize(source);
 
-        assert_eq!(tokens.len(), 11);
-        assert!(matches!(tokens[10], Token::Operator { .. }));
+            assert_eq!(tokens.len(), 6);
+            assert!(matches!(tokens[5], Token::Punctuation { .. }));
+        }
 
-    }
+        #[test]
+        fn test_comment() {
+            let source = "( ) { } , ; // comment is fine";
+            let tokens: Vec<Token> = tokenize(source);
 
-    #[test]
-    fn test_punctuation() {
-        let source = "( ) { } , ;";
-        let tokens: Vec<Token> = tokenize(source);
+            assert_eq!(tokens.len(), 6);
+            assert!(matches!(tokens[5], Token::Punctuation { .. }));
+        }
 
-        assert_eq!(tokens.len(), 6);
-        assert!(matches!(tokens[5], Token::Punctuation { .. }));
-    }
-
-    #[test]
-    fn test_comment() {
-        let source = "( ) { } , ; // comment is fine";
-        let tokens: Vec<Token> = tokenize(source);
-
-        assert_eq!(tokens.len(), 6);
-        assert!(matches!(tokens[5], Token::Punctuation { .. }));
-    }
-
-    #[test]
-    fn test_multiline_comment() {
-        let mut source = "( ) { } , ; /* heyo */";
+        #[test]
+        fn test_multiline_comment() {
+            let mut source = "( ) { } , ; /* heyo */
+    ";
         let mut tokens: Vec<Token> = tokenize(source);
 
         assert_eq!(tokens.len(), 6);
         assert!(matches!(tokens[7], Token::Punctuation { .. }));
 
         source = "( ) { } , ; /*
-            heyo 123
-        */ heyo_identifier";
+                                  heyo 123
+                              */
+    heyo_identifier";
         tokens = tokenize(source);
 
         assert_eq!(tokens.len(), 7);
         assert!(matches!(tokens[7], Token::Identifier { .. }));
 
         source = "( ) { } , ; /*
-            heyo 123
-        */ heyo_identifier /* another
-        comment
-         */ 123";
+                                  heyo 123
+                              */
+    heyo_identifier /* another
+                    comment
+                     */
+    123";
         tokens = tokenize(source);
 
         assert_eq!(tokens.len(), 8);
@@ -269,17 +277,17 @@ if 3 wowowo
     #[test]
     fn long_test() {
         let source = " // 1
-            // Here is a function 2
-            function f(int cool_number = 1) { // 3
-                if (cool_number == 2) // Not default 4
-                    print(wow); // 5
-                } // 6
-                return whatever; // 7
-            } // 8
+                       // Here is a function 2
+    function f(int cool_number = 1) { // 3
+    if (cool_number == 2) // Not default 4
+    print(wow); // 5
+    } // 6
+    return whatever; // 7
+    } // 8
 
-            // Lets invoke it: // 10
-            f(2); // prints wow 11
-        ";
+    // Lets invoke it: // 10
+    f(2); // prints wow 11
+    ";
         let tokens: Vec<Token> = tokenize(source);
         assert_eq!(tokens.len(), 30);
         if let Token::Punctuation { location, .. } = tokens[tokens.len() - 1] {

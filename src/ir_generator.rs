@@ -65,7 +65,7 @@ pub enum Instruction {
 #[derive(Debug)]
 pub struct IREntry {
     // location: SourceLocation,
-    instruction: Instruction
+    pub instruction: Instruction
 }
 
 impl IREntry {

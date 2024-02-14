@@ -10,21 +10,21 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  unit-test:
-
+  test:
     runs-on: ubuntu-latest
 
     steps:
     - uses: actions/checkout@v3
-    - name: Build
-      run: cargo build --verbose
-    - name: Run tests
-      run: cargo test --verbose
   
-  e2e:
-    runs-on: ubuntu-latest
-
-    steps:
-    - uses: actions/checkout@v3
-    - name: E2E
-      run: cargo run -- e2e
+    - name: Build image
+      uses: docker/build-push-action@v4
+      with:
+        context: .
+        push: false
+        load: true
+        tags: compiler:latest
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+    
+    - name: Run tests
+      run: docker run --name compiler_dev -i --volume ./:/opt/app-root/src compiler_dev cargo test && cargo run -- e2e

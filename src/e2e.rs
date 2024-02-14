@@ -46,12 +46,12 @@ fn run_test(source: &str) {
     let ir = generate_ir(typed_ast);
     let asm = generate_asm(ir);
 
-    if fs::write("./temp_asm.s", asm).is_err() {
-        panic!("Failed to write to temp file ./temp_asm.s")
+    if fs::write("./target/temp_asm.s", asm).is_err() {
+        panic!("Failed to write to temp file ./target/temp_asm.s")
     }
 
     let compile_output  = Command::new("gcc")
-        .args(["-g", "-no-pie", "-o", "./temp_program", "./temp_asm.s"])
+        .args(["-g", "-no-pie", "-o", "./target/temp_program", "./target/temp_asm.s"])
         .output()
         .expect("gcc compile should've run");
     
@@ -62,7 +62,7 @@ fn run_test(source: &str) {
         panic!("gcc compile exited with nonzero status")
     }
 
-    let mut process = Command::new("./temp_program")
+    let mut process = Command::new("./target/temp_program")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .spawn()

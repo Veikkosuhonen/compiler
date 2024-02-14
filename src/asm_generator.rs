@@ -1,9 +1,19 @@
 use std::collections::HashMap;
 
-use crate::ir_generator::{IREntry, Instruction};
+use crate::{ir_generator::{IREntry, Instruction}, sym_table::Symbol, tokenizer::Op};
 
 fn bin_op(arg_1: &String, arg_2: &String, dest: &String, op: &str) -> String {
     format!("movq {}, %rax \n{} {}, %rax \nmovq %rax, {}", arg_2, op, arg_1, dest)
+}
+
+fn comparison(arg1: &String, arg2: &String, dest: &String, op: &str) -> String {
+    vec![
+        format!("xor %rax, %rax"),
+        format!("movq {}, %rdx", arg1),
+        format!("cmpq {}, %rdx", arg2),
+        format!("{} %al", op),
+        format!("movq %rax, {}", dest),
+    ].join("\n")
 }
 
 pub fn generate_asm(ir: Vec<IREntry>) -> String {
@@ -11,7 +21,7 @@ pub fn generate_asm(ir: Vec<IREntry>) -> String {
     let mut locations = HashMap::new();
     let mut next_stack_loc = -8;
 
-    let mut add_var = |name: &String| {
+    let mut add_var = |name: &Symbol| {
         if !locations.contains_key(name) {
             locations.insert(name.clone(), format!("{next_stack_loc}(%rbp)"));
             next_stack_loc -= 8;
@@ -43,23 +53,115 @@ pub fn generate_asm(ir: Vec<IREntry>) -> String {
         let asm = match &entry.instruction {
             Instruction::LoadIntConst { value, dest } => {
                 let dest_loc = locations.get(&dest.name).unwrap();
-                format!("movq ${}, {}", value, dest_loc)
+                vec![
+                    format!("movq ${}, {}", value, dest_loc)
+                ]
             },
             Instruction::LoadBoolConst { value, dest } => {
                 let dest_loc = locations.get(&dest.name).unwrap();
                 let byte_val = if *value { 1 } else { 0 };
-                format!("movq ${}, {}", byte_val, dest_loc)
+                vec![
+                    format!("movq ${}, {}", byte_val, dest_loc)
+                ]
             },
             Instruction::Call { fun, args, dest } => {
-                match fun.name.as_str() {
-                    "+" => {
-                        let dest_loc = locations.get(&dest.name).unwrap();
-                        let arg_1_loc = locations.get(&args[0].name).unwrap();
-                        let arg_2_loc = locations.get(&args[1].name).unwrap();
+                let dest_loc = locations.get(&dest.name).unwrap();
 
-                        bin_op(arg_1_loc, arg_2_loc, dest_loc, "addq")
+                match &fun.name {
+                    Symbol::Operator(op) => {
+                        let arg_1_loc = locations.get(&args[0].name).unwrap();
+                        let arg_2_opt = &args.get(1).and_then(|irvar| locations.get(&irvar.name));
+
+                        if let Some(arg_2_loc) = arg_2_opt {
+                            match op {
+                                Op::Add => {
+                                    vec![
+                                        bin_op(arg_1_loc, arg_2_loc, dest_loc, "addq")
+                                    ]
+                                },
+                                Op::Sub => {
+                                    vec![
+                                        bin_op(arg_1_loc, arg_2_loc, dest_loc, "subq")
+                                    ]
+                                },
+                                Op::Mul => {
+                                    vec![
+                                        bin_op(arg_1_loc, arg_2_loc, dest_loc, "imulq")
+                                    ]
+                                },
+                                Op::Div => {
+                                    vec![
+                                        format!("movq {}, %rax", arg_1_loc),
+                                        format!("cqto"), // wottefok
+                                        format!("idivq {}", arg_2_loc),
+                                        format!("movq %rax, {}", dest_loc),    
+                                    ]
+                                },
+                                Op::Mod => {
+                                    vec![
+                                        format!("movq {}, %rax", arg_1_loc),
+                                        format!("cqto"), // wottefok
+                                        format!("idivq {}", arg_2_loc),
+                                        format!("movq %rdx, {}", dest_loc), // %rdx contains remainder    
+                                    ]
+                                },
+                                Op::Equals => {
+                                    vec![
+                                        comparison(arg_1_loc, arg_2_loc, dest_loc, "sete"),
+                                    ]
+                                },
+                                Op::NotEquals => {
+                                    vec![
+                                        comparison(arg_1_loc, arg_2_loc, dest_loc, "setne"),
+                                    ]
+                                },
+                                Op::GT => {
+                                    vec![
+                                        comparison(arg_1_loc, arg_2_loc, dest_loc, "setg"),
+                                    ]
+                                },
+                                Op::GTE => {
+                                    vec![
+                                        comparison(arg_1_loc, arg_2_loc, dest_loc, "setge"),
+                                    ]
+                                },
+                                Op::LT => {
+                                    vec![
+                                        comparison(arg_1_loc, arg_2_loc, dest_loc, "setl"),
+                                    ]
+                                },
+                                Op::LTE => {
+                                    vec![
+                                        comparison(arg_1_loc, arg_2_loc, dest_loc, "setle"),
+                                    ]
+                                },
+                                _ => todo!("{:?}", op)
+                            }
+                        } else {
+                            let arg_loc = locations.get(&args[0].name).unwrap();
+
+                            match op {
+                                Op::Not => {
+                                    vec![
+                                        format!("movq {}, %rax", arg_loc),
+                                        format!("xorg 0x1, %rax"),
+                                        format!("movq %rax, {}", dest_loc)
+                                    ]
+                                },
+                                Op::Sub => {
+                                    vec![
+                                        format!("movq {}, %rax", arg_loc),
+                                        format!("negq %rax"),
+                                        format!("movq %rax, {}", dest_loc)
+                                    ]
+                                },
+                                _ => todo!("{:?}", op)
+                            }
+                        }
                     },
-                    _ => todo!("{}", fun.name)
+                    Symbol::Identifier(name) => {
+                        todo!("{}", name)
+                    }
                 }
             },
             Instruction::Copy { source, dest } => {
@@ -67,27 +169,40 @@ pub fn generate_asm(ir: Vec<IREntry>) -> String {
                 let src_reg = "%rax";
                 let dest_loc = locations.get(&dest.name).unwrap();
 
-                format!("movq {}, {} \nmovq {}, {}", src_loc, src_reg, src_reg, dest_loc)
+                vec![
+                    format!("movq {}, {}", src_loc, src_reg), 
+                    format!("movq {}, {}", src_reg, dest_loc)
+                ]
             },
             Instruction::Label(name) => {
-                format!(".{}:", name)
+                vec![
+                    format!(".{}:", name)
+                ]
             },
-                Instruction::Jump(label) => {
-                format!("jmp .{}", label)
+            Instruction::Jump(label) => {
+                vec![
+                    format!("jmp .{}", label)
+                ]
             },
             Instruction::CondJump { cond, then_label, else_label } => {
                 let cond_loc = locations.get(&cond.name).unwrap();
-                format!("cmpq $0, {}\njne .{}\njmp .{}", cond_loc, then_label, else_label)
+                vec![
+                    format!("cmpq $0, {}", cond_loc),
+                    format!("jne .{}", then_label), 
+                    format!("jmp .{}", else_label)
+                ]
             },
             Instruction::Return => {
-                format!("# return")
+                vec![
+                    format!("# return")
+                ]
             },
-        };
+        }.join("\n");
 
         format!("# {:?}\n{}", entry.instruction, asm)
 
 
-    }).collect::<Vec<String>>().join("\n");
+    }).collect::<Vec<String>>().join("\n\n");
 
     format!("
 # Metadata for debuggers and other tools

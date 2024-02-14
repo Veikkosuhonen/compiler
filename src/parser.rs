@@ -1,5 +1,5 @@
-use lazy_static::lazy_static;
 use crate::tokenizer::{Op, SourceLocation, Token, TokenType};
+use lazy_static::lazy_static;
 
 lazy_static! {
     static ref BINARY_OP_PRECEDENCE: Vec<Vec<Op>> = vec![
@@ -11,10 +11,7 @@ lazy_static! {
         vec![Op::Mul, Op::Div, Op::Mod],
         vec![Op::Exp],
     ];
-    static ref UNARY_OP_PRECEDENCE: Vec<Vec<Op>> = vec![
-        vec![Op::Not],
-        vec![Op::Sub],
-    ];
+    static ref UNARY_OP_PRECEDENCE: Vec<Vec<Op>> = vec![vec![Op::Not], vec![Op::Sub],];
 }
 
 #[derive(Debug)]
@@ -30,13 +27,13 @@ impl ASTNode {
 
 #[derive(Debug)]
 pub enum Expression<T> {
+    Unit,
     IntegerLiteral {
         value: i32,
     },
     BooleanLiteral {
         value: bool,
     },
-    Unit,
     Identifier {
         value: String,
     },
@@ -72,7 +69,7 @@ pub enum Expression<T> {
     },
     CallExpression {
         callee: Box<T>,
-        arguments: Vec<Box<T>>
+        arguments: Vec<Box<T>>,
     },
 }
 
@@ -105,10 +102,7 @@ impl Parser {
             Token {
                 token_type: TokenType::None,
                 value: "".to_string(),
-                location: SourceLocation {
-                    line: 0,
-                    column: 0,
-                },
+                location: SourceLocation { line: 0, column: 0 },
             }
         }
     }
@@ -121,10 +115,16 @@ impl Parser {
         self.peek_forward(1).value == value
     }
 
-    fn consume_with_values(&mut self, expected_type: TokenType, expected_values: &[String]) -> Token {
+    fn consume_with_values(
+        &mut self,
+        expected_type: TokenType,
+        expected_values: &[String],
+    ) -> Token {
         let token: Token = self.peek();
 
-        if expected_type == token.token_type && (expected_values.is_empty() || expected_values.contains(&token.value)) {
+        if expected_type == token.token_type
+            && (expected_values.is_empty() || expected_values.contains(&token.value))
+        {
             self.current_index += 1;
             token
         } else {
@@ -157,8 +157,13 @@ impl Parser {
     }
 
     fn parse_boolean_literal(&mut self) -> ASTNode {
-        let token = self.consume_with_values(TokenType::BooleanLiteral, &["true".to_string(), "false".to_string()]);
-        ASTNode::new(Expression::BooleanLiteral { value: token.value.starts_with('t') })
+        let token = self.consume_with_values(
+            TokenType::BooleanLiteral,
+            &["true".to_string(), "false".to_string()],
+        );
+        ASTNode::new(Expression::BooleanLiteral {
+            value: token.value.starts_with('t'),
+        })
     }
 
     fn parse_int_literal(&mut self) -> ASTNode {
@@ -170,9 +175,7 @@ impl Parser {
 
     fn parse_identifier(&mut self) -> ASTNode {
         let token = self.consume(TokenType::Identifier);
-        ASTNode::new(Expression::Identifier {
-            value: token.value,
-        })
+        ASTNode::new(Expression::Identifier { value: token.value })
     }
 
     fn parse_call_expression(&mut self) -> ASTNode {
@@ -192,7 +195,10 @@ impl Parser {
         }
         self.consume_right_paren();
 
-        ASTNode::new(Expression::CallExpression { callee: Box::new(callee), arguments })
+        ASTNode::new(Expression::CallExpression {
+            callee: Box::new(callee),
+            arguments,
+        })
     }
 
     fn parse_if_expression(&mut self) -> ASTNode {
@@ -243,12 +249,18 @@ impl Parser {
         loop {
             if self.current_is("}") {
                 self.consume(TokenType::Punctuation);
-                return ASTNode::new(Expression::BlockExpression { statements, result: Box::new(ASTNode::new(Expression::Unit)) })
+                return ASTNode::new(Expression::BlockExpression {
+                    statements,
+                    result: Box::new(ASTNode::new(Expression::Unit)),
+                });
             }
             let statement = self.parse_statement();
             if self.current_is("}") {
                 self.consume(TokenType::Punctuation);
-                return ASTNode::new(Expression::BlockExpression { statements, result: Box::new(statement) })
+                return ASTNode::new(Expression::BlockExpression {
+                    statements,
+                    result: Box::new(statement),
+                });
             }
             statements.push(Box::new(statement));
             self.consume_with_value(TokenType::Punctuation, ";");
@@ -278,16 +290,14 @@ impl Parser {
                 } else {
                     self.parse_identifier()
                 }
-            },
-            TokenType::Punctuation => {
-                match token.value.as_str() {
-                    "(" => self.parse_parentheses(),
-                    "{" => self.parse_block_expression(),
-                    _ => panic!("Unexpected token: {:?}", token),
-                }
+            }
+            TokenType::Punctuation => match token.value.as_str() {
+                "(" => self.parse_parentheses(),
+                "{" => self.parse_block_expression(),
+                _ => panic!("Unexpected token: {:?}", token),
             },
             TokenType::None => panic!("Unexpected end of file"),
-            _ => panic!("Unexpected token {:?}", token)
+            _ => panic!("Unexpected token {:?}", token),
         }
     }
 
@@ -295,14 +305,16 @@ impl Parser {
         if level >= UNARY_OP_PRECEDENCE.len() {
             return self.parse_factor();
         }
-    
-        let ops = UNARY_OP_PRECEDENCE.get(level).expect("Invalid precedence level");
+
+        let ops = UNARY_OP_PRECEDENCE
+            .get(level)
+            .expect("Invalid precedence level");
 
         if let Some(operator) = Op::try_from_str(&self.peek().value) {
             if ops.contains(&operator) {
                 self.consume(TokenType::Operator);
                 let operand = self.parse_unary_precedence_level(level);
-                ASTNode::new(Expression::UnaryExpression { 
+                ASTNode::new(Expression::UnaryExpression {
                     operator,
                     operand: Box::new(operand),
                 })
@@ -312,14 +324,16 @@ impl Parser {
         } else {
             self.parse_factor()
         }
-    } 
+    }
 
     fn parse_binary_precedence_level(&mut self, level: usize) -> ASTNode {
         if level >= BINARY_OP_PRECEDENCE.len() {
             return self.parse_unary_precedence_level(0);
         }
-    
-        let ops = BINARY_OP_PRECEDENCE.get(level).expect("Invalid precedence level");
+
+        let ops = BINARY_OP_PRECEDENCE
+            .get(level)
+            .expect("Invalid precedence level");
 
         let mut left = self.parse_binary_precedence_level(level + 1);
 
@@ -328,7 +342,11 @@ impl Parser {
                 if ops.contains(&operator) {
                     self.consume(TokenType::Operator);
                     let right = self.parse_binary_precedence_level(level + 1);
-                    left = ASTNode::new(Expression::BinaryExpression { left: Box::new(left), operator, right: Box::new(right) })
+                    left = ASTNode::new(Expression::BinaryExpression {
+                        left: Box::new(left),
+                        operator,
+                        right: Box::new(right),
+                    })
                 } else {
                     break;
                 }
@@ -346,7 +364,10 @@ impl Parser {
             if let Op::Assign = op {
                 self.consume(TokenType::Operator);
                 let right = self.parse_assignment_expression();
-                ASTNode::new(Expression::AssignmentExpression { left: Box::new(left), right: Box::new(right) })
+                ASTNode::new(Expression::AssignmentExpression {
+                    left: Box::new(left),
+                    right: Box::new(right),
+                })
             } else {
                 self.parse_binary_precedence_level(0)
             }
@@ -364,7 +385,10 @@ impl Parser {
         let id = self.parse_identifier();
         self.consume_with_value(TokenType::Operator, "=");
         let init = self.parse_expression();
-        ASTNode::new(Expression::VariableDeclaration { id: Box::new(id), init: Box::new(init) })
+        ASTNode::new(Expression::VariableDeclaration {
+            id: Box::new(id),
+            init: Box::new(init),
+        })
     }
 
     fn parse_statement(&mut self) -> ASTNode {
@@ -374,7 +398,6 @@ impl Parser {
             self.parse_expression()
         }
     }
-
 }
 
 pub fn parse(tokens: Vec<Token>) -> ASTNode {

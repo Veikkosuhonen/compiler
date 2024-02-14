@@ -1,24 +1,24 @@
 use std::collections::HashMap;
 
-use crate::{builtin_functions::get_builtin_function_ir_vars, parser::Expression, type_checker::{Type, TypedASTNode}};
+use crate::{builtin_functions::get_builtin_function_ir_vars, parser::Expression, sym_table::Symbol, type_checker::{Type, TypedASTNode}};
 
 #[derive(Clone, Debug)]
 pub struct IRVar {
-    pub name: String,
+    pub name: Symbol,
     pub var_type: Type
 }
 
 impl IRVar {
     fn new(var_idx: usize, var_type: Type) -> IRVar {
-        IRVar { name: format!("x{}", var_idx), var_type }
+        IRVar { name: Symbol::Identifier(format!("x{}", var_idx)), var_type }
     }
 
     fn unit() -> IRVar {
-        IRVar { name: String::from("U"), var_type: Type::Unit }
+        IRVar { name: Symbol::Identifier(String::from("U")), var_type: Type::Unit }
     }
 
     fn to_string(&self) -> String {
-        self.name.clone()
+        self.name.to_string()
     }
 }
 

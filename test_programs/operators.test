@@ -40,6 +40,21 @@
 
     print_bool(not true);
     expect 0
+
+    print_bool(true and true);
+    expect 1
+
+    print_bool(false and true);
+    expect 0
+
+    print_bool(true or true);
+    expect 1
+
+    print_bool(true or false);
+    expect 1
+
+    print_bool(false or false);
+    expect 0
 }
 
 ---

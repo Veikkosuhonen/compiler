@@ -9,6 +9,7 @@ pub mod sym_table;
 pub mod type_checker;
 pub mod builtin_functions;
 pub mod asm_generator;
+pub mod e2e;
 
 fn read_file(path: &String) -> String {
     let contents = fs::read_to_string(path)

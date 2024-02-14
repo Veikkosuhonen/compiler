@@ -29,4 +29,4 @@ jobs:
         cache-to: type=gha,mode=max
     
     - name: Run tests
-      run: docker run --name compiler -i --rm --volume ./:/opt/app-root/src compiler cargo test && ./target/debug/compiler e2e
+      run: docker run --name compiler -i --rm compiler cargo test && ./target/debug/compiler e2e

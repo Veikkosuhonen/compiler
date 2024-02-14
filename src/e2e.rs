@@ -4,6 +4,7 @@ use std::process::{Command, Stdio};
 use crate::{asm_generator::generate_asm, ir_generator::generate_ir, parse_source, type_checker::typecheck_program};
 
 pub fn run_tests() {
+    let _ = fs::create_dir("./target");
     fs::read_dir("./test_programs").unwrap()
         .filter_map(|res| {
             res.ok()

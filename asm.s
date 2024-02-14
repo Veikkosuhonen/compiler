@@ -118,6 +118,17 @@ ret
 # String data that we pass to functions 'scanf' and 'printf'
 scan_format:
 .asciz "%ld"
+
 print_format:
 .asciz "%ld\n"
+
+print_bool_format:
+.asciz "%s\n"
+
+true_str:
+    .ascii "true\n"
+
+false_str:
+    .ascii "false\n"
+
 

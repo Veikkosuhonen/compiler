@@ -23,7 +23,7 @@ impl IRVar {
 }
 
 struct IRVarTable {
-    vars: HashMap<String, IRVar>,
+    vars: HashMap<Symbol, IRVar>,
     var_idx: usize,
     label_idx: usize,
 }
@@ -39,8 +39,8 @@ impl IRVarTable {
         var
     }
 
-    fn get(&self, name: &String) -> IRVar {
-        self.vars.get(name).expect(&format!("IRVar '{}' should be defined", name)).clone()
+    fn get(&self, name: &Symbol) -> IRVar {
+        self.vars.get(name).expect(&format!("IRVar '{}' should be defined", name.to_string())).clone()
     }
 
     fn create_label(&mut self) -> String {
@@ -127,12 +127,12 @@ fn generate(node: TypedASTNode, instructions: &mut Vec<IREntry>, var_table: &mut
             dest
         },
         Expression::Identifier { value } => {
-            var_table.get(&value)
+            var_table.get(&Symbol::Identifier(value))
         },
         Expression::VariableDeclaration { id, init } => {
             let init = generate(*init, instructions, var_table);
             if let Expression::Identifier { value } = id.expr {
-                var_table.vars.insert(value, init.clone());
+                var_table.vars.insert(Symbol::Identifier(value), init.clone());
                 init
             } else {
                 panic!("Id of a variable declaration must be an Identifier")
@@ -141,7 +141,7 @@ fn generate(node: TypedASTNode, instructions: &mut Vec<IREntry>, var_table: &mut
         Expression::UnaryExpression { operand, operator } => {
             let operand = generate(*operand, instructions, var_table);
             let dest = var_table.create(node.node_type);
-            let fun = var_table.get(&operator.to_string());
+            let fun = var_table.get(&Symbol::Operator(operator));
 
             instructions.push(IREntry { 
                 // location: , 
@@ -157,7 +157,7 @@ fn generate(node: TypedASTNode, instructions: &mut Vec<IREntry>, var_table: &mut
             let left = generate(*left, instructions, var_table);
             let right = generate(*right, instructions, var_table);
             let dest = var_table.create(node.node_type);
-            let fun = var_table.get(&operator.to_string());
+            let fun = var_table.get(&Symbol::Operator(operator));
 
             instructions.push(IREntry { 
                 // location: , 
@@ -176,7 +176,7 @@ fn generate(node: TypedASTNode, instructions: &mut Vec<IREntry>, var_table: &mut
                     argument_vars.push(Box::new(generate(*arg, instructions, var_table)));
                 }
                 let dest = var_table.create(node.node_type);
-                let fun = var_table.get(&value);
+                let fun = var_table.get(&Symbol::Identifier(value));
 
                 instructions.push(IREntry { 
                     // location: , 

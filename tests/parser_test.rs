@@ -31,7 +31,7 @@ fn test_parse_unary_op() {
     
     match expression.expr {
         Expression::UnaryExpression { operator, .. } => {
-            assert_eq!(operator, Op::Sub);
+            assert_eq!(operator, Op::UnarySub);
         },
         _ => panic!("Expected unary expression"),
     }
@@ -235,7 +235,7 @@ fn test_complex_unary() {
                     assert_eq!(operator, Op::Mul);
                     match right.expr {
                         Expression::UnaryExpression { operator,.. } => {
-                            assert_eq!(operator, Op::Sub)
+                            assert_eq!(operator, Op::UnarySub)
                         },
                         _ => panic!("Expected - unary expression")
                     }

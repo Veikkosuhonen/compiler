@@ -70,7 +70,7 @@
     expect 1
 
     print_int(7 + 7);
-    expect 49
+    expect 14
 
     print_int(7 - 7);
     expect 0

@@ -213,6 +213,20 @@ fn intrisic(fun: &Box<IRVar>, args: &Vec<Box<IRVar>>, dest: &Box<IRVar>, locatio
                             comparison(arg_1_loc, arg_2_loc, dest_loc, "setle"),
                         ]
                     },
+                    Op::And => {
+                        vec![
+                            format!("movq {}, %rax", arg_1_loc),
+                            format!("andq {}, %rax", arg_2_loc),
+                            format!("movq %rax, {}", dest_loc)
+                        ]
+                    },
+                    Op::Or => {
+                        vec![
+                            format!("movq {}, %rax", arg_1_loc),
+                            format!("orq {}, %rax", arg_2_loc),
+                            format!("movq %rax, {}", dest_loc)
+                        ]
+                    },
                     _ => todo!("{:?}", op)
                 }
             } else {
@@ -224,7 +238,7 @@ fn intrisic(fun: &Box<IRVar>, args: &Vec<Box<IRVar>>, dest: &Box<IRVar>, locatio
                             format!("movq %rax, {}", dest_loc)
                         ]
                     },
-                    Op::Sub => {
+                    Op::UnarySub => {
                         vec![
                             format!("movq {}, %rax", arg_1_loc),
                             format!("negq %rax"),

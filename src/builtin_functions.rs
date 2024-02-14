@@ -252,9 +252,9 @@ pub fn get_builtin_function_symbol_type_mappings() -> Vec<(Symbol, Type)> {
     mapped_ops.chain(mapped_funcs).collect()
 }
 
-pub fn get_builtin_function_ir_vars() -> Vec<(String, IRVar)> {
+pub fn get_builtin_function_ir_vars() -> Vec<(Symbol, IRVar)> {
     let ops = get_builtin_function_symbol_type_mappings();
     ops.iter().map(|(symbol, var_type)| 
-        (symbol.to_string(), IRVar { name: symbol.clone(), var_type: var_type.clone() })
+        (symbol.clone(), IRVar { name: symbol.clone(), var_type: var_type.clone() })
     ).collect()
 }

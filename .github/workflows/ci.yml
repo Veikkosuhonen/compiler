@@ -14,10 +14,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
   
     - name: Build image
-      uses: docker/build-push-action@v4
+      uses: docker/build-push-action@v5
       with:
         context: .
         push: false
@@ -27,4 +27,4 @@ jobs:
         cache-to: type=gha,mode=max
     
     - name: Run tests
-      run: docker run --name compiler_dev -i --volume ./:/opt/app-root/src compiler_dev cargo test && cargo run -- e2e
+      run: docker run --name compiler -i --rm --volume ./:/opt/app-root/src compiler cargo test && ./target/debug/compiler e2e

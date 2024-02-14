@@ -355,9 +355,9 @@ mod tests {
     }
 
     #[test]
-    fn print_bool() {
+    fn unary_sub() {
         let node = t("
-            print_int(7 * -7)
+            7 * -7
         ");
 
         assert_eq!(node.node_type, Type::Integer);

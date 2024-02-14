@@ -11,7 +11,7 @@ lazy_static! {
         vec![Op::Mul, Op::Div, Op::Mod],
         vec![Op::Exp],
     ];
-    static ref UNARY_OP_PRECEDENCE: Vec<Vec<Op>> = vec![vec![Op::Not], vec![Op::Sub],];
+    static ref UNARY_OP_PRECEDENCE: Vec<Vec<Op>> = vec![vec![Op::Not], vec![Op::UnarySub],];
 }
 
 #[derive(Debug)]
@@ -310,7 +310,7 @@ impl Parser {
             .get(level)
             .expect("Invalid precedence level");
 
-        if let Some(operator) = Op::try_from_str(&self.peek().value) {
+        if let Ok(operator) = Op::unary_from_str(&self.peek().value) {
             if ops.contains(&operator) {
                 self.consume(TokenType::Operator);
                 let operand = self.parse_unary_precedence_level(level);
@@ -338,7 +338,7 @@ impl Parser {
         let mut left = self.parse_binary_precedence_level(level + 1);
 
         loop {
-            if let Some(operator) = Op::try_from_str(&self.peek().value) {
+            if let Ok(operator) = Op::binary_from_str(&self.peek().value) {
                 if ops.contains(&operator) {
                     self.consume(TokenType::Operator);
                     let right = self.parse_binary_precedence_level(level + 1);
@@ -360,7 +360,7 @@ impl Parser {
 
     fn parse_assignment_expression(&mut self) -> ASTNode {
         let left = self.parse_binary_precedence_level(0);
-        if let Some(op) = Op::try_from_str(&self.peek().value) {
+        if let Ok(op) = Op::binary_from_str(&self.peek().value) {
             if let Op::Assign = op {
                 self.consume(TokenType::Operator);
                 let right = self.parse_assignment_expression();

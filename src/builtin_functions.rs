@@ -124,6 +124,7 @@ pub fn get_builtin_function_symbol_value_mappings() -> Vec<(Symbol, Value)> {
     let ops = vec![
         (Op::Add, BuiltIn::Add),
         (Op::Sub, BuiltIn::Sub),
+        (Op::UnarySub, BuiltIn::Sub),
         (Op::Mul, BuiltIn::Mul),
         (Op::Div, BuiltIn::Div),
         (Op::Mod, BuiltIn::Mod),
@@ -165,6 +166,10 @@ pub fn get_builtin_function_symbol_type_mappings() -> Vec<(Symbol, Type)> {
         }),
         (Op::Sub, FunctionType {
             param_types: vec![Type::Integer, Type::Integer],
+            return_type: Type::Integer,
+        }),
+        (Op::UnarySub, FunctionType {
+            param_types: vec![Type::Integer],
             return_type: Type::Integer,
         }),
         (Op::Mul, FunctionType {

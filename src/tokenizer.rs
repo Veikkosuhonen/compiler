@@ -5,6 +5,7 @@ use regex::{Match, Regex};
 pub enum Op {
     Add,
     Sub,
+    UnarySub,
     Mul,
     Div,
     Mod,
@@ -22,15 +23,14 @@ pub enum Op {
 }
 
 impl Op {
-    pub fn try_from_str(value: &str) -> Option<Op> {
-        Some(match value {
+    pub fn binary_from_str(value: &str) -> Result<Op, &str> {
+        Ok(match value {
             "+" => Op::Add,
             "-" => Op::Sub,
             "*" => Op::Mul,
             "/" => Op::Div,
             "%" => Op::Mod,
             "**" => Op::Exp,
-            "not" => Op::Not,
             "==" => Op::Equals,
             "!=" => Op::NotEquals,
             "<" => Op::LT,
@@ -40,13 +40,23 @@ impl Op {
             "and" => Op::And,
             "or" => Op::Or,
             "=" => Op::Assign,
-            _ => return None,
+            _ => return Err("Unknown binary operator"),
         })
     }
+
+    pub fn unary_from_str(value: &str) -> Result<Op, &str> {
+        Ok(match value {
+            "-" => Op::UnarySub,
+            "not" => Op::Not,
+            _ => return Err("Unknown unary operator"),
+        })
+    }
+
     pub fn to_string(&self) -> String {
         String::from(match self {
             Op::Add => "+",
             Op::Sub => "-",
+            Op::UnarySub => "-",
             Op::Mul => "*",
             Op::Div => "/",
             Op::Mod => "%",

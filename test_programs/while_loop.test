@@ -1,0 +1,49 @@
+{
+    input 5
+
+    var x = read_int();
+
+    var i = 0;
+
+    while i < 10 do {
+        x = 2 * x;
+        i = i + 1;
+    };
+
+    print_bool(x > 5000);
+
+    expect 1
+}
+
+---
+
+{   
+    while false do {
+        print_bool(false);
+    };
+
+    print_bool(true);
+
+    expect 1
+}
+
+---
+
+{
+    var once1 = true;
+    var once2 = true;
+    var once3 = true;
+
+    while once1 do {
+        once1 = false;
+        while once2 do {
+            once2 = false;
+            while once3 do {
+                once3 = false;
+                print_int(42);
+            };
+        };
+    };
+
+    expect 42
+}

@@ -353,4 +353,13 @@ mod tests {
 
         assert_eq!(node.node_type, Type::Integer);
     }
+
+    #[test]
+    fn print_bool() {
+        let node = t("
+            print_int(7 * -7)
+        ");
+
+        assert_eq!(node.node_type, Type::Integer);
+    }
 }

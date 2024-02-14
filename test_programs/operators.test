@@ -1,0 +1,65 @@
+{
+    print_bool(2 > 1);
+    expect 1
+
+    print_bool(1 > 2);
+    expect 0
+
+    print_bool(1 >= 1);
+    expect 1
+
+    print_bool(1 >= 2);
+    expect 0
+
+    print_bool(1 < 2);
+    expect 1
+
+    print_bool(2 < 1);
+    expect 0
+
+    print_bool(1 <= 1);
+    expect 1
+
+    print_bool(2 <= 1);
+    expect 0
+
+    print_bool(123 == 123);
+    expect 1
+
+    print_bool(122 == 123);
+    expect 0
+
+    print_bool(122 != 123);
+    expect 1
+
+    print_bool(123 != 123);
+    expect 0
+
+    print_bool(not false);
+    expect 1
+
+    print_bool(not true);
+    expect 0
+}
+
+---
+
+{
+    print_int(7 * 7);
+    expect 49
+
+    print_int(7 / 7);
+    expect 1
+
+    print_int(7 % 6);
+    expect 1
+
+    print_int(7 + 7);
+    expect 49
+
+    print_int(7 - 7);
+    expect 0
+
+    print_int(7 * -7);
+    expect -49
+}

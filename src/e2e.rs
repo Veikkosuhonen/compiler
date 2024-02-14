@@ -30,10 +30,10 @@ fn run_test(source: &str) {
     let mut expects: Vec<i32> = vec![];
 
     let program_source = source.split("\n").filter(|line| {
-        if line.starts_with("input") {
+        if line.trim_start().starts_with("input") {
             inputs.push(line.split_whitespace().last().unwrap().parse().expect("Should've been able to parse i32 after 'input'"));
             false
-        } else if line.starts_with("expect") {
+        } else if line.trim_start().starts_with("expect") {
             expects.push(line.split_whitespace().last().unwrap().parse().expect("Should've been able to parse i32 after 'expect'"));
             false
         } else {

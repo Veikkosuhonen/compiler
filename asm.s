@@ -12,13 +12,17 @@ main:
 # Function stack setup
 pushq %rbp
 movq %rsp, %rbp
-subq $72, %rsp
+subq $112, %rsp
 
 # Label("start")
 .start:
 
-# LoadIntConst { value: 2, dest: IRVar { name: Identifier("x0"), var_type: Integer } }
-movq $2, -8(%rbp)
+# Call { fun: IRVar { name: Identifier("read_int"), var_type: Function(FunctionType { param_types: [], return_type: Integer }) }, args: [], dest: IRVar { name: Identifier("x0"), var_type: Integer } }
+movq $scan_format, %rdi
+leaq -8(%rbp), %rsi
+call scanf
+cmpq $1, %rax
+jne .Lend
 
 # LoadIntConst { value: 0, dest: IRVar { name: Identifier("x1"), var_type: Integer } }
 movq $0, -16(%rbp)
@@ -44,30 +48,38 @@ jmp .L2
 # Label("L1")
 .L1:
 
-# Call { fun: IRVar { name: Operator(Mul), var_type: Function(FunctionType { param_types: [Integer, Integer], return_type: Integer }) }, args: [IRVar { name: Identifier("x0"), var_type: Integer }, IRVar { name: Identifier("x0"), var_type: Integer }], dest: IRVar { name: Identifier("x5"), var_type: Integer } }
-movq -8(%rbp), %rax 
-imulq -8(%rbp), %rax 
-movq %rax, -40(%rbp)
+# LoadIntConst { value: 2, dest: IRVar { name: Identifier("x5"), var_type: Integer } }
+movq $2, -40(%rbp)
 
-# Copy { source: IRVar { name: Identifier("x5"), var_type: Integer }, dest: IRVar { name: Identifier("x0"), var_type: Integer } }
-movq -40(%rbp), %rax
+# Call { fun: IRVar { name: Operator(Mul), var_type: Function(FunctionType { param_types: [Integer, Integer], return_type: Integer }) }, args: [IRVar { name: Identifier("x5"), var_type: Integer }, IRVar { name: Identifier("x0"), var_type: Integer }], dest: IRVar { name: Identifier("x6"), var_type: Integer } }
+movq -8(%rbp), %rax 
+imulq -40(%rbp), %rax 
+movq %rax, -48(%rbp)
+
+# Copy { source: IRVar { name: Identifier("x6"), var_type: Integer }, dest: IRVar { name: Identifier("x0"), var_type: Integer } }
+movq -48(%rbp), %rax
 movq %rax, -8(%rbp)
 
-# LoadIntConst { value: 1, dest: IRVar { name: Identifier("x6"), var_type: Integer } }
-movq $1, -48(%rbp)
+# LoadIntConst { value: 1, dest: IRVar { name: Identifier("x7"), var_type: Integer } }
+movq $1, -56(%rbp)
 
-# Call { fun: IRVar { name: Operator(Add), var_type: Function(FunctionType { param_types: [Integer, Integer], return_type: Integer }) }, args: [IRVar { name: Identifier("x1"), var_type: Integer }, IRVar { name: Identifier("x6"), var_type: Integer }], dest: IRVar { name: Identifier("x7"), var_type: Integer } }
-movq -48(%rbp), %rax 
+# Call { fun: IRVar { name: Operator(Add), var_type: Function(FunctionType { param_types: [Integer, Integer], return_type: Integer }) }, args: [IRVar { name: Identifier("x1"), var_type: Integer }, IRVar { name: Identifier("x7"), var_type: Integer }], dest: IRVar { name: Identifier("x8"), var_type: Integer } }
+movq -56(%rbp), %rax 
 addq -16(%rbp), %rax 
-movq %rax, -56(%rbp)
+movq %rax, -64(%rbp)
 
-# Copy { source: IRVar { name: Identifier("x7"), var_type: Integer }, dest: IRVar { name: Identifier("x1"), var_type: Integer } }
-movq -56(%rbp), %rax
+# Copy { source: IRVar { name: Identifier("x8"), var_type: Integer }, dest: IRVar { name: Identifier("x1"), var_type: Integer } }
+movq -64(%rbp), %rax
 movq %rax, -16(%rbp)
 
+# Call { fun: IRVar { name: Identifier("print_int"), var_type: Function(FunctionType { param_types: [Integer], return_type: Unit }) }, args: [IRVar { name: Identifier("x0"), var_type: Integer }], dest: IRVar { name: Identifier("x9"), var_type: Unit } }
+movq -8(%rbp), %rsi
+movq $print_format, %rdi
+call printf
+
 # Copy { source: IRVar { name: Identifier("U"), var_type: Unit }, dest: IRVar { name: Identifier("x2"), var_type: Unit } }
-movq -64(%rbp), %rax
-movq %rax, -72(%rbp)
+movq -80(%rbp), %rax
+movq %rax, -88(%rbp)
 
 # Jump("L0")
 jmp .L0
@@ -75,15 +87,24 @@ jmp .L0
 # Label("L2")
 .L2:
 
-# Return
-# return
+# LoadIntConst { value: 5000, dest: IRVar { name: Identifier("x10"), var_type: Integer } }
+movq $5000, -96(%rbp)
 
-movq -24(%rbp), %rsi
+# Call { fun: IRVar { name: Operator(GT), var_type: Function(FunctionType { param_types: [Integer, Integer], return_type: Boolean }) }, args: [IRVar { name: Identifier("x0"), var_type: Integer }, IRVar { name: Identifier("x10"), var_type: Integer }], dest: IRVar { name: Identifier("x11"), var_type: Boolean } }
+xor %rax, %rax
+movq -8(%rbp), %rdx
+cmpq -96(%rbp), %rdx
+setg %al
+movq %rax, -104(%rbp)
 
-# Call function 'printf("%ld\n", %rsi)'
-# to print the number in %rsi.
+# Call { fun: IRVar { name: Identifier("print_bool"), var_type: Function(FunctionType { param_types: [Boolean], return_type: Unit }) }, args: [IRVar { name: Identifier("x11"), var_type: Boolean }], dest: IRVar { name: Identifier("x12"), var_type: Unit } }
+movq -104(%rbp), %rsi
+andq $0x1, %rsi
 movq $print_format, %rdi
 call printf
+
+# Return
+# return
 
 # Labels starting with ".L" are local to this function,
 # i.e. another function than "main" could have its own ".Lend".

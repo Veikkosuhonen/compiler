@@ -1,13 +1,14 @@
 {
 
-var x = 2;
+var x = read_int();
 var i = 0;
 
 while i < 10 do {
-    x = x * x;
+    x = 2 * x;
     i = i + 1;
+    print_int(x);
 };
 
-x
+print_bool(x > 5000);
 
 }

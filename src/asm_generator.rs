@@ -1,20 +1,6 @@
 use std::collections::HashMap;
 
-use crate::{ir_generator::{IREntry, Instruction}, sym_table::Symbol, tokenizer::Op};
-
-fn bin_op(arg_1: &String, arg_2: &String, dest: &String, op: &str) -> String {
-    format!("movq {}, %rax \n{} {}, %rax \nmovq %rax, {}", arg_2, op, arg_1, dest)
-}
-
-fn comparison(arg1: &String, arg2: &String, dest: &String, op: &str) -> String {
-    vec![
-        format!("xor %rax, %rax"),
-        format!("movq {}, %rdx", arg1),
-        format!("cmpq {}, %rdx", arg2),
-        format!("{} %al", op),
-        format!("movq %rax, {}", dest),
-    ].join("\n")
-}
+use crate::{ir_generator::{IREntry, IRVar, Instruction}, sym_table::Symbol, tokenizer::Op};
 
 pub fn generate_asm(ir: Vec<IREntry>) -> String {
 
@@ -65,104 +51,9 @@ pub fn generate_asm(ir: Vec<IREntry>) -> String {
                 ]
             },
             Instruction::Call { fun, args, dest } => {
-                let dest_loc = locations.get(&dest.name).unwrap();
-
-                match &fun.name {
-                    Symbol::Operator(op) => {
-                        let arg_1_loc = locations.get(&args[0].name).unwrap();
-                        let arg_2_opt = &args.get(1).and_then(|irvar| locations.get(&irvar.name));
-
-                        if let Some(arg_2_loc) = arg_2_opt {
-                            match op {
-                                Op::Add => {
-                                    vec![
-                                        bin_op(arg_1_loc, arg_2_loc, dest_loc, "addq")
-                                    ]
-                                },
-                                Op::Sub => {
-                                    vec![
-                                        bin_op(arg_1_loc, arg_2_loc, dest_loc, "subq")
-                                    ]
-                                },
-                                Op::Mul => {
-                                    vec![
-                                        bin_op(arg_1_loc, arg_2_loc, dest_loc, "imulq")
-                                    ]
-                                },
-                                Op::Div => {
-                                    vec![
-                                        format!("movq {}, %rax", arg_1_loc),
-                                        format!("cqto"), // wottefok
-                                        format!("idivq {}", arg_2_loc),
-                                        format!("movq %rax, {}", dest_loc),    
-                                    ]
-                                },
-                                Op::Mod => {
-                                    vec![
-                                        format!("movq {}, %rax", arg_1_loc),
-                                        format!("cqto"), // wottefok
-                                        format!("idivq {}", arg_2_loc),
-                                        format!("movq %rdx, {}", dest_loc), // %rdx contains remainder    
-                                    ]
-                                },
-                                Op::Equals => {
-                                    vec![
-                                        comparison(arg_1_loc, arg_2_loc, dest_loc, "sete"),
-                                    ]
-                                },
-                                Op::NotEquals => {
-                                    vec![
-                                        comparison(arg_1_loc, arg_2_loc, dest_loc, "setne"),
-                                    ]
-                                },
-                                Op::GT => {
-                                    vec![
-                                        comparison(arg_1_loc, arg_2_loc, dest_loc, "setg"),
-                                    ]
-                                },
-                                Op::GTE => {
-                                    vec![
-                                        comparison(arg_1_loc, arg_2_loc, dest_loc, "setge"),
-                                    ]
-                                },
-                                Op::LT => {
-                                    vec![
-                                        comparison(arg_1_loc, arg_2_loc, dest_loc, "setl"),
-                                    ]
-                                },
-                                Op::LTE => {
-                                    vec![
-                                        comparison(arg_1_loc, arg_2_loc, dest_loc, "setle"),
-                                    ]
-                                },
-                                _ => todo!("{:?}", op)
-                            }
-                        } else {
-                            let arg_loc = locations.get(&args[0].name).unwrap();
-
-                            match op {
-                                Op::Not => {
-                                    vec![
-                                        format!("movq {}, %rax", arg_loc),
-                                        format!("xorg 0x1, %rax"),
-                                        format!("movq %rax, {}", dest_loc)
-                                    ]
-                                },
-                                Op::Sub => {
-                                    vec![
-                                        format!("movq {}, %rax", arg_loc),
-                                        format!("negq %rax"),
-                                        format!("movq %rax, {}", dest_loc)
-                                    ]
-                                },
-                                _ => todo!("{:?}", op)
-                            }
-                        }
-                    },
-                    Symbol::Identifier(name) => {
-                        todo!("{}", name)
-                    }
-                }
+                vec![
+                    intrisic(fun, args, dest, &locations)
+                ]
             },
             Instruction::Copy { source, dest } => {
                 let src_loc = locations.get(&source.name).unwrap();
@@ -222,13 +113,6 @@ subq ${}, %rsp
 
 {}
 
-movq -24(%rbp), %rsi
-
-# Call function 'printf(\"%ld\\n\", %rsi)'
-# to print the number in %rsi.
-movq $print_format, %rdi
-call printf
-
 # Labels starting with \".L\" are local to this function,
 # i.e. another function than \"main\" could have its own \".Lend\".
 .Lend:
@@ -241,8 +125,162 @@ ret
 # String data that we pass to functions 'scanf' and 'printf'
 scan_format:
 .asciz \"%ld\"
+
 print_format:
 .asciz \"%ld\\n\"
+
+print_bool_format:
+.asciz \"%s\\n\"
+
+true_str:
+    .ascii \"true\\n\"
+
+false_str:
+    .ascii \"false\\n\"
+
 ", locals_size, function_code)
 
+}
+
+fn intrisic(fun: &Box<IRVar>, args: &Vec<Box<IRVar>>, dest: &Box<IRVar>, locations: &HashMap<Symbol, String>) -> String {
+    let dest_loc = locations.get(&dest.name).unwrap();
+
+    match &fun.name {
+        Symbol::Operator(op) => {
+            let arg_1_loc = locations.get(&args[0].name).unwrap();
+            let arg_2_opt = &args.get(1).and_then(|irvar| locations.get(&irvar.name));
+
+            if let Some(arg_2_loc) = arg_2_opt {
+                match op {
+                    Op::Add => {
+                        vec![
+                            bin_op(arg_1_loc, arg_2_loc, dest_loc, "addq")
+                        ]
+                    },
+                    Op::Sub => {
+                        vec![
+                            bin_op(arg_1_loc, arg_2_loc, dest_loc, "subq")
+                        ]
+                    },
+                    Op::Mul => {
+                        vec![
+                            bin_op(arg_1_loc, arg_2_loc, dest_loc, "imulq")
+                        ]
+                    },
+                    Op::Div => {
+                        vec![
+                            format!("movq {}, %rax", arg_1_loc),
+                            format!("cqto"), // wottefok
+                            format!("idivq {}", arg_2_loc),
+                            format!("movq %rax, {}", dest_loc),    
+                        ]
+                    },
+                    Op::Mod => {
+                        vec![
+                            format!("movq {}, %rax", arg_1_loc),
+                            format!("cqto"), // wottefok
+                            format!("idivq {}", arg_2_loc),
+                            format!("movq %rdx, {}", dest_loc), // %rdx contains remainder    
+                        ]
+                    },
+                    Op::Equals => {
+                        vec![
+                            comparison(arg_1_loc, arg_2_loc, dest_loc, "sete"),
+                        ]
+                    },
+                    Op::NotEquals => {
+                        vec![
+                            comparison(arg_1_loc, arg_2_loc, dest_loc, "setne"),
+                        ]
+                    },
+                    Op::GT => {
+                        vec![
+                            comparison(arg_1_loc, arg_2_loc, dest_loc, "setg"),
+                        ]
+                    },
+                    Op::GTE => {
+                        vec![
+                            comparison(arg_1_loc, arg_2_loc, dest_loc, "setge"),
+                        ]
+                    },
+                    Op::LT => {
+                        vec![
+                            comparison(arg_1_loc, arg_2_loc, dest_loc, "setl"),
+                        ]
+                    },
+                    Op::LTE => {
+                        vec![
+                            comparison(arg_1_loc, arg_2_loc, dest_loc, "setle"),
+                        ]
+                    },
+                    _ => todo!("{:?}", op)
+                }
+            } else {
+                match op {
+                    Op::Not => {
+                        vec![
+                            format!("movq {}, %rax", arg_1_loc),
+                            format!("xorq $0x1, %rax"),
+                            format!("movq %rax, {}", dest_loc)
+                        ]
+                    },
+                    Op::Sub => {
+                        vec![
+                            format!("movq {}, %rax", arg_1_loc),
+                            format!("negq %rax"),
+                            format!("movq %rax, {}", dest_loc)
+                        ]
+                    },
+                    _ => todo!("{:?}", op)
+                }
+            }
+        },
+        Symbol::Identifier(name) => {
+            match name.as_str() {
+                "print_int" => {
+                    let arg_loc = locations.get(&args[0].name).unwrap();
+
+                    vec![
+                        format!("movq {}, %rsi", arg_loc),
+                        format!("movq $print_format, %rdi"),
+                        format!("call printf"),
+                    ]
+                },
+                "print_bool" => {
+                    let arg_loc = locations.get(&args[0].name).unwrap();
+
+                    vec![
+                        format!("movq {}, %rsi", arg_loc),
+                        format!("andq $0x1, %rsi"),
+                        format!("movq $print_format, %rdi"),
+                        format!("call printf"),
+                    ]
+                },
+                "read_int" => {
+                    vec![
+                        format!("movq $scan_format, %rdi"),
+                        format!("leaq {}, %rsi", dest_loc),
+                        format!("call scanf"),
+                        format!("cmpq $1, %rax"),
+                        format!("jne .Lend"),
+                    ]
+                },
+                _ => todo!("{}", name)
+            }
+        }
+    }.join("\n")
+}
+
+fn bin_op(arg_1: &String, arg_2: &String, dest: &String, op: &str) -> String {
+    format!("movq {}, %rax \n{} {}, %rax \nmovq %rax, {}", arg_2, op, arg_1, dest)
+}
+
+fn comparison(arg1: &String, arg2: &String, dest: &String, op: &str) -> String {
+    vec![
+        format!("xor %rax, %rax"),
+        format!("movq {}, %rdx", arg1),
+        format!("cmpq {}, %rdx", arg2),
+        format!("{} %al", op),
+        format!("movq %rax, {}", dest),
+    ].join("\n")
 }

@@ -1,3 +1,5 @@
+use std::fs::File;
+use std::os::unix::fs::PermissionsExt;
 use std::{fs, io::Write};
 use std::process::{Command, Stdio};
 
@@ -61,6 +63,13 @@ fn run_test(source: &str) {
     if !compile_output.status.success() {
         println!("{}", String::from_utf8(compile_output.stderr).unwrap());
         panic!("gcc compile exited with nonzero status")
+    }
+
+    // Set executable permission
+    if let Ok(file) = File::open("./target/temp_program") {
+        if let Ok(meta) = file.metadata() {
+            meta.permissions().set_mode(777); // yes we have the tietoturva
+        }
     }
 
     let mut process = Command::new("./target/temp_program")

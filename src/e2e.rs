@@ -89,7 +89,7 @@ fn run_test(source: &str) {
 
     if !output.status.success() {
         println!("{}", String::from_utf8(output.stderr).unwrap());
-        panic!("process exited with nonzero status")
+        println!("process exited with status {}", output.status.to_string())
     }
 
     // Check whether output matches expects

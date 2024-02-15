@@ -176,6 +176,10 @@ pub fn tokenize(source: &str) -> Vec<Token> {
         }
     }
 
+    if tokens.is_empty() {
+        panic!("Empty source")
+    }
+
     tokens
 }
 

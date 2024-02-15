@@ -1,4 +1,4 @@
-{
+
 
 var x = read_int();
 var i = 0;
@@ -11,4 +11,3 @@ while i < 10 do {
 
 print_bool(x > 5000);
 
-}

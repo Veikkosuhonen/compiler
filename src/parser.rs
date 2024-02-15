@@ -156,6 +156,15 @@ impl Parser {
         self.consume_with_value(TokenType::Keyword, value);
     }
 
+    fn consume_available_semi(&mut self) -> bool {
+        if self.current_is(";") {
+            self.consume_with_value(TokenType::Punctuation, ";");
+            true
+        } else {
+            false
+        }
+    }
+
     fn parse_boolean_literal(&mut self) -> ASTNode {
         let token = self.consume_with_values(
             TokenType::BooleanLiteral,
@@ -263,7 +272,7 @@ impl Parser {
                 });
             }
             statements.push(Box::new(statement));
-            self.consume_with_value(TokenType::Punctuation, ";");
+            self.consume_available_semi();
         }
     }
 
@@ -398,13 +407,29 @@ impl Parser {
             self.parse_expression()
         }
     }
+
+    fn parse_top_level_block(&mut self) -> ASTNode {
+        let mut statements: Vec<Box<ASTNode>> = vec![];
+
+        while self.tokens.len() - self.current_index > 0 {
+            let stmt = Box::new(self.parse_statement());
+            if self.consume_available_semi() {
+                statements.push(stmt);
+            } else {
+                return ASTNode::new(Expression::BlockExpression { statements, result: stmt })
+            }
+        }
+
+        ASTNode::new(Expression::BlockExpression { statements, result: Box::new(ASTNode::new(Expression::Unit)) })
+    }
 }
 
+/// If given an empty vec, returns an ASTNode with empty BlockExpression
 pub fn parse(tokens: Vec<Token>) -> ASTNode {
-    let mut token_list = Parser::new(tokens);
-    let expr = token_list.parse_statement();
-    if token_list.current_index < token_list.tokens.len() {
-        panic!("Unexpected token: {:?}", token_list.peek());
+    let mut parser = Parser::new(tokens);
+    let expr = parser.parse_top_level_block();
+    if parser.current_index < parser.tokens.len() {
+        panic!("Unexpected token: {:?}", parser.peek());
     }
     expr
 }

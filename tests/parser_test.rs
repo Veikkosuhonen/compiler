@@ -3,11 +3,16 @@ use compiler::parser::{parse, ASTNode, Expression};
 use compiler::tokenizer::{Token,Op,tokenize};
 
 fn p(source: &str) -> ASTNode {
-    parse(tokenize(source))
+    let node = parse(tokenize(source));
+    // Match to block
+    match node.expr {
+        Expression::BlockExpression { result,.. } => *result,
+        _ => panic!("Parse returned a non block expression")
+    }
 }
 
 #[test]
-#[should_panic(expected = "Unexpected end of file")]
+#[should_panic(expected = "Empty source")]
 fn test_empty_expression() {
     let source = "";
     let tokens: Vec<Token> = tokenize(source);
@@ -30,10 +35,13 @@ fn test_parse_unary_op() {
     let expression = parse(tokens);
     
     match expression.expr {
-        Expression::UnaryExpression { operator, .. } => {
-            assert_eq!(operator, Op::UnarySub);
+        Expression::BlockExpression { result, .. } => {
+            match result.expr {
+                Expression::UnaryExpression { operator, .. } => assert_eq!(operator, Op::UnarySub),
+                _ => panic!("Expected unary expression"),
+            }
         },
-        _ => panic!("Expected unary expression"),
+        _ => panic!("Expected block expression"),
     }
 }
 
@@ -45,32 +53,36 @@ fn test_parse_multiple_unary_op() {
     let node = parse(tokens);
     
     match node.expr {
-        Expression::UnaryExpression { operator, operand } => {
-            assert_eq!(operator, Op::Not);
-            if let Expression::UnaryExpression { operand,.. } = operand.expr {
-                if let Expression::UnaryExpression { operand,.. } = operand.expr {
-                    if let Expression::BooleanLiteral { value } = operand.expr {
-                        assert!(!value)
+        Expression::BlockExpression { result, .. } => {
+            match result.expr {
+                Expression::UnaryExpression { operator, operand } => {
+                    assert_eq!(operator, Op::Not);
+                    if let Expression::UnaryExpression { operand,.. } = operand.expr {
+                        if let Expression::UnaryExpression { operand,.. } = operand.expr {
+                            if let Expression::BooleanLiteral { value } = operand.expr {
+                                assert!(!value)
+                            } else {
+                                panic!("Perkele!")
+                            }
+                        } else {
+                            panic!("Expected unary expression")
+                        }
                     } else {
-                        panic!("Perkele!")
+                        panic!("Expected unary expression")
                     }
-                } else {
-                    panic!("Expected unary expression")
-                }
-            } else {
-                panic!("Expected unary expression")
+                },
+                _ => panic!("Expected unary expression"),
             }
         },
-        _ => panic!("Expected unary expression"),
+        _ => panic!("Expected block expression"),
     }
 }
 
 #[test]
 fn test_parse_binary_op() {
     let source = "1 + pepejam";
-    let tokens: Vec<Token> = tokenize(source);
 
-    let node = parse(tokens);
+    let node = p(source);
     
     match node.expr {
         Expression::BinaryExpression { operator, .. } => {
@@ -83,9 +95,8 @@ fn test_parse_binary_op() {
 #[test]
 fn test_associative_binary_op() {
     let source = "minttujam - 2 + 3 - 4";
-    let tokens: Vec<Token> = tokenize(source);
 
-    let node = parse(tokens);
+    let node = p(source);
     
     match node.expr {
         Expression::BinaryExpression { operator, left ,.. } => {
@@ -116,9 +127,8 @@ fn test_associative_binary_op() {
 #[test]
 fn test_precedence_binary_op() {
     let source = "1 + 2 * PI - 4";
-    let tokens: Vec<Token> = tokenize(source);
 
-    let node = parse(tokens);
+    let node = p(source);
     
     match node.expr {
         Expression::BinaryExpression { operator, left, .. } => {
@@ -155,9 +165,8 @@ fn test_precedence_binary_op() {
 #[test]
 fn test_parentheses() {
     let source = "(1 + 2) * 3";
-    let tokens: Vec<Token> = tokenize(source);
 
-    let node = parse(tokens);
+    let node = p(source);
     
     match node.expr {
         Expression::BinaryExpression { operator, left, .. } => {
@@ -182,9 +191,8 @@ fn test_parentheses() {
 #[test]
 fn test_parse_int_literal() {
     let source = "42";
-    let tokens: Vec<Token> = tokenize(source);
 
-    let node = parse(tokens);
+    let node = p(source);
     
     match node.expr {
         Expression::IntegerLiteral { value, .. } => {
@@ -197,9 +205,8 @@ fn test_parse_int_literal() {
 #[test]
 fn test_parse_identifier() {
     let source = "identifieeeer";
-    let tokens: Vec<Token> = tokenize(source);
 
-    let node = parse(tokens);
+    let node = p(source);
     
     match node.expr {
         Expression::Identifier { value, .. } => {
@@ -212,8 +219,7 @@ fn test_parse_identifier() {
 #[test]
 fn complex_test_1() {
     let source = "((never + gonna * (give - you)) / (up))";
-    let tokens: Vec<Token> = tokenize(source);
-    let node = parse(tokens);
+    let node = p(source);
     match node.expr {
         Expression::BinaryExpression { operator, .. } => {
             assert_eq!(operator, Op::Div);
@@ -224,8 +230,7 @@ fn complex_test_1() {
 
 #[test]
 fn test_complex_unary() {
-    let tokens = tokenize("2 * -2 + -2");
-    let node = parse(tokens);
+    let node = p("2 * -2 + -2");
 
     match node.expr {
         Expression::BinaryExpression { left, operator, .. } => {
@@ -251,8 +256,7 @@ fn test_complex_unary() {
 #[test]
 fn test_if_else_expression() {
     let source = "if 1 then 2 else 3";
-    let tokens: Vec<Token> = tokenize(source);
-    let node = parse(tokens);
+    let node = p(source);
     match node.expr {
         Expression::IfExpression { condition, then_branch, else_branch } => {
             match condition.expr {
@@ -286,8 +290,7 @@ fn test_if_else_expression() {
 #[test]
 fn test_if_expression() {
     let source = "if 1 then 2";
-    let tokens: Vec<Token> = tokenize(source);
-    let node = parse(tokens);
+    let node = p(source);
     match node.expr {
         Expression::IfExpression { condition, then_branch, else_branch } => {
             match condition.expr {
@@ -314,8 +317,7 @@ fn test_if_expression() {
 #[test]
 fn test_complex_if_expression() {
     let source = "1 + (if 1 then 2 else 3) * 2";
-    let tokens: Vec<Token> = tokenize(source);
-    let node = parse(tokens);
+    let node = p(source);
     match node.expr {
         Expression::BinaryExpression { right , ..} => {
             match right.expr {
@@ -337,8 +339,7 @@ fn test_complex_if_expression() {
 #[test]
 fn test_boolean_literal() {
     let source = "true";
-    let tokens = tokenize(source);
-    let node = parse(tokens);
+    let node = p(source);
     match node.expr {
         Expression::BooleanLiteral { value } => {
             assert_eq!(value, true)
@@ -350,8 +351,7 @@ fn test_boolean_literal() {
 #[test]
 fn test_function_call_without_args() {
     let source = "f()";
-    let tokens = tokenize(source);
-    let node = parse(tokens);
+    let node = p(source);
     match node.expr {
         Expression::CallExpression { arguments, callee } => {
             match callee.expr {
@@ -369,8 +369,7 @@ fn test_function_call_without_args() {
 #[test]
 fn test_function_call_with_arg() {
     let source = "f(1 + 1)";
-    let tokens = tokenize(source);
-    let node = parse(tokens);
+    let node = p(source);
     match node.expr {
         Expression::CallExpression { arguments, callee } => {
             match callee.expr {
@@ -388,8 +387,7 @@ fn test_function_call_with_arg() {
 #[test]
 fn test_function_call_with_args() {
     let source = "f(1, 2, 3)";
-    let tokens = tokenize(source);
-    let node = parse(tokens);
+    let node = p(source);
     match node.expr {
         Expression::CallExpression { arguments, callee } => {
             match callee.expr {
@@ -407,8 +405,7 @@ fn test_function_call_with_args() {
 #[test]
 fn test_assignment() {
     let source = "x = 42 + 58";
-    let tokens = tokenize(source);
-    let node = parse(tokens);
+    let node = p(source);
     if let Expression::AssignmentExpression { left, right } = node.expr {
         assert!(matches!(left.expr, Expression::Identifier { .. }));
         assert!(matches!(right.expr, Expression::BinaryExpression { .. }));
@@ -426,26 +423,23 @@ fn test_block() {
 #[test]
 fn test_example_blocks() {
     p("
-    {
-        f(a);
-        x = y;
-        f(x)
-    }");
+    f(a);
+    x = y;
+    f(x)
+    ");
 
     p("
-    {
-        if f() then { // <-- the real example had a while loop, but its not yet implemented
-            x = 10;
-            y = if g(x) then {
-                x = x + 1;
-                x
-            } else {
-                g(x)
-            }; // <-- (this semicolon will become optional later)
-            g(y);
-        }; // <------ (this too)
-        123
-    }
+    if f() then {
+        x = 10;
+        y = if g(x) then {
+            x = x + 1;
+            x
+        } else {
+            g(x)
+        }; // <-- (this semicolon will become optional later)
+        g(y);
+    }; // <------ (this too)
+    123
     ");
 }
 
@@ -460,10 +454,8 @@ fn test_variable_declaration() {
 #[test]
 fn test_many_variable_declarations() {
     let n = p("
-        {
-            var x = 42;
-            var x = if false then { never() } else { always() };
-        }
+        var x = 42;
+        var x = if false then { never() } else { always() }
     ");
-    assert!(matches!(n.expr, Expression::BlockExpression { .. }))
+    assert!(matches!(n.expr, Expression::VariableDeclaration { .. }))
 }

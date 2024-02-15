@@ -289,12 +289,17 @@ mod tests {
         let res = t("{ var x = 789 }");
         // ASTNode { expr: BlockExpression { statements: [], result: ASTNode { expr: VariableDeclaration { id: ASTNode { expr: Identifier { value: "x" } }, init: ASTNode { expr: IntegerLiteral { value: 789 } } } } } }
         assert_eq!(Type::Unit, res.node_type);
+
         if let Expression::BlockExpression { result,.. } = res.expr {
-            if let Expression::VariableDeclaration { id, init } = result.expr {
-                assert_eq!(id.node_type, Type::Integer);
-                assert_eq!(init.node_type, Type::Integer);
+            if let Expression::BlockExpression { result,.. } = result.expr {
+                if let Expression::VariableDeclaration { id, init } = result.expr {
+                    assert_eq!(id.node_type, Type::Integer);
+                    assert_eq!(init.node_type, Type::Integer);
+                } else {
+                    panic!("Expected VariableDec, got {:?}", result.expr)
+                }
             } else {
-                panic!("Expected VariableDec, got {:?}", result.expr)
+                panic!("Expected Block, got {:?}", result.expr)
             }
         } else {
             panic!("Expected Block, got {:?}", res.expr)
@@ -330,13 +335,17 @@ mod tests {
         ");
 
         assert_eq!(node.node_type, Type::Boolean);
-        if let Expression::IfExpression { condition, .. } = node.expr {
-            assert_eq!(condition.node_type, Type::Boolean);
-            if let Expression::BinaryExpression { left, right, .. } = condition.expr {
-                assert_eq!(left.node_type, Type::Integer);
-                assert_eq!(right.node_type, Type::Integer);
+        if let Expression::BlockExpression { result,.. } = node.expr {
+            if let Expression::IfExpression { condition, .. } = result.expr {
+                assert_eq!(condition.node_type, Type::Boolean);
+                if let Expression::BinaryExpression { left, right, .. } = condition.expr {
+                    assert_eq!(left.node_type, Type::Integer);
+                    assert_eq!(right.node_type, Type::Integer);
+                } else {
+                    panic!("Fakd")
+                }
             } else {
-                panic!("Fakd")
+                panic!("Wrong, got {:?}", result.expr)
             }
         } else {
             panic!("Wrong, got {:?}", node.expr)

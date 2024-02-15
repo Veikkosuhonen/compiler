@@ -2,12 +2,12 @@
 This amazing program demonstrates the basic syntax of the Chiken programming language
 */
 
-{
-    if 1 == 2 then {
-        f();
-    } else {
-        2 ** 5 + 10
-    }
+
+if 1 == 2 then {
+    f();
+} else {
+    2 ** 5 + 10
 }
+
 
 // Evaluates to 42

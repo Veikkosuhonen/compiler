@@ -9,6 +9,42 @@ pub struct FunctionType {
     pub return_type: Type,
 }
 
+impl FunctionType {
+    fn check_arg_count(&self, argument_expr: &Vec<&Box<TypedASTNode>>) {
+        if self.param_types.len() != argument_expr.len() {
+            panic!("Wrong number of arguments, expected {} but got {}", self.param_types.len(), argument_expr.len())
+        }
+    }
+
+    fn typecheck_call(&self, argument_expr: &Vec<&Box<TypedASTNode>>) -> Type {
+        self.check_arg_count(&argument_expr);
+    
+        for (idx, param_type) in self.param_types.iter().enumerate() {
+            let arg = &argument_expr[idx];
+            if arg.node_type != *param_type {
+                panic!("Invalid argument type at index {}, expected {:?} but got {:?}", idx, param_type, arg.node_type)
+            }
+        }
+    
+        self.return_type.clone()
+    }
+
+    fn typecheck_operator_call(&self, op: Op, argument_expr: &Vec<&Box<TypedASTNode>>) -> Type {
+        match op {
+            Op::Equals | Op::NotEquals => {
+                self.check_arg_count(argument_expr);
+                let arg_type = argument_expr.get(0).unwrap();
+                let arg_2_type = argument_expr.get(1).unwrap();
+                if arg_type.node_type != arg_2_type.node_type {
+                    panic!("Argument types for '{}' do not match: {:?} != {:?}", op.to_string(), arg_type, arg_2_type);
+                }
+                self.return_type.clone()
+            },
+            _ => self.typecheck_call(argument_expr)
+        }
+    }
+}
+
 #[derive(Debug, Clone, Default, PartialEq)]
 pub enum Type {
     Integer,
@@ -189,10 +225,7 @@ fn typecheck_binary_op(
     if let Type::Function(op_function) = sym_table.get(&mut Symbol::Operator(operator)) {
         let left  = Box::new(typecheck(*left_expr, sym_table));
         let right = Box::new(typecheck(*right_expr, sym_table));
-        let node_type = typecheck_call(
-            op_function, 
-            vec![&left, &right]
-        );
+        let node_type = op_function.typecheck_operator_call(operator, &vec![&left, &right]);
         TypedASTNode { expr: Expression::BinaryExpression { left, operator, right }, node_type }
     } else {
         panic!("Undefined operator {:?}", operator)
@@ -206,10 +239,7 @@ fn typecheck_unary_op(
 ) -> TypedASTNode {
     if let Type::Function(op_function) = sym_table.get(&mut Symbol::Operator(operator)) {
         let operand = Box::new(typecheck(*operand, sym_table));
-        let node_type = typecheck_call(
-            op_function, 
-            vec![&operand]
-        );
+        let node_type = op_function.typecheck_operator_call(operator, &vec![&operand]);
         TypedASTNode { expr: Expression::UnaryExpression { operand, operator }, node_type }
     } else {
         panic!("Undefined operator {:?}", operator)
@@ -229,9 +259,8 @@ fn typecheck_call_expression(
                 let arg = Box::new(typecheck(*expr, sym_table));
                 typed_argument_expr.push(arg);
             }
-            let node_type = typecheck_call(
-                called_function, 
-                typed_argument_expr.iter().collect()
+            let node_type = called_function.typecheck_call(
+                &typed_argument_expr.iter().collect()
             );
             TypedASTNode {
                 expr: Expression::CallExpression { 
@@ -246,24 +275,6 @@ fn typecheck_call_expression(
     } else {
         panic!("Callee of a call expression must be an identifier");
     }
-}
-
-fn typecheck_call(
-    callee: Box<FunctionType>,
-    argument_expr: Vec<&Box<TypedASTNode>>
-) -> Type {
-    if callee.param_types.len() != argument_expr.len() {
-        panic!("Wrong number of arguments, expected {} but got {}", callee.param_types.len(), argument_expr.len())
-    }
-
-    for (idx, param_type) in callee.param_types.iter().enumerate() {
-        let arg = &argument_expr[idx];
-        if arg.node_type != *param_type {
-            panic!("Invalid argument type at index {}, expected {:?} but got {:?}", idx, param_type, arg.node_type)
-        }
-    }
-
-    callee.return_type
 }
 
 #[cfg(test)]
@@ -370,5 +381,17 @@ mod tests {
         ");
 
         assert_eq!(node.node_type, Type::Integer);
+    }
+
+    #[test]
+    fn compare_eq_booleans() {
+        let node = t("false == true");
+        assert_eq!(node.node_type, Type::Boolean);
+    }
+
+    #[test]
+    fn compare_eq_integer() {
+        let node = t("123 == 123");
+        assert_eq!(node.node_type, Type::Boolean);
     }
 }

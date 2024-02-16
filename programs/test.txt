@@ -1,0 +1,2 @@
+print_bool(123 == 123);
+print_bool(123 != 123);

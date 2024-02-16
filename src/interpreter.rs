@@ -364,4 +364,10 @@ mod tests {
         ");
         assert_eq!(42, res2.try_into().expect("Not an integer!"));
     }
+
+    #[test]
+    fn compare_booleans() {
+        let res = i("true == false");
+        assert!(matches!(res, Value::Boolean(false)));
+    }
 }

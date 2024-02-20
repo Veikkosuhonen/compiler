@@ -1,7 +1,7 @@
 use std::rc::Rc;
 
 use crate::sym_table::{SymTable, Symbol};
-use crate::parser::{ASTNode, Expression};
+use crate::parser::{ASTNode, Expression, Module};
 use crate::tokenizer::Op;
 use crate::builtin_functions::*;
 
@@ -187,8 +187,8 @@ fn get_toplevel_sym_table() -> Box<SymTable<Value>> {
     sym_table
 }
 
-pub fn interpret_program(node: &ASTNode) -> Value {
-    interpret(node, &mut get_toplevel_sym_table())
+pub fn interpret_program(module: &Module) -> Value {
+    interpret(&module.top_ast, &mut get_toplevel_sym_table())
 }
 
 #[cfg(test)]
@@ -199,8 +199,8 @@ mod tests {
 
     fn i(src: &str) -> Value {
         let tokens: Vec<Token> = tokenize(src);
-        let expression = parse(tokens);
-        interpret_program(&expression)
+        let module = parse(tokens);
+        interpret_program(&module)
     }
 
     #[test]

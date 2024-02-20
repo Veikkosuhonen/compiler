@@ -5,7 +5,7 @@ use compiler::tokenizer::{Token,Op,tokenize};
 fn p(source: &str) -> ASTNode {
     let node = parse(tokenize(source));
     // Match to block
-    match node.expr {
+    match node.top_ast.expr {
         Expression::BlockExpression { result,.. } => *result,
         _ => panic!("Parse returned a non block expression")
     }
@@ -30,51 +30,36 @@ fn test_invalid_source() {
 #[test]
 fn test_parse_unary_op() {
     let source = "-1";
-    let tokens: Vec<Token> = tokenize(source);
-
-    let expression = parse(tokens);
-    
+    let expression = p(source);
     match expression.expr {
-        Expression::BlockExpression { result, .. } => {
-            match result.expr {
-                Expression::UnaryExpression { operator, .. } => assert_eq!(operator, Op::UnarySub),
-                _ => panic!("Expected unary expression"),
-            }
-        },
-        _ => panic!("Expected block expression"),
+        Expression::UnaryExpression { operator, .. } => assert_eq!(operator, Op::UnarySub),
+        _ => panic!("Expected unary expression"),
     }
 }
 
 #[test]
 fn test_parse_multiple_unary_op() {
     let source = "not not not false";
-    let tokens: Vec<Token> = tokenize(source);
-
-    let node = parse(tokens);
+    let node = p(source);
     
     match node.expr {
-        Expression::BlockExpression { result, .. } => {
-            match result.expr {
-                Expression::UnaryExpression { operator, operand } => {
-                    assert_eq!(operator, Op::Not);
-                    if let Expression::UnaryExpression { operand,.. } = operand.expr {
-                        if let Expression::UnaryExpression { operand,.. } = operand.expr {
-                            if let Expression::BooleanLiteral { value } = operand.expr {
-                                assert!(!value)
-                            } else {
-                                panic!("Perkele!")
-                            }
-                        } else {
-                            panic!("Expected unary expression")
-                        }
+        Expression::UnaryExpression { operator, operand } => {
+            assert_eq!(operator, Op::Not);
+            if let Expression::UnaryExpression { operand,.. } = operand.expr {
+                if let Expression::UnaryExpression { operand,.. } = operand.expr {
+                    if let Expression::BooleanLiteral { value } = operand.expr {
+                        assert!(!value)
                     } else {
-                        panic!("Expected unary expression")
+                        panic!("Perkele!")
                     }
-                },
-                _ => panic!("Expected unary expression"),
+                } else {
+                    panic!("Expected unary expression")
+                }
+            } else {
+                panic!("Expected unary expression")
             }
         },
-        _ => panic!("Expected block expression"),
+        _ => panic!("Expected unary expression"),
     }
 }
 

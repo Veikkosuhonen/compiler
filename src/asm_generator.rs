@@ -2,7 +2,9 @@ use std::collections::HashMap;
 
 use crate::{ir_generator::{IREntry, IRVar, Instruction}, sym_table::Symbol, tokenizer::Op};
 
-pub fn generate_asm(ir: Vec<IREntry>) -> String {
+pub fn generate_asm(fun_name: &str, ir: HashMap<String, Vec<IREntry>>) -> String {
+
+    let fun_ir = ir.get(fun_name).unwrap();
 
     let mut locations = HashMap::new();
     let mut next_stack_loc = -8;
@@ -14,7 +16,7 @@ pub fn generate_asm(ir: Vec<IREntry>) -> String {
         }
     };
 
-    for entry in &ir {
+    for entry in fun_ir {
         match &entry.instruction {
             Instruction::LoadIntConst { dest, .. } => add_var(&dest.name),
             Instruction::LoadBoolConst { dest,.. } => add_var(&dest.name),
@@ -34,7 +36,7 @@ pub fn generate_asm(ir: Vec<IREntry>) -> String {
 
     let locals_size = 8 * locations.len();
 
-    let function_code = ir.iter().map(|entry| {
+    let function_code = fun_ir.iter().map(|entry| {
 
         let asm = match &entry.instruction {
             Instruction::LoadIntConst { value, dest } => {

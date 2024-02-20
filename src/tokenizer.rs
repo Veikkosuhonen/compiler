@@ -108,7 +108,7 @@ lazy_static! {
     static ref BOOLEAN_LITERAL_REGEX: Regex = Regex::new(r"^(true|false)").unwrap();
     static ref OPERATOR_REGEX: Regex = Regex::new(r"^(==|!=|<=|>=|\+|-|\*?\*|/|%|=|<|>|and|or|not)").unwrap();
     static ref PUNCTUATION_REGEX: Regex = Regex::new(r"^(\(|\)|\{|\}|,|;|:)").unwrap();
-    static ref KEYWORD_REGEX: Regex = Regex::new(r"^(while|do|if|then|else|var)").unwrap();
+    static ref KEYWORD_REGEX: Regex = Regex::new(r"^(while|do|if|then|else|var|fun)").unwrap();
 
     // Order is significant here. The first match is the one that will be used.
     static ref TOKEN_REGEX_TO_TYPE: Vec<(Regex, TokenType)> = vec![

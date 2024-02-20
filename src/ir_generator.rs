@@ -83,11 +83,11 @@ impl IREntry {
     }
 }
 
-pub fn generate_ir_code(ir: Vec<IREntry>) -> String {
-    ir.iter().map(|ir| ir.to_string()).collect::<Vec<String>>().join("\n")
+pub fn generate_ir_code(ir: HashMap<String, Vec<IREntry>>) -> String {
+    ir.iter().flat_map(|(_, ir)| ir).map(|ir| { ir.to_string() }).collect::<Vec<String>>().join("\n")
 }
 
-pub fn generate_ir(node: TypedASTNode) -> Vec<IREntry> {
+pub fn generate_ir(node: TypedASTNode) -> HashMap<String, Vec<IREntry>> {
     let mut instructions: Vec<IREntry> = vec![];
     instructions.push(IREntry { instruction: Instruction::Label(String::from("start")) });
 
@@ -98,7 +98,12 @@ pub fn generate_ir(node: TypedASTNode) -> Vec<IREntry> {
 
     generate(node, &mut instructions, &mut var_table);
     instructions.push(IREntry { instruction: Instruction::Return });
-    instructions
+
+    let mut module_functions: HashMap<String, Vec<IREntry>> = HashMap::new();
+
+    module_functions.insert(String::from("main"), instructions);
+
+    module_functions
 }
 
 fn generate(node: TypedASTNode, instructions: &mut Vec<IREntry>, var_table: &mut IRVarTable) -> IRVar {
@@ -266,7 +271,7 @@ mod tests {
 
     use super::*;
 
-    fn i(src: &str) -> Vec<IREntry> {
+    fn i(src: &str) -> HashMap<String, Vec<IREntry>> {
         let a = parse_source(src.to_string());
         let t = typecheck_program(a);
         generate_ir(t)
@@ -275,15 +280,15 @@ mod tests {
     #[test]
     fn literals() {
         let ir = i("789");
-        assert!(matches!(&ir[1].instruction, Instruction::LoadIntConst { value: 789, .. }));
+        assert!(matches!(&ir.get("main").unwrap()[1].instruction, Instruction::LoadIntConst { value: 789, .. }));
         let ir2 = i("true");
-        assert!(matches!(&ir2[1].instruction, Instruction::LoadBoolConst { value: true, .. }))
+        assert!(matches!(&ir2.get("main").unwrap()[1].instruction, Instruction::LoadBoolConst { value: true, .. }))
     }
 
     #[test]
     fn var_declaration() {
         let ir = i("{ var x = 789 }");
         println!("{:?}", ir);
-        assert!(matches!(&ir[1].instruction, Instruction::LoadIntConst { value: 789, .. }));
+        assert!(matches!(&ir.get("main").unwrap()[1].instruction, Instruction::LoadIntConst { value: 789, .. }));
     }
 }

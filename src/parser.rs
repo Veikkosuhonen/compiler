@@ -1,4 +1,4 @@
-use crate::tokenizer::{Op, SourceLocation, Token, TokenType};
+use crate::{interpreter::UserDefinedFunction, tokenizer::{Op, SourceLocation, Token, TokenType}};
 use lazy_static::lazy_static;
 
 lazy_static! {
@@ -71,6 +71,11 @@ pub enum Expression<T> {
         callee: Box<T>,
         arguments: Vec<Box<T>>,
     },
+}
+
+pub struct Module {
+    pub functions: Vec<UserDefinedFunction>,
+    pub top_ast: ASTNode,
 }
 
 struct Parser {
@@ -425,11 +430,14 @@ impl Parser {
 }
 
 /// If given an empty vec, returns an ASTNode with empty BlockExpression
-pub fn parse(tokens: Vec<Token>) -> ASTNode {
+pub fn parse(tokens: Vec<Token>) -> Module {
     let mut parser = Parser::new(tokens);
     let expr = parser.parse_top_level_block();
     if parser.current_index < parser.tokens.len() {
         panic!("Unexpected token: {:?}", parser.peek());
     }
-    expr
+    Module {
+        top_ast: expr,
+        functions: vec![],
+    }
 }

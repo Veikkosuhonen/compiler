@@ -1,6 +1,6 @@
 use crate::builtin_functions::get_builtin_function_symbol_type_mappings;
 use crate::sym_table::{SymTable, Symbol};
-use crate::parser::{ASTNode, Expression};
+use crate::parser::{ASTNode, Expression, Module};
 use crate::tokenizer::Op;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -59,8 +59,8 @@ pub struct TypedASTNode {
     pub node_type: Type,
 }
 
-pub fn typecheck_program(node: ASTNode) -> TypedASTNode {
-    typecheck(node, &mut get_toplevel_sym_table())
+pub fn typecheck_program(module: Module) -> TypedASTNode {
+    typecheck(module.top_ast, &mut get_toplevel_sym_table())
 }
 
 fn get_toplevel_sym_table() -> Box<SymTable<Type>> {
@@ -285,8 +285,8 @@ mod tests {
 
     fn t(src: &str) -> TypedASTNode {
         let tokens: Vec<Token> = tokenize(src);
-        let expression = parse(tokens);
-        typecheck_program(expression)
+        let module = parse(tokens);
+        typecheck_program(module)
     }
 
     #[test]

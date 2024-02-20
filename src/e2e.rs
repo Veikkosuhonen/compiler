@@ -47,7 +47,7 @@ fn run_test(source: &str) {
     let node = parse_source(program_source);
     let typed_ast = typecheck_program(node);
     let ir = generate_ir(typed_ast);
-    let asm = generate_asm(ir);
+    let asm = generate_asm("main", ir);
 
     if fs::write("./target/temp_asm.s", asm).is_err() {
         panic!("Failed to write to temp file ./target/temp_asm.s")

@@ -9,8 +9,9 @@ use crate::builtin_functions::*;
 #[derive(Debug)]
 #[allow(dead_code)]
 pub struct UserDefinedFunction {
-    body: Box<Expression<ASTNode>>, // This should only be a BlockExpression
-    params: Vec<Box<Expression<ASTNode>>>, // This should only be a vec of Identifiers
+    pub id: Box<ASTNode>,
+    pub body: Box<ASTNode>, // This should only be a BlockExpression
+    pub params: Vec<Box<ASTNode>>, // This should only be a vec of Identifiers
 }
 
 #[derive(Debug, Clone)]

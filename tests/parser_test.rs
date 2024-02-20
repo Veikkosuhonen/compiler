@@ -1,5 +1,6 @@
 
-use compiler::parser::{parse, ASTNode, Expression};
+use compiler::interpreter::UserDefinedFunction;
+use compiler::parser::{parse, ASTNode, Expression, Module};
 use compiler::tokenizer::{Token,Op,tokenize};
 
 fn p(source: &str) -> ASTNode {
@@ -9,6 +10,10 @@ fn p(source: &str) -> ASTNode {
         Expression::BlockExpression { result,.. } => *result,
         _ => panic!("Parse returned a non block expression")
     }
+}
+
+fn parse_module(source: &str) -> Module {
+    parse(tokenize(source))
 }
 
 #[test]
@@ -443,4 +448,37 @@ fn test_many_variable_declarations() {
         var x = if false then { never() } else { always() }
     ");
     assert!(matches!(n.expr, Expression::VariableDeclaration { .. }))
+}
+
+#[test]
+fn function_definition() {
+    let module = parse_module("
+        var x = 313;
+    ");
+    assert_eq!(module.functions.len(), 0);
+
+    let module2 = parse_module("
+        var x = 313;
+        fun f() {
+            313
+        }
+    ");
+    assert_eq!(module2.functions.len(), 1);
+
+    let fun = module2.functions.get(0).unwrap();
+    if let Expression::Identifier { value } = &fun.id.expr {
+        assert_eq!(value, "f");
+    } else {
+        panic!("Function id is not Identifier")
+    }
+
+    assert_eq!(fun.params.len(), 0);
+
+    if let Expression::BlockExpression { result, .. } = &fun.body.expr {
+        if let Expression::IntegerLiteral { value } = result.expr {
+            assert_eq!(value, 313)
+        }
+    } else {
+        panic!("Function body is not Block")
+    }
 }

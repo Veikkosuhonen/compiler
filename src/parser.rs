@@ -73,6 +73,7 @@ pub enum Expression<T> {
     },
 }
 
+#[derive(Debug)]
 pub struct Module {
     pub functions: Vec<UserDefinedFunction>,
     pub top_ast: ASTNode,
@@ -413,31 +414,69 @@ impl Parser {
         }
     }
 
-    fn parse_top_level_block(&mut self) -> ASTNode {
+    fn parse_function_definition(&mut self) -> UserDefinedFunction {
+        self.consume_keyword("fun");
+        let id = self.parse_identifier();
+    
+        self.consume_left_paren();
+        let mut params: Vec<Box<ASTNode>> = vec![];
+        if !self.current_is(")") {
+            loop {
+                let arg = self.parse_expression();
+                params.push(Box::new(arg));
+                if self.current_is(")") {
+                    break;
+                }
+                self.consume_comma();
+            }
+        }
+        self.consume_right_paren();
+
+        let body = self.parse_block_expression();
+
+        UserDefinedFunction {
+            id: Box::new(id),
+            body: Box::new(body),
+            params,
+        }
+    }
+
+    fn parse_top_level_block(&mut self) -> (ASTNode, Vec<UserDefinedFunction>) {
         let mut statements: Vec<Box<ASTNode>> = vec![];
+        let mut result = Box::new(ASTNode::new(Expression::Unit));
+        let mut functions: Vec<UserDefinedFunction> = vec![];
 
         while self.tokens.len() - self.current_index > 0 {
-            let stmt = Box::new(self.parse_statement());
-            if self.consume_available_semi() {
-                statements.push(stmt);
+            if self.current_is("fun") {
+                let fun = self.parse_function_definition();
+                functions.push(fun);
             } else {
-                return ASTNode::new(Expression::BlockExpression { statements, result: stmt })
+                let stmt = Box::new(self.parse_statement());
+                if self.consume_available_semi() {
+                    statements.push(stmt);
+                } else {
+                    result = stmt;
+                    break;
+                }
             }
         }
 
-        ASTNode::new(Expression::BlockExpression { statements, result: Box::new(ASTNode::new(Expression::Unit)) })
+        (
+            ASTNode::new(Expression::BlockExpression { statements, result }),
+            functions
+        )
     }
 }
 
 /// If given an empty vec, returns an ASTNode with empty BlockExpression
 pub fn parse(tokens: Vec<Token>) -> Module {
     let mut parser = Parser::new(tokens);
-    let expr = parser.parse_top_level_block();
+    let (expr, functions) = parser.parse_top_level_block();
     if parser.current_index < parser.tokens.len() {
         panic!("Unexpected token: {:?}", parser.peek());
     }
     Module {
         top_ast: expr,
-        functions: vec![],
+        functions,
     }
 }

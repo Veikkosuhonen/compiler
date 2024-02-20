@@ -134,7 +134,7 @@ fn generate(node: TypedASTNode, instructions: &mut Vec<IREntry>, var_table: &mut
         Expression::Identifier { value } => {
             var_table.get(&Symbol::Identifier(value))
         },
-        Expression::VariableDeclaration { id, init } => {
+        Expression::VariableDeclaration { id, init,.. } => {
             let init = generate(*init, instructions, var_table);
             if let Expression::Identifier { value } = id.expr {
                 var_table.vars.insert(Symbol::Identifier(value), init.clone());

@@ -47,6 +47,7 @@ pub enum Expression<T> {
     },
     VariableDeclaration {
         id: Box<T>,
+        type_annotation: Option<Box<T>>,
         init: Box<T>,
     },
     BinaryExpression {
@@ -398,10 +399,16 @@ impl Parser {
     fn parse_variable_declaration(&mut self) -> ASTNode {
         self.consume_with_value(TokenType::Keyword, "var");
         let id = self.parse_identifier();
+        let mut type_annotation = None;
+        if self.current_is(":") {
+            self.consume_with_value(TokenType::Punctuation, ":");
+            type_annotation = Some(self.parse_identifier());
+        }
         self.consume_with_value(TokenType::Operator, "=");
         let init = self.parse_expression();
         ASTNode::new(Expression::VariableDeclaration {
             id: Box::new(id),
+            type_annotation: type_annotation.map(Box::new),
             init: Box::new(init),
         })
     }

@@ -481,3 +481,24 @@ fn function_definition() {
         panic!("Function body is not Block")
     }
 }
+
+
+#[test]
+fn type_annotation() {
+    let node = p("var x: Int = 313");
+    if let Expression::VariableDeclaration { id, type_annotation, .. } = &node.expr {
+        if let Expression::Identifier { value } = &id.expr {
+            assert_eq!(value, "x");
+        } else {
+            panic!("Id is not Identifier")
+        }
+        let type_annotation = type_annotation.as_ref().unwrap();
+        if let Expression::Identifier { value } = &type_annotation.expr {
+            assert_eq!(value, "Int");
+        } else {
+            panic!("Type annotation is not Identifier")
+        }
+    } else {
+        panic!("Top level expression is not VariableDeclaration ({:?})", node.expr)
+    }
+}

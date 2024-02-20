@@ -185,10 +185,9 @@ pub fn tokenize(source: &str) -> Vec<Token> {
 
 #[cfg(test)]
 mod tests {
-    /*
         use super::*;
 
-        #[test]
+        /*#[test]
         fn test_keywords_integers_and_literals() {
             let source = "
     if 3 wowowo
@@ -309,21 +308,33 @@ mod tests {
         } else {
             panic!("Last token not punctuation!");
         }
-    }
+    }*/
 
     #[test]
     fn test_function_call() {
         let source = "f(1, 2, 3)";
         let tokens = tokenize(source);
         assert_eq!(tokens.len(), 8);
-        assert!(matches!(tokens[0], Token::Identifier     {..}));
-        assert!(matches!(tokens[1], Token::Punctuation    {..}));
-        assert!(matches!(tokens[2], Token::IntegerLiteral {..}));
-        assert!(matches!(tokens[3], Token::Punctuation    {..}));
-        assert!(matches!(tokens[4], Token::IntegerLiteral {..}));
-        assert!(matches!(tokens[5], Token::Punctuation    {..}));
-        assert!(matches!(tokens[6], Token::IntegerLiteral {..}));
-        assert!(matches!(tokens[7], Token::Punctuation    {..}));
+        assert!(matches!(tokens[0].token_type, TokenType::Identifier     {..}));
+        assert!(matches!(tokens[1].token_type, TokenType::Punctuation    {..}));
+        assert!(matches!(tokens[2].token_type, TokenType::IntegerLiteral {..}));
+        assert!(matches!(tokens[3].token_type, TokenType::Punctuation    {..}));
+        assert!(matches!(tokens[4].token_type, TokenType::IntegerLiteral {..}));
+        assert!(matches!(tokens[5].token_type, TokenType::Punctuation    {..}));
+        assert!(matches!(tokens[6].token_type, TokenType::IntegerLiteral {..}));
+        assert!(matches!(tokens[7].token_type, TokenType::Punctuation    {..}));
     }
-    */
+
+    #[test]
+    fn test_type_definition() {
+        let source = "var x: Int = 1";
+        let tokens = tokenize(source);
+        assert_eq!(tokens.len(), 6);
+        assert!(matches!(tokens[0].token_type, TokenType::Keyword        {..}));
+        assert!(matches!(tokens[1].token_type, TokenType::Identifier     {..}));
+        assert!(matches!(tokens[2].token_type, TokenType::Punctuation    {..}));
+        assert!(matches!(tokens[3].token_type, TokenType::Identifier     {..}));
+        assert!(matches!(tokens[4].token_type, TokenType::Operator       {..}));
+        assert!(matches!(tokens[5].token_type, TokenType::IntegerLiteral {..}));
+    }
 }

@@ -192,7 +192,7 @@ fn interpret(node: &ASTNode, sym_table: &mut Box<SymTable<Value>>) -> Value {
                 panic!("Left side of an assignment must be an identifier");
             }
         },
-        Expression::VariableDeclaration { id, init } => {
+        Expression::VariableDeclaration { id, init,.. } => {
             if let Expression::Identifier { value } = &id.expr {
                 let init_value = interpret(&init, sym_table);
                 sym_table.symbols.insert(Symbol::Identifier(value.clone()), init_value);

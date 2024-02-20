@@ -65,10 +65,15 @@ pub fn typecheck_program(module: Module) -> TypedASTNode {
 
 fn get_toplevel_sym_table() -> Box<SymTable<Type>> {
     let mut sym_table = SymTable::new(None);
+
     let builtins = get_builtin_function_symbol_type_mappings();
     for (symbol, val) in builtins {
         sym_table.symbols.insert(symbol, val);
     }
+
+    sym_table.symbols.insert(Symbol::Identifier("Int".to_string()), Type::Integer);
+    sym_table.symbols.insert(Symbol::Identifier("Bool".to_string()), Type::Boolean);
+
     sym_table
 }
 
@@ -96,8 +101,8 @@ fn typecheck(node: ASTNode, sym_table: &mut Box<SymTable<Type>>) -> TypedASTNode
         Expression::AssignmentExpression { left, right } => {
             typecheck_assignment_expression(left, right, sym_table)
         },
-        Expression::VariableDeclaration { id, init } => {
-            typecheck_variable_declaration(id, init, sym_table)
+        Expression::VariableDeclaration { id, init, type_annotation } => {
+            typecheck_variable_declaration(id, init, type_annotation, sym_table)
         },
         Expression::CallExpression { callee, arguments } => {
             typecheck_call_expression(callee, arguments, sym_table)
@@ -198,16 +203,28 @@ fn typecheck_block_expression(
 
 fn typecheck_variable_declaration(
     id: Box<ASTNode>, 
-    init: Box<ASTNode>, 
+    init: Box<ASTNode>,
+    type_annotation: Option<Box<ASTNode>>,
     sym_table: &mut Box<SymTable<Type>>
 )   -> TypedASTNode {
     if let Expression::Identifier { value } = id.expr {
         let init = typecheck(*init, sym_table);
+        if let Some(type_annotation) = type_annotation {
+            let type_name = match type_annotation.expr {
+                Expression::Identifier { value } => value,
+                _ => panic!("Type annotation must be an identifier")
+            };
+            let annotated_type = sym_table.get(&Symbol::Identifier(type_name));
+            if init.node_type != annotated_type {
+                panic!("Type annotation and init expression types differ: {:?} != {:?}", annotated_type, init.node_type)
+            }
+        }
         sym_table.symbols.insert(Symbol::Identifier(value.clone()), init.node_type.clone());
         TypedASTNode { 
             expr: Expression::VariableDeclaration { 
                 id: Box::new(TypedASTNode { expr: Expression::Identifier { value }, node_type: init.node_type.clone() }), 
                 init: Box::new(init),
+                type_annotation: None,
             }, 
             node_type: Type::Unit
         }
@@ -303,7 +320,7 @@ mod tests {
 
         if let Expression::BlockExpression { result,.. } = res.expr {
             if let Expression::BlockExpression { result,.. } = result.expr {
-                if let Expression::VariableDeclaration { id, init } = result.expr {
+                if let Expression::VariableDeclaration { id, init,.. } = result.expr {
                     assert_eq!(id.node_type, Type::Integer);
                     assert_eq!(init.node_type, Type::Integer);
                 } else {
@@ -393,5 +410,23 @@ mod tests {
     fn compare_eq_integer() {
         let node = t("123 == 123");
         assert_eq!(node.node_type, Type::Boolean);
+    }
+
+    #[test]
+    fn type_annotation() {
+        let node = t("var x: Int = 123");
+        assert_eq!(node.node_type, Type::Unit);
+    }
+
+    #[test]
+    #[should_panic(expected="Type annotation and init expression types differ: Integer != Boolean")]
+    fn type_annotation_int_error() {
+        t("var x: Int = false");
+    }
+
+    #[test]
+    #[should_panic(expected="Type annotation and init expression types differ: Boolean != Integer")]
+    fn type_annotation_bool_error() {
+        t("var x: Bool = 1");
     }
 }

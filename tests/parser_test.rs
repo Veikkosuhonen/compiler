@@ -1,5 +1,4 @@
 
-use compiler::interpreter::UserDefinedFunction;
 use compiler::parser::{parse, ASTNode, Expression, Module};
 use compiler::tokenizer::{Token,Op,tokenize};
 

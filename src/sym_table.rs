@@ -59,4 +59,15 @@ impl<T:Clone + Default> SymTable<T> {
         *self = inner_symtab.parent.unwrap();
         result
     }
+
+    pub fn with_inner_given_args<Y>(self: &mut Box<SymTable<T>>, args: &Vec<(Symbol, T)>, f: impl FnOnce(&mut Box<SymTable<T>>) -> Y) -> Y {
+        let symtab = mem::replace(self, Default::default());
+        let mut inner_symtab = SymTable::new(Some(symtab));
+        for (arg_symbol, arg_val) in args {
+            inner_symtab.symbols.insert(arg_symbol.clone(), arg_val.clone());
+        }
+        let result = f(&mut inner_symtab);
+        *self = inner_symtab.parent.unwrap();
+        result
+    }
 }

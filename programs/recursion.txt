@@ -1,0 +1,10 @@
+
+fun recurse(x, i) {
+    if i > 10 then {
+        x
+    } else {
+        recurse(2 * x, i + 1)
+    }
+}
+
+print_int(recurse(1, 0));

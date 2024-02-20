@@ -1,4 +1,5 @@
 use std::rc::Rc;
+use std::vec;
 
 use crate::sym_table::{SymTable, Symbol};
 use crate::parser::{ASTNode, Expression, Module};
@@ -6,8 +7,7 @@ use crate::tokenizer::Op;
 use crate::builtin_functions::*;
 
 
-#[derive(Debug)]
-#[allow(dead_code)]
+#[derive(Debug, Clone)]
 pub struct UserDefinedFunction {
     pub id: Box<ASTNode>,
     pub body: Box<ASTNode>, // This should only be a BlockExpression
@@ -100,7 +100,13 @@ fn eval_call_expression(
                     }
                     eval_builtin_function(builtin, args)
                 },
-                Function::UserDefined(_) => panic!("Not yet implemented"),
+                Function::UserDefined(function) => {
+                    let mut args: Vec<Value> = vec![];
+                    for expr in argument_expr {
+                        args.push(interpret(&expr, sym_table));
+                    }
+                    eval_user_defined_function(&function, args, sym_table)
+                }
             }
         } else {
             panic!("Calling undefined function {:?}", function_id);
@@ -108,6 +114,29 @@ fn eval_call_expression(
     } else {
         panic!("Callee of a call expression must be an identifier");
     }
+}
+
+fn eval_user_defined_function(
+    function: &Rc<UserDefinedFunction>,
+    arguments: Vec<Value>,
+    sym_table: &mut Box<SymTable<Value>>,
+) -> Value {
+    let mut named_arguments: Vec<(Symbol, Value)> = vec![];
+
+    for (idx, arg_name) in function.params.iter().enumerate() {
+        if let Expression::Identifier { value } = &arg_name.expr {
+            named_arguments.push((
+                Symbol::Identifier(value.to_string()),
+                arguments.get(idx).expect("Argument length to match param list length").clone()
+            ))
+        } else {
+            panic!("Function params must be Identifiers");
+        }
+    }
+
+    sym_table.with_inner_given_args(&named_arguments, |inner| {
+        interpret(&function.body, inner)
+    })
 }
 
 fn interpret(node: &ASTNode, sym_table: &mut Box<SymTable<Value>>) -> Value {
@@ -189,7 +218,19 @@ fn get_toplevel_sym_table() -> Box<SymTable<Value>> {
 }
 
 pub fn interpret_program(module: &Module) -> Value {
-    interpret(&module.top_ast, &mut get_toplevel_sym_table())
+    let mut top_sym_table = get_toplevel_sym_table();
+    
+    for func in &module.functions {
+        if let Expression::Identifier { value } = &func.id.expr {
+            top_sym_table.symbols.insert(
+                Symbol::Identifier(value.clone()),
+                Value::Function(Function::UserDefined(Rc::new(func.clone()))),
+            );
+        }
+        
+    }
+
+    interpret(&module.top_ast, &mut top_sym_table)
 }
 
 #[cfg(test)]
@@ -364,6 +405,18 @@ mod tests {
             }
         ");
         assert_eq!(42, res2.try_into().expect("Not an integer!"));
+    }
+
+    #[test]
+    fn user_function() {
+        let res = i("
+            fun fuubaar(x, y) {
+                x + y
+            }
+            var x = fuubaar(2, 2);
+            x
+        ");
+        assert!(matches!(res, Value::Integer(4)));
     }
 
     #[test]

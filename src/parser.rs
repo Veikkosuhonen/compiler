@@ -14,7 +14,7 @@ lazy_static! {
     static ref UNARY_OP_PRECEDENCE: Vec<Vec<Op>> = vec![vec![Op::Not], vec![Op::UnarySub],];
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ASTNode {
     pub expr: Expression<ASTNode>,
 }
@@ -25,7 +25,7 @@ impl ASTNode {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Expression<T> {
     Unit,
     IntegerLiteral {

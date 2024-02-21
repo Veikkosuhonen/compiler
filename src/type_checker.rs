@@ -484,7 +484,7 @@ mod tests {
     #[test]
     fn typed_variable_assignment() {
         let node = t("var x: Int = 123; x = 456");
-        assert_eq!(node.node_type, Type::Unit);
+        assert_eq!(node.node_type, Type::Integer);
     }
 
     #[test]

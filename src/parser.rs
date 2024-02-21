@@ -17,11 +17,13 @@ lazy_static! {
 #[derive(Debug, Clone)]
 pub struct ASTNode {
     pub expr: Expression<ASTNode>,
+    pub start: SourceLocation,
+    pub end: SourceLocation,
 }
 
 impl ASTNode {
-    pub fn new(expr: Expression<ASTNode>) -> ASTNode {
-        ASTNode { expr }
+    pub fn new(expr: Expression<ASTNode>, start: SourceLocation, end: SourceLocation) -> ASTNode {
+        ASTNode { expr, start, end }
     }
 }
 
@@ -93,11 +95,15 @@ impl Parser {
         }
     }
 
-    fn peek(&mut self) -> Token {
+    fn current_location(&self) -> SourceLocation {
+        self.peek().location
+    }
+
+    fn peek(&self) -> Token {
         self.peek_forward(0)
     }
 
-    fn peek_forward(&mut self, lookahead: usize) -> Token {
+    fn peek_forward(&self, lookahead: usize) -> Token {
         let idx = self.current_index + lookahead;
         if idx < self.tokens.len() {
             if let Some(t) = self.tokens.get(idx) {
@@ -179,23 +185,24 @@ impl Parser {
         );
         ASTNode::new(Expression::BooleanLiteral {
             value: token.value.starts_with('t'),
-        })
+        }, token.location.clone(), token.location)
     }
 
     fn parse_int_literal(&mut self) -> ASTNode {
         let token = self.consume(TokenType::IntegerLiteral);
         ASTNode::new(Expression::IntegerLiteral {
             value: token.value.parse().expect("Not a valid number"),
-        })
+        }, token.location.clone(), token.location)
     }
 
     fn parse_identifier(&mut self) -> ASTNode {
         let token = self.consume(TokenType::Identifier);
-        ASTNode::new(Expression::Identifier { value: token.value })
+        ASTNode::new(Expression::Identifier { value: token.value }, token.location.clone(), token.location)
     }
 
     fn parse_call_expression(&mut self) -> ASTNode {
         let callee = self.parse_identifier();
+        let start = callee.start.clone();
         self.consume_left_paren();
 
         let mut arguments: Vec<Box<ASTNode>> = vec![];
@@ -209,15 +216,17 @@ impl Parser {
                 self.consume_comma();
             }
         }
+        let end = self.current_location().clone();
         self.consume_right_paren();
 
         ASTNode::new(Expression::CallExpression {
             callee: Box::new(callee),
             arguments,
-        })
+        }, start, end)
     }
 
     fn parse_if_expression(&mut self) -> ASTNode {
+        let start = self.current_location().clone();
         self.consume_keyword("if");
         let condition = self.parse_expression();
         self.consume_keyword("then");
@@ -226,30 +235,34 @@ impl Parser {
         if self.current_is("else") {
             self.consume_keyword("else");
             let else_branch = self.parse_expression();
+            let end = else_branch.end.clone();
             ASTNode::new(Expression::IfExpression {
                 condition: Box::new(condition),
                 then_branch: Box::new(then_branch),
                 else_branch: Some(Box::new(else_branch)),
-            })
+            }, start, end)
         } else {
+            let end = then_branch.end.clone();
             ASTNode::new(Expression::IfExpression {
                 condition: Box::new(condition),
                 then_branch: Box::new(then_branch),
                 else_branch: None,
-            })
+            }, start, end)
         }
     }
 
     fn parse_while_expression(&mut self) -> ASTNode {
+        let start = self.current_location().clone();
         self.consume_keyword("while");
         let condition = self.parse_expression();
         self.consume_keyword("do");
         let body = self.parse_expression();
+        let end = body.end.clone();
 
         ASTNode::new(Expression::WhileExpression {
             condition: Box::new(condition),
             body: Box::new(body),
-        })
+        }, start, end)
     }
 
     fn parse_parentheses(&mut self) -> ASTNode {
@@ -261,22 +274,25 @@ impl Parser {
 
     fn parse_block_expression(&mut self) -> ASTNode {
         self.consume_with_value(TokenType::Punctuation, "{");
+        let start = self.current_location().clone();
         let mut statements: Vec<Box<ASTNode>> = vec![];
         loop {
             if self.current_is("}") {
+                let end = self.current_location().clone();
                 self.consume(TokenType::Punctuation);
                 return ASTNode::new(Expression::BlockExpression {
                     statements,
-                    result: Box::new(ASTNode::new(Expression::Unit)),
-                });
+                    result: Box::new(ASTNode::new(Expression::Unit, end.clone(), end.clone())),
+                }, start, end);
             }
             let statement = self.parse_statement();
             if self.current_is("}") {
+                let end = self.current_location().clone();
                 self.consume(TokenType::Punctuation);
                 return ASTNode::new(Expression::BlockExpression {
                     statements,
                     result: Box::new(statement),
-                });
+                }, start, end);
             }
             statements.push(Box::new(statement));
             self.consume_available_semi();
@@ -328,12 +344,14 @@ impl Parser {
 
         if let Ok(operator) = Op::unary_from_str(&self.peek().value) {
             if ops.contains(&operator) {
+                let start = self.current_location().clone();
                 self.consume(TokenType::Operator);
                 let operand = self.parse_unary_precedence_level(level);
+                let end = operand.end.clone();
                 ASTNode::new(Expression::UnaryExpression {
                     operator,
                     operand: Box::new(operand),
-                })
+                }, start, end)
             } else {
                 self.parse_unary_precedence_level(level + 1)
             }
@@ -358,11 +376,13 @@ impl Parser {
                 if ops.contains(&operator) {
                     self.consume(TokenType::Operator);
                     let right = self.parse_binary_precedence_level(level + 1);
+                    let start = left.start.clone();
+                    let end = right.end.clone();
                     left = ASTNode::new(Expression::BinaryExpression {
                         left: Box::new(left),
                         operator,
                         right: Box::new(right),
-                    })
+                    }, start, end)
                 } else {
                     break;
                 }
@@ -376,14 +396,16 @@ impl Parser {
 
     fn parse_assignment_expression(&mut self) -> ASTNode {
         let left = self.parse_binary_precedence_level(0);
+        let start = left.start.clone();
         if let Ok(op) = Op::binary_from_str(&self.peek().value) {
             if let Op::Assign = op {
                 self.consume(TokenType::Operator);
                 let right = self.parse_assignment_expression();
+                let end = right.end.clone();
                 ASTNode::new(Expression::AssignmentExpression {
                     left: Box::new(left),
                     right: Box::new(right),
-                })
+                }, start, end)
             } else {
                 self.parse_binary_precedence_level(0)
             }
@@ -397,6 +419,7 @@ impl Parser {
     }
 
     fn parse_variable_declaration(&mut self) -> ASTNode {
+        let start = self.current_location().clone();
         self.consume_with_value(TokenType::Keyword, "var");
         let id = self.parse_identifier();
         let mut type_annotation = None;
@@ -406,11 +429,12 @@ impl Parser {
         }
         self.consume_with_value(TokenType::Operator, "=");
         let init = self.parse_expression();
+        let end = init.end.clone();
         ASTNode::new(Expression::VariableDeclaration {
             id: Box::new(id),
             type_annotation: type_annotation.map(Box::new),
             init: Box::new(init),
-        })
+        }, start, end)
     }
 
     fn parse_statement(&mut self) -> ASTNode {
@@ -458,8 +482,9 @@ impl Parser {
     }
 
     fn parse_top_level_block(&mut self) -> (ASTNode, Vec<UserDefinedFunction>) {
+        let start = self.current_location().clone();
         let mut statements: Vec<Box<ASTNode>> = vec![];
-        let mut result = Box::new(ASTNode::new(Expression::Unit));
+        let mut result = Box::new(ASTNode::new(Expression::Unit, start.clone(), start.clone()));
         let mut functions: Vec<UserDefinedFunction> = vec![];
 
         while self.tokens.len() - self.current_index > 0 {
@@ -476,9 +501,10 @@ impl Parser {
                 }
             }
         }
+        let end = self.current_location().clone();
 
         (
-            ASTNode::new(Expression::BlockExpression { statements, result }),
+            ASTNode::new(Expression::BlockExpression { statements, result }, start, end),
             functions
         )
     }

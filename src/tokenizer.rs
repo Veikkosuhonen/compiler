@@ -89,8 +89,8 @@ impl SourceLocation {
 
 #[derive(Debug)]
 pub struct TokenisationError {
-    pub location: SourceLocation,
     pub message: String,
+    pub location: SourceLocation,
 }
 
 #[derive(PartialEq, Eq, Debug, Clone, Copy)]
@@ -108,7 +108,8 @@ pub enum TokenType {
 pub struct Token {
     pub token_type: TokenType,
     pub value: String,
-    pub location: SourceLocation,
+    pub start: SourceLocation,
+    pub end: SourceLocation,
 }
 
 lazy_static! {
@@ -166,14 +167,16 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, TokenisationError> {
 
     while current_start < source.len() {
         let slice = &source[current_start..];
+        let start = SourceLocation { line, column };
 
         if let Some((m, token_type)) = match_token(slice) {
             if token_type != TokenType::None {
-                let location = SourceLocation { line, column };
+                let end = SourceLocation { line, column: column + m.end() };
                 tokens.push(Token {
                     value: m.as_str().to_string(),
-                    location,
                     token_type,
+                    start,
+                    end,
                 });
             }
 

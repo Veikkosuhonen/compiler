@@ -1,2 +1,5 @@
-print_bool(123 == 123);
-print_bool(123 != 123);
+var x = {
+    if x {
+        haha();
+    } else 10000
+}

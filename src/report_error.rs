@@ -18,10 +18,10 @@ pub fn report_syntax_error(source: &String, error: &SyntaxError) {
     let end_col = error.end.column;
     let line = source.split("\n").nth(start_line - 1).unwrap();
     let mut caret = String::new();
-    for _ in 0..start_col {
+    for _ in 0..start_col - 1 {
         caret.push(' ');
     }
-    for _ in start_col..end_col {
+    for _ in start_col - 1..end_col - 1 {
         caret.push('^');
     }
     println!("Syntax error at line {}:\n{}\n{}\n{}", start_line, line, caret, error.message);

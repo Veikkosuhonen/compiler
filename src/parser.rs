@@ -102,15 +102,20 @@ impl Parser {
         }
     }
 
-    fn current_location(&self) -> SourceLocation {
-        self.peek().unwrap().location
+    fn current_start(&self) -> SourceLocation {
+        self.peek().unwrap().start
+    }
+
+    fn current_end(&self) -> SourceLocation {
+        self.peek().unwrap().end
     }
 
     fn error_here(&self, message: &str) -> SyntaxError {
+        let current = self.peek().unwrap();
         SyntaxError {
             message: message.to_string(),
-            start: self.current_location(),
-            end: self.current_location(),
+            start: current.start,
+            end: current.end,
         }
     }
 
@@ -130,7 +135,8 @@ impl Parser {
             Ok(Token {
                 token_type: TokenType::None,
                 value: "".to_string(),
-                location: SourceLocation { line: 0, column: 0 },
+                start: SourceLocation { line: 0, column: 0 },
+                end: SourceLocation { line: 0, column: 0 },
             })
         }
     }
@@ -158,11 +164,11 @@ impl Parser {
         } else {
             Err(SyntaxError {
                 message: format!(
-                    "Expected {:?} with value in {:?}, got {:?}",
-                    expected_type, expected_values, token
+                    "Expected {:?} {}, got {}",
+                    expected_type, expected_values.join("|"), token.value
                 ),
-                start: token.location.clone(),
-                end: token.location,
+                start: token.start,
+                end: token.end,
             })
         }
     }
@@ -210,7 +216,7 @@ impl Parser {
         )?;
         Ok(ASTNode::new(Expression::BooleanLiteral {
             value: token.value.starts_with('t'),
-        }, token.location.clone(), token.location))
+        }, token.start, token.end))
     }
 
     fn parse_int_literal(&mut self) -> Result<ASTNode, SyntaxError>  {
@@ -218,12 +224,12 @@ impl Parser {
 
         Ok(ASTNode::new(Expression::IntegerLiteral {
             value: token.value.parse().expect("Not a valid number"),
-        }, token.location.clone(), token.location))
+        }, token.start, token.end))
     }
 
     fn parse_identifier(&mut self) -> Result<ASTNode, SyntaxError> {
         let token = self.consume(TokenType::Identifier)?;
-        Ok(ASTNode::new(Expression::Identifier { value: token.value }, token.location.clone(), token.location))
+        Ok(ASTNode::new(Expression::Identifier { value: token.value }, token.start, token.end))
     }
 
     fn parse_call_expression(&mut self) -> Result<ASTNode, SyntaxError> {
@@ -242,7 +248,7 @@ impl Parser {
                 self.consume_comma()?;
             }
         }
-        let end = self.current_location().clone();
+        let end = self.current_end().clone();
         self.consume_right_paren()?;
 
         Ok(ASTNode::new(Expression::CallExpression {
@@ -252,7 +258,7 @@ impl Parser {
     }
 
     fn parse_if_expression(&mut self) -> Result<ASTNode, SyntaxError> {
-        let start = self.current_location().clone();
+        let start = self.current_start().clone();
         self.consume_keyword("if")?;
         let condition = self.parse_expression()?;
         self.consume_keyword("then")?;
@@ -277,7 +283,7 @@ impl Parser {
     }
 
     fn parse_while_expression(&mut self) -> Result<ASTNode, SyntaxError> {
-        let start = self.current_location().clone();
+        let start = self.current_start().clone();
         self.consume_keyword("while")?;
         let condition = self.parse_expression()?;
         self.consume_keyword("do")?;
@@ -299,11 +305,11 @@ impl Parser {
 
     fn parse_block_expression(&mut self) -> Result<ASTNode, SyntaxError> {
         self.consume_left_curly()?;
-        let start = self.current_location().clone();
+        let start = self.current_start().clone();
         let mut statements: Vec<Box<ASTNode>> = vec![];
         loop {
             if self.consume_right_curly().is_ok() {
-                let end = self.current_location().clone();
+                let end = self.current_end().clone();
                 return Ok(ASTNode::new(Expression::BlockExpression {
                     statements,
                     result: Box::new(ASTNode::new(Expression::Unit, end.clone(), end.clone())),
@@ -311,7 +317,7 @@ impl Parser {
             }
             let statement = self.parse_statement()?;
             if self.consume_right_curly().is_ok() {
-                let end = self.current_location().clone();
+                let end = self.current_end().clone();
                 return Ok(ASTNode::new(Expression::BlockExpression {
                     statements,
                     result: Box::new(statement),
@@ -367,7 +373,7 @@ impl Parser {
 
         if let Ok(operator) = Op::unary_from_str(&self.peek()?.value) {
             if ops.contains(&operator) {
-                let start = self.current_location().clone();
+                let start = self.current_start().clone();
                 self.consume(TokenType::Operator)?;
                 let operand = self.parse_unary_precedence_level(level)?;
                 let end = operand.end.clone();
@@ -442,7 +448,7 @@ impl Parser {
     }
 
     fn parse_variable_declaration(&mut self) -> Result<ASTNode, SyntaxError> {
-        let start = self.current_location().clone();
+        let start = self.current_start().clone();
         self.consume_with_value(TokenType::Keyword, "var")?;
         let id = self.parse_identifier()?;
         let mut type_annotation = None;
@@ -503,7 +509,7 @@ impl Parser {
     }
 
     fn parse_top_level_block(&mut self) -> Result<(ASTNode, Vec<UserDefinedFunction>), SyntaxError> {
-        let start = self.current_location().clone();
+        let start = self.current_start().clone();
         let mut statements: Vec<Box<ASTNode>> = vec![];
         let mut result = Box::new(ASTNode::new(Expression::Unit, start.clone(), start.clone()));
         let mut functions: Vec<UserDefinedFunction> = vec![];
@@ -522,7 +528,7 @@ impl Parser {
                 }
             }
         }
-        let end = self.current_location().clone();
+        let end = self.current_end().clone();
 
         Ok((
             ASTNode::new(Expression::BlockExpression { statements, result }, start, end),
@@ -538,11 +544,11 @@ pub fn parse(tokens: Vec<Token>) -> Result<Module<UserDefinedFunction, ASTNode>,
 
     if parser.current_index < parser.tokens.len() {
         let token = parser.peek()?;
-        let message = format!("Unexpected token {:?} at {:}", token.token_type, token.location.to_string());
+        let message = format!("Unexpected token {:?} at {:}", token.token_type, token.start.to_string());
         return Err(SyntaxError {
             message,
-            start: token.location.clone(),
-            end: token.location,
+            start: token.start,
+            end: token.end,
         });
     }
 

@@ -4,7 +4,9 @@ use compiler::parser::{parse, ASTNode, Expression, Module};
 use compiler::tokenizer::{Token,Op,tokenize};
 
 fn p(source: &str) -> ASTNode {
-    let node = parse(tokenize(source));
+    let node = parse(
+        tokenize(source).expect("Should've been able to tokenize the source")
+    ).expect("Should've been able to parse the source");
     // Match to block
     match node.ast.expr {
         Expression::BlockExpression { result,.. } => *result,
@@ -13,23 +15,16 @@ fn p(source: &str) -> ASTNode {
 }
 
 fn parse_module(source: &str) -> Module<UserDefinedFunction, ASTNode> {
-    parse(tokenize(source))
+    parse(
+        tokenize(source).expect("Should've been able to tokenize the source")
+    ).expect("Should've been able to parse the source")
 }
 
 #[test]
-#[should_panic(expected = "Empty source")]
-fn test_empty_expression() {
-    let source = "";
-    let tokens: Vec<Token> = tokenize(source);
-    parse(tokens);
-}
-
-#[test]
-#[should_panic(expected = "Unexpected token: Token { token_type: IntegerLiteral, value: \"3\", location: SourceLocation { line: 1, column: 7 } }")]
 fn test_invalid_source() {
     let source = "1 + 2 3 4 haha minttuglitch";
-    let tokens: Vec<Token> = tokenize(source);
-    parse(tokens);
+    let tokens: Vec<Token> = tokenize(source).expect("Should've been able to tokenize the source");
+    assert!(parse(tokens).is_err())
 }
 
 #[test]

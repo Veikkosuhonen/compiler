@@ -239,8 +239,8 @@ mod tests {
     use super::*;
 
     fn i(src: &str) -> Value {
-        let tokens: Vec<Token> = tokenize(src);
-        let module = parse(tokens);
+        let tokens: Vec<Token> = tokenize(src).expect("Should've been able to tokenize the source");
+        let module = parse(tokens).expect("Should've been able to parse the source");
         interpret_program(&module)
     }
 

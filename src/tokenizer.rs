@@ -81,6 +81,18 @@ pub struct SourceLocation {
     pub column: usize,
 }
 
+impl SourceLocation {
+    pub fn to_string(&self) -> String {
+        format!("{}:{}", self.line, self.column)
+    }
+}
+
+#[derive(Debug)]
+pub struct TokenisationError {
+    pub location: SourceLocation,
+    pub message: String,
+}
+
 #[derive(PartialEq, Eq, Debug, Clone, Copy)]
 pub enum TokenType {
     Identifier,
@@ -144,7 +156,7 @@ fn count_line_column_changes(v: &str, line: usize, column: usize) -> (usize, usi
     (line + line_change, column)
 }
 
-pub fn tokenize(source: &str) -> Vec<Token> {
+pub fn tokenize(source: &str) -> Result<Vec<Token>, TokenisationError> {
     let mut tokens: Vec<Token> = Vec::new();
 
     let mut line = 1;
@@ -169,18 +181,24 @@ pub fn tokenize(source: &str) -> Vec<Token> {
 
             current_start += m.end();
         } else {
-            panic!(
-                "Cannot tokenize input at line {} column {}: {}",
-                line, current_start, slice
-            );
+            return Err(TokenisationError {
+                location: SourceLocation { line, column },
+                message: format!(
+                    "Cannot tokenize input at line {} column {}: {}",
+                    line, current_start, slice
+                ),
+            });
         }
     }
 
     if tokens.is_empty() {
-        panic!("Empty source")
+        return Err(TokenisationError {
+            location: SourceLocation { line, column },
+            message: "No tokens found".to_string(),
+        });
     }
 
-    tokens
+    Ok(tokens)
 }
 
 #[cfg(test)]
@@ -311,9 +329,15 @@ mod tests {
     }*/
 
     #[test]
+    fn test_empty_expression() {
+        let source = "";
+        assert!(tokenize(source).is_err());
+    }
+
+    #[test]
     fn test_function_call() {
         let source = "f(1, 2, 3)";
-        let tokens = tokenize(source);
+        let tokens = tokenize(source).expect("Should've been able to tokenize");
         assert_eq!(tokens.len(), 8);
         assert!(matches!(tokens[0].token_type, TokenType::Identifier     {..}));
         assert!(matches!(tokens[1].token_type, TokenType::Punctuation    {..}));
@@ -328,7 +352,7 @@ mod tests {
     #[test]
     fn test_type_definition() {
         let source = "var x: Int = 1";
-        let tokens = tokenize(source);
+        let tokens = tokenize(source).expect("Should've been able to tokenize");
         assert_eq!(tokens.len(), 6);
         assert!(matches!(tokens[0].token_type, TokenType::Keyword        {..}));
         assert!(matches!(tokens[1].token_type, TokenType::Identifier     {..}));

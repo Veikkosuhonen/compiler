@@ -20,8 +20,8 @@ fn read_file(path: &String) -> String {
 }
 
 fn parse_source(contents: String) -> Module<UserDefinedFunction, ASTNode> {
-    let tokens = tokenizer::tokenize(&contents);
-    let module = parser::parse(tokens);
+    let tokens = tokenizer::tokenize(&contents).expect("Should've been able to tokenize the source");
+    let module = parser::parse(tokens).expect("Should've been able to parse the source");
     module
 }
 

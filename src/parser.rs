@@ -14,6 +14,13 @@ lazy_static! {
     static ref UNARY_OP_PRECEDENCE: Vec<Vec<Op>> = vec![vec![Op::Not], vec![Op::UnarySub],];
 }
 
+#[derive(Debug)]
+pub struct SyntaxError {
+    pub message: String,
+    pub start: SourceLocation,
+    pub end: SourceLocation,
+}
+
 #[derive(Debug, Clone)]
 pub struct ASTNode {
     pub expr: Expression<ASTNode>,
@@ -510,15 +517,23 @@ impl Parser {
     }
 }
 
-/// If given an empty vec, returns an ASTNode with empty BlockExpression
-pub fn parse(tokens: Vec<Token>) -> Module<UserDefinedFunction, ASTNode> {
+
+pub fn parse(tokens: Vec<Token>) -> Result<Module<UserDefinedFunction, ASTNode>, SyntaxError> {
     let mut parser = Parser::new(tokens);
     let (expr, functions) = parser.parse_top_level_block();
+
     if parser.current_index < parser.tokens.len() {
-        panic!("Unexpected token: {:?}", parser.peek());
+        let token = parser.peek();
+        let message = format!("Unexpected token {:?} at {:}", token.token_type, token.location.to_string());
+        return Err(SyntaxError {
+            message,
+            start: token.location.clone(),
+            end: token.location,
+        });
     }
-    Module {
+
+    Ok(Module {
         ast: expr,
         functions,
-    }
+    })
 }

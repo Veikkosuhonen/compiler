@@ -357,8 +357,8 @@ mod tests {
     use super::*;
 
     fn t(src: &str) -> TypedASTNode {
-        let tokens: Vec<Token> = tokenize(src);
-        let module = parse(tokens);
+        let tokens: Vec<Token> = tokenize(src).expect("Tokenizing to succeed");
+        let module = parse(tokens).expect("Parsing to succeed");
         let module = typecheck_program(module);
         module.ast
     }

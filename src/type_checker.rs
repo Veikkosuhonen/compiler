@@ -60,7 +60,16 @@ pub struct TypedASTNode {
 }
 
 pub fn typecheck_program(module: Module) -> TypedASTNode {
-    typecheck(module.top_ast, &mut get_toplevel_sym_table())
+    let mut sym_table = get_toplevel_sym_table();
+    for func in module.functions {
+        let param_types = func.params.iter().map(|param| {
+            sym_table.get(&Symbol::Identifier(param.param_type.clone()))
+        }).collect();
+        let return_type_name = func.return_type.unwrap_or(String::from("Unit"));
+        let return_type = sym_table.get(&Symbol::Identifier(return_type_name));
+        sym_table.symbols.insert(Symbol::Identifier(func.id.clone()), Type::Function(Box::new(FunctionType { param_types, return_type })));
+    }
+    typecheck(module.top_ast, &mut sym_table)
 }
 
 fn get_toplevel_sym_table() -> Box<SymTable<Type>> {
@@ -73,6 +82,7 @@ fn get_toplevel_sym_table() -> Box<SymTable<Type>> {
 
     sym_table.symbols.insert(Symbol::Identifier("Int".to_string()), Type::Integer);
     sym_table.symbols.insert(Symbol::Identifier("Bool".to_string()), Type::Boolean);
+    sym_table.symbols.insert(Symbol::Identifier("Unit".to_string()), Type::Unit);
 
     sym_table
 }
@@ -428,5 +438,16 @@ mod tests {
     #[should_panic(expected="Type annotation and init expression types differ: Boolean != Integer")]
     fn type_annotation_bool_error() {
         t("var x: Bool = 1");
+    }
+
+    #[test]
+    fn typecheck_function_call() {
+        let node = t("
+            fun add(x: Int, y: Int): Int {
+                x + y
+            }
+            add(1, 2)
+        ");
+        assert_eq!(node.node_type, Type::Integer);
     }
 }

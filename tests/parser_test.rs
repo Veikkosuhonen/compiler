@@ -465,11 +465,7 @@ fn function_definition() {
     assert_eq!(module2.functions.len(), 1);
 
     let fun = module2.functions.get(0).unwrap();
-    if let Expression::Identifier { value } = &fun.id.expr {
-        assert_eq!(value, "f");
-    } else {
-        panic!("Function id is not Identifier")
-    }
+    assert_eq!(fun.id, "f");
 
     assert_eq!(fun.params.len(), 0);
 

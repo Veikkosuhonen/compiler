@@ -1,4 +1,4 @@
-use crate::{interpreter::UserDefinedFunction, tokenizer::{Op, SourceLocation, Token, TokenType}};
+use crate::{interpreter::{Param, UserDefinedFunction}, tokenizer::{Op, SourceLocation, Token, TokenType}};
 use lazy_static::lazy_static;
 
 lazy_static! {
@@ -423,14 +423,16 @@ impl Parser {
 
     fn parse_function_definition(&mut self) -> UserDefinedFunction {
         self.consume_keyword("fun");
-        let id = self.parse_identifier();
+        let id = self.consume(TokenType::Identifier).value;
     
         self.consume_left_paren();
-        let mut params: Vec<Box<ASTNode>> = vec![];
+        let mut params: Vec<Param> = vec![];
         if !self.current_is(")") {
             loop {
-                let arg = self.parse_expression();
-                params.push(Box::new(arg));
+                let arg = self.consume(TokenType::Identifier).value;
+                self.consume_with_value(TokenType::Punctuation, ":");
+                let type_annotation = self.consume(TokenType::Identifier).value;
+                params.push(Param { name: arg, param_type: type_annotation });
                 if self.current_is(")") {
                     break;
                 }
@@ -439,12 +441,19 @@ impl Parser {
         }
         self.consume_right_paren();
 
+        let mut return_type = None;
+        if self.current_is(":") {
+            self.consume_with_value(TokenType::Punctuation, ":");
+            return_type = Some(self.consume(TokenType::Identifier).value);
+        }
+
         let body = self.parse_block_expression();
 
         UserDefinedFunction {
-            id: Box::new(id),
+            id,
             body: Box::new(body),
             params,
+            return_type
         }
     }
 

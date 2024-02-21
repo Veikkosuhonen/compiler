@@ -6,12 +6,18 @@ use crate::parser::{ASTNode, Expression, Module};
 use crate::tokenizer::Op;
 use crate::builtin_functions::*;
 
+#[derive(Debug, Clone)]
+pub struct Param {
+    pub name: String,
+    pub param_type: String,
+}
 
 #[derive(Debug, Clone)]
 pub struct UserDefinedFunction {
-    pub id: Box<ASTNode>,
-    pub body: Box<ASTNode>, // This should only be a BlockExpression
-    pub params: Vec<Box<ASTNode>>, // This should only be a vec of Identifiers
+    pub id: String,
+    pub body: Box<ASTNode>,
+    pub params: Vec<Param>,
+    pub return_type: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -123,15 +129,11 @@ fn eval_user_defined_function(
 ) -> Value {
     let mut named_arguments: Vec<(Symbol, Value)> = vec![];
 
-    for (idx, arg_name) in function.params.iter().enumerate() {
-        if let Expression::Identifier { value } = &arg_name.expr {
-            named_arguments.push((
-                Symbol::Identifier(value.to_string()),
-                arguments.get(idx).expect("Argument length to match param list length").clone()
-            ))
-        } else {
-            panic!("Function params must be Identifiers");
-        }
+    for (idx, param) in function.params.iter().enumerate() {
+        named_arguments.push((
+            Symbol::Identifier(param.name.to_string()),
+            arguments.get(idx).expect("Argument length to match param list length").clone()
+        ))
     }
 
     sym_table.with_inner_given_args(&named_arguments, |inner| {
@@ -221,13 +223,10 @@ pub fn interpret_program(module: &Module) -> Value {
     let mut top_sym_table = get_toplevel_sym_table();
     
     for func in &module.functions {
-        if let Expression::Identifier { value } = &func.id.expr {
-            top_sym_table.symbols.insert(
-                Symbol::Identifier(value.clone()),
-                Value::Function(Function::UserDefined(Rc::new(func.clone()))),
-            );
-        }
-        
+        top_sym_table.symbols.insert(
+            Symbol::Identifier(func.id.clone()),
+            Value::Function(Function::UserDefined(Rc::new(func.clone()))),
+        );
     }
 
     interpret(&module.top_ast, &mut top_sym_table)
@@ -410,7 +409,7 @@ mod tests {
     #[test]
     fn user_function() {
         let res = i("
-            fun fuubaar(x, y) {
+            fun fuubaar(x: Int, y: Int): Int {
                 x + y
             }
             var x = fuubaar(2, 2);

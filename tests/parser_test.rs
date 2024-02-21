@@ -1,17 +1,18 @@
 
+use compiler::interpreter::UserDefinedFunction;
 use compiler::parser::{parse, ASTNode, Expression, Module};
 use compiler::tokenizer::{Token,Op,tokenize};
 
 fn p(source: &str) -> ASTNode {
     let node = parse(tokenize(source));
     // Match to block
-    match node.top_ast.expr {
+    match node.ast.expr {
         Expression::BlockExpression { result,.. } => *result,
         _ => panic!("Parse returned a non block expression")
     }
 }
 
-fn parse_module(source: &str) -> Module {
+fn parse_module(source: &str) -> Module<UserDefinedFunction, ASTNode> {
     parse(tokenize(source))
 }
 

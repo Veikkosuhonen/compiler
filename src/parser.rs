@@ -75,9 +75,9 @@ pub enum Expression<T> {
 }
 
 #[derive(Debug)]
-pub struct Module {
-    pub functions: Vec<UserDefinedFunction>,
-    pub top_ast: ASTNode,
+pub struct Module<F, T> {
+    pub functions: Vec<F>,
+    pub ast: T,
 }
 
 struct Parser {
@@ -485,14 +485,14 @@ impl Parser {
 }
 
 /// If given an empty vec, returns an ASTNode with empty BlockExpression
-pub fn parse(tokens: Vec<Token>) -> Module {
+pub fn parse(tokens: Vec<Token>) -> Module<UserDefinedFunction, ASTNode> {
     let mut parser = Parser::new(tokens);
     let (expr, functions) = parser.parse_top_level_block();
     if parser.current_index < parser.tokens.len() {
         panic!("Unexpected token: {:?}", parser.peek());
     }
     Module {
-        top_ast: expr,
+        ast: expr,
         functions,
     }
 }

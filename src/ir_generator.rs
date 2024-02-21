@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::{builtin_functions::get_builtin_function_ir_vars, parser::Expression, sym_table::Symbol, type_checker::{Type, TypedASTNode}};
+use crate::{builtin_functions::get_builtin_function_ir_vars, parser::{Expression, Module}, sym_table::Symbol, type_checker::{Type, TypedASTNode, TypedUserDefinedFunction}};
 
 #[derive(Clone, Debug)]
 pub struct IRVar {
@@ -87,7 +87,7 @@ pub fn generate_ir_code(ir: HashMap<String, Vec<IREntry>>) -> String {
     ir.iter().flat_map(|(_, ir)| ir).map(|ir| { ir.to_string() }).collect::<Vec<String>>().join("\n")
 }
 
-pub fn generate_ir(node: TypedASTNode) -> HashMap<String, Vec<IREntry>> {
+pub fn generate_ir(module: Module<TypedUserDefinedFunction, TypedASTNode>) -> HashMap<String, Vec<IREntry>> {
     let mut instructions: Vec<IREntry> = vec![];
     instructions.push(IREntry { instruction: Instruction::Label(String::from("start")) });
 
@@ -96,7 +96,7 @@ pub fn generate_ir(node: TypedASTNode) -> HashMap<String, Vec<IREntry>> {
         var_table.vars.insert(name, var);
     }
 
-    generate(node, &mut instructions, &mut var_table);
+    generate(module.ast, &mut instructions, &mut var_table);
     instructions.push(IREntry { instruction: Instruction::Return });
 
     let mut module_functions: HashMap<String, Vec<IREntry>> = HashMap::new();

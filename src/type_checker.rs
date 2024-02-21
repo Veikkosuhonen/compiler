@@ -1,4 +1,5 @@
 use crate::builtin_functions::get_builtin_function_symbol_type_mappings;
+use crate::interpreter::UserDefinedFunction;
 use crate::sym_table::{SymTable, Symbol};
 use crate::parser::{ASTNode, Expression, Module};
 use crate::tokenizer::Op;
@@ -53,23 +54,39 @@ pub enum Type {
     #[default] Unit,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TypedASTNode {
     pub expr: Expression<TypedASTNode>,
     pub node_type: Type,
 }
 
-pub fn typecheck_program(module: Module) -> TypedASTNode {
+#[derive(Debug, Clone)]
+pub struct TypedParam {
+    pub param_type: Type,
+    pub id: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct TypedUserDefinedFunction {
+    pub id: String,
+    pub body: Box<TypedASTNode>,
+    pub params: Vec<String>,
+    pub func_type: FunctionType,
+}
+
+pub fn typecheck_program(module: Module<UserDefinedFunction, ASTNode>) -> Module<TypedUserDefinedFunction, TypedASTNode> {
     let mut sym_table = get_toplevel_sym_table();
+    let mut functions: Vec<TypedUserDefinedFunction> = vec![];
+
     for func in module.functions {
-        let param_types = func.params.iter().map(|param| {
-            sym_table.get(&Symbol::Identifier(param.param_type.clone()))
-        }).collect();
-        let return_type_name = func.return_type.unwrap_or(String::from("Unit"));
-        let return_type = sym_table.get(&Symbol::Identifier(return_type_name));
-        sym_table.symbols.insert(Symbol::Identifier(func.id.clone()), Type::Function(Box::new(FunctionType { param_types, return_type })));
+        let typed_function = typecheck_function(func, &mut sym_table);
+        sym_table.symbols.insert(Symbol::Identifier(typed_function.id.clone()), Type::Function(Box::new(typed_function.func_type.clone())));
+        functions.push(typed_function);
     }
-    typecheck(module.top_ast, &mut sym_table)
+
+    let typed_node = typecheck(module.ast, &mut sym_table);
+
+    Module { functions, ast: typed_node }
 }
 
 fn get_toplevel_sym_table() -> Box<SymTable<Type>> {
@@ -117,6 +134,33 @@ fn typecheck(node: ASTNode, sym_table: &mut Box<SymTable<Type>>) -> TypedASTNode
         Expression::CallExpression { callee, arguments } => {
             typecheck_call_expression(callee, arguments, sym_table)
         },
+    }
+}
+
+fn typecheck_function(
+    func: UserDefinedFunction,
+    sym_table: &mut Box<SymTable<Type>>
+) -> TypedUserDefinedFunction {
+    let params: Vec<(Symbol, Type)> = func.params.iter().map(|param| {
+        let sym = Symbol::Identifier(param.name.clone());
+        (sym, sym_table.get(&Symbol::Identifier(param.param_type.clone())))
+    }).collect();
+
+    let return_type_name = func.return_type.unwrap_or(String::from("Unit"));
+    let return_type = sym_table.get(&Symbol::Identifier(return_type_name));
+    let func_type = FunctionType { 
+        param_types: params.iter().map(|(_, val)| val.clone()).collect(),
+        return_type
+    };
+    let body = sym_table.with_inner_given_args(&params, |inner| {
+        typecheck(*func.body, inner)
+    });
+
+    TypedUserDefinedFunction {
+        id: func.id,
+        body: Box::new(body),
+        params: func.params.iter().map(|param| param.name.clone()).collect(),
+        func_type,
     }
 }
 
@@ -313,7 +357,8 @@ mod tests {
     fn t(src: &str) -> TypedASTNode {
         let tokens: Vec<Token> = tokenize(src);
         let module = parse(tokens);
-        typecheck_program(module)
+        let module = typecheck_program(module);
+        module.ast
     }
 
     #[test]

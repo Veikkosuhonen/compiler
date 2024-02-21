@@ -1,6 +1,8 @@
 use std::fs;
 
-use parser::Module;
+use interpreter::UserDefinedFunction;
+use parser::{ASTNode, Module};
+use type_checker::{TypedASTNode, TypedUserDefinedFunction};
 pub mod tokenizer;
 pub mod parser;
 pub mod interpreter;
@@ -17,7 +19,7 @@ fn read_file(path: &String) -> String {
     contents
 }
 
-fn parse_source(contents: String) -> Module {
+fn parse_source(contents: String) -> Module<UserDefinedFunction, ASTNode> {
     let tokens = tokenizer::tokenize(&contents);
     let module = parser::parse(tokens);
     module
@@ -31,7 +33,7 @@ pub fn interpret_file(path: &String) -> interpreter::Value {
     result
 }
 
-pub fn typecheck_file(path: &String) -> type_checker::TypedASTNode {
+pub fn typecheck_file(path: &String) -> Module<TypedUserDefinedFunction, TypedASTNode> {
     let contents = read_file(path);
     let module = parse_source(contents);
     let result = type_checker::typecheck_program(module);

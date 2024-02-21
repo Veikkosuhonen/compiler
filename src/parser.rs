@@ -103,221 +103,237 @@ impl Parser {
     }
 
     fn current_location(&self) -> SourceLocation {
-        self.peek().location
+        self.peek().unwrap().location
     }
 
-    fn peek(&self) -> Token {
+    fn error_here(&self, message: &str) -> SyntaxError {
+        SyntaxError {
+            message: message.to_string(),
+            start: self.current_location(),
+            end: self.current_location(),
+        }
+    }
+
+    fn peek(&self) -> Result<Token, SyntaxError> {
         self.peek_forward(0)
     }
 
-    fn peek_forward(&self, lookahead: usize) -> Token {
+    fn peek_forward(&self, lookahead: usize) -> Result<Token, SyntaxError> {
         let idx = self.current_index + lookahead;
         if idx < self.tokens.len() {
             if let Some(t) = self.tokens.get(idx) {
-                t.clone()
+                Ok(t.clone())
             } else {
-                panic!("Unexpected end of file");
+                Err(self.error_here("Unexpected end of file"))
             }
         } else {
-            Token {
+            Ok(Token {
                 token_type: TokenType::None,
                 value: "".to_string(),
                 location: SourceLocation { line: 0, column: 0 },
-            }
+            })
         }
     }
 
     fn current_is(&mut self, value: &str) -> bool {
-        self.peek().value == value
+        self.peek().is_ok_and(|t| t.value == value)
     }
 
     fn next_is(&mut self, value: &str) -> bool {
-        self.peek_forward(1).value == value
+        self.peek_forward(1).is_ok_and(|t| t.value == value)
     }
 
     fn consume_with_values(
         &mut self,
         expected_type: TokenType,
         expected_values: &[String],
-    ) -> Token {
-        let token: Token = self.peek();
+    ) -> Result<Token, SyntaxError> {
+        let token: Token = self.peek()?;
 
         if expected_type == token.token_type
             && (expected_values.is_empty() || expected_values.contains(&token.value))
         {
             self.current_index += 1;
-            token
+            Ok(token)
         } else {
-            panic!("Unexpected token: {:?}", token);
+            Err(SyntaxError {
+                message: format!(
+                    "Expected {:?} with value in {:?}, got {:?}",
+                    expected_type, expected_values, token
+                ),
+                start: token.location.clone(),
+                end: token.location,
+            })
         }
     }
 
-    fn consume(&mut self, expected_type: TokenType) -> Token {
+    fn consume(&mut self, expected_type: TokenType) -> Result<Token, SyntaxError>  {
         self.consume_with_values(expected_type, &[])
     }
 
-    fn consume_with_value(&mut self, expected_type: TokenType, value: &str) -> Token {
+    fn consume_with_value(&mut self, expected_type: TokenType, value: &str) -> Result<Token, SyntaxError> {
         self.consume_with_values(expected_type, &[value.to_string()])
     }
 
-    fn consume_left_paren(&mut self) {
-        self.consume_with_value(TokenType::Punctuation, "(");
+    fn consume_left_paren(&mut self) -> Result<Token, SyntaxError> {
+        self.consume_with_value(TokenType::Punctuation, "(")
     }
 
-    fn consume_right_paren(&mut self) {
-        self.consume_with_value(TokenType::Punctuation, ")");
+    fn consume_right_paren(&mut self) -> Result<Token, SyntaxError> {
+        self.consume_with_value(TokenType::Punctuation, ")")
     }
 
-    fn consume_comma(&mut self) {
-        self.consume_with_value(TokenType::Punctuation, ",");
+    fn consume_left_curly(&mut self) -> Result<Token, SyntaxError> {
+        self.consume_with_value(TokenType::Punctuation, "{")
     }
 
-    fn consume_keyword(&mut self, value: &str) {
-        self.consume_with_value(TokenType::Keyword, value);
+    fn consume_right_curly(&mut self) -> Result<Token, SyntaxError> {
+        self.consume_with_value(TokenType::Punctuation, "}")
+    }
+
+    fn consume_comma(&mut self) -> Result<Token, SyntaxError> {
+        self.consume_with_value(TokenType::Punctuation, ",")
+    }
+
+    fn consume_keyword(&mut self, value: &str) -> Result<Token, SyntaxError> {
+        self.consume_with_value(TokenType::Keyword, value)
     }
 
     fn consume_available_semi(&mut self) -> bool {
-        if self.current_is(";") {
-            self.consume_with_value(TokenType::Punctuation, ";");
-            true
-        } else {
-            false
-        }
+        self.consume_with_value(TokenType::Punctuation, ";").is_ok()
     }
 
-    fn parse_boolean_literal(&mut self) -> ASTNode {
+    fn parse_boolean_literal(&mut self) -> Result<ASTNode, SyntaxError> {
         let token = self.consume_with_values(
             TokenType::BooleanLiteral,
             &["true".to_string(), "false".to_string()],
-        );
-        ASTNode::new(Expression::BooleanLiteral {
+        )?;
+        Ok(ASTNode::new(Expression::BooleanLiteral {
             value: token.value.starts_with('t'),
-        }, token.location.clone(), token.location)
+        }, token.location.clone(), token.location))
     }
 
-    fn parse_int_literal(&mut self) -> ASTNode {
-        let token = self.consume(TokenType::IntegerLiteral);
-        ASTNode::new(Expression::IntegerLiteral {
+    fn parse_int_literal(&mut self) -> Result<ASTNode, SyntaxError>  {
+        let token = self.consume(TokenType::IntegerLiteral)?;
+
+        Ok(ASTNode::new(Expression::IntegerLiteral {
             value: token.value.parse().expect("Not a valid number"),
-        }, token.location.clone(), token.location)
+        }, token.location.clone(), token.location))
     }
 
-    fn parse_identifier(&mut self) -> ASTNode {
-        let token = self.consume(TokenType::Identifier);
-        ASTNode::new(Expression::Identifier { value: token.value }, token.location.clone(), token.location)
+    fn parse_identifier(&mut self) -> Result<ASTNode, SyntaxError> {
+        let token = self.consume(TokenType::Identifier)?;
+        Ok(ASTNode::new(Expression::Identifier { value: token.value }, token.location.clone(), token.location))
     }
 
-    fn parse_call_expression(&mut self) -> ASTNode {
-        let callee = self.parse_identifier();
+    fn parse_call_expression(&mut self) -> Result<ASTNode, SyntaxError> {
+        let callee = self.parse_identifier()?;
         let start = callee.start.clone();
-        self.consume_left_paren();
+        self.consume_left_paren()?;
 
         let mut arguments: Vec<Box<ASTNode>> = vec![];
         if !self.current_is(")") {
             loop {
-                let arg = self.parse_expression();
+                let arg = self.parse_expression()?;
                 arguments.push(Box::new(arg));
                 if self.current_is(")") {
                     break;
                 }
-                self.consume_comma();
+                self.consume_comma()?;
             }
         }
         let end = self.current_location().clone();
-        self.consume_right_paren();
+        self.consume_right_paren()?;
 
-        ASTNode::new(Expression::CallExpression {
+        Ok(ASTNode::new(Expression::CallExpression {
             callee: Box::new(callee),
             arguments,
-        }, start, end)
+        }, start, end))
     }
 
-    fn parse_if_expression(&mut self) -> ASTNode {
+    fn parse_if_expression(&mut self) -> Result<ASTNode, SyntaxError> {
         let start = self.current_location().clone();
-        self.consume_keyword("if");
-        let condition = self.parse_expression();
-        self.consume_keyword("then");
-        let then_branch = self.parse_expression();
+        self.consume_keyword("if")?;
+        let condition = self.parse_expression()?;
+        self.consume_keyword("then")?;
+        let then_branch = self.parse_expression()?;
 
-        if self.current_is("else") {
-            self.consume_keyword("else");
-            let else_branch = self.parse_expression();
+        if self.consume_keyword("else").is_ok() {
+            let else_branch = self.parse_expression()?;
             let end = else_branch.end.clone();
-            ASTNode::new(Expression::IfExpression {
+            Ok(ASTNode::new(Expression::IfExpression {
                 condition: Box::new(condition),
                 then_branch: Box::new(then_branch),
                 else_branch: Some(Box::new(else_branch)),
-            }, start, end)
+            }, start, end))
         } else {
             let end = then_branch.end.clone();
-            ASTNode::new(Expression::IfExpression {
+            Ok(ASTNode::new(Expression::IfExpression {
                 condition: Box::new(condition),
                 then_branch: Box::new(then_branch),
                 else_branch: None,
-            }, start, end)
+            }, start, end))
         }
     }
 
-    fn parse_while_expression(&mut self) -> ASTNode {
+    fn parse_while_expression(&mut self) -> Result<ASTNode, SyntaxError> {
         let start = self.current_location().clone();
-        self.consume_keyword("while");
-        let condition = self.parse_expression();
-        self.consume_keyword("do");
-        let body = self.parse_expression();
+        self.consume_keyword("while")?;
+        let condition = self.parse_expression()?;
+        self.consume_keyword("do")?;
+        let body = self.parse_expression()?;
         let end = body.end.clone();
 
-        ASTNode::new(Expression::WhileExpression {
+        Ok(ASTNode::new(Expression::WhileExpression {
             condition: Box::new(condition),
             body: Box::new(body),
-        }, start, end)
+        }, start, end))
     }
 
-    fn parse_parentheses(&mut self) -> ASTNode {
-        self.consume_left_paren();
-        let expr = self.parse_expression();
-        self.consume_right_paren();
-        expr
+    fn parse_parentheses(&mut self) -> Result<ASTNode, SyntaxError> {
+        self.consume_left_paren()?;
+        let expr = self.parse_expression()?;
+        self.consume_right_paren()?;
+        Ok(expr)
     }
 
-    fn parse_block_expression(&mut self) -> ASTNode {
-        self.consume_with_value(TokenType::Punctuation, "{");
+    fn parse_block_expression(&mut self) -> Result<ASTNode, SyntaxError> {
+        self.consume_left_curly()?;
         let start = self.current_location().clone();
         let mut statements: Vec<Box<ASTNode>> = vec![];
         loop {
-            if self.current_is("}") {
+            if self.consume_right_curly().is_ok() {
                 let end = self.current_location().clone();
-                self.consume(TokenType::Punctuation);
-                return ASTNode::new(Expression::BlockExpression {
+                return Ok(ASTNode::new(Expression::BlockExpression {
                     statements,
                     result: Box::new(ASTNode::new(Expression::Unit, end.clone(), end.clone())),
-                }, start, end);
+                }, start, end));
             }
-            let statement = self.parse_statement();
-            if self.current_is("}") {
+            let statement = self.parse_statement()?;
+            if self.consume_right_curly().is_ok() {
                 let end = self.current_location().clone();
-                self.consume(TokenType::Punctuation);
-                return ASTNode::new(Expression::BlockExpression {
+                return Ok(ASTNode::new(Expression::BlockExpression {
                     statements,
                     result: Box::new(statement),
-                }, start, end);
+                }, start, end));
             }
             statements.push(Box::new(statement));
             self.consume_available_semi();
         }
     }
 
-    fn parse_keywordy_factor(&mut self) -> ASTNode {
+    fn parse_keywordy_factor(&mut self) -> Result<ASTNode, SyntaxError> {
         if self.current_is("if") {
             self.parse_if_expression()
         } else if self.current_is("while") {
             self.parse_while_expression()
         } else {
-            panic!("Unknown keyword {:?}", self.peek())
+            Err(self.error_here(&format!("Unexpected keyword {:?}", self.peek()?.value)))
         }
     }
 
-    fn parse_factor(&mut self) -> ASTNode {
-        let token = self.peek();
+    fn parse_factor(&mut self) -> Result<ASTNode, SyntaxError> {
+        let token = self.peek()?;
 
         match token.token_type {
             TokenType::IntegerLiteral => self.parse_int_literal(),
@@ -333,14 +349,14 @@ impl Parser {
             TokenType::Punctuation => match token.value.as_str() {
                 "(" => self.parse_parentheses(),
                 "{" => self.parse_block_expression(),
-                _ => panic!("Unexpected token: {:?}", token),
+                _ => Err(self.error_here(format!("Unexpected token: {:?}", token).as_str())),
             },
-            TokenType::None => panic!("Unexpected end of file"),
-            _ => panic!("Unexpected token {:?}", token),
+            TokenType::None => Err(self.error_here("Unexpected end of file")),
+            _ => Err(self.error_here(format!("Unexpected token: {:?}", token).as_str())),
         }
     }
 
-    fn parse_unary_precedence_level(&mut self, level: usize) -> ASTNode {
+    fn parse_unary_precedence_level(&mut self, level: usize) -> Result<ASTNode, SyntaxError> {
         if level >= UNARY_OP_PRECEDENCE.len() {
             return self.parse_factor();
         }
@@ -349,16 +365,16 @@ impl Parser {
             .get(level)
             .expect("Invalid precedence level");
 
-        if let Ok(operator) = Op::unary_from_str(&self.peek().value) {
+        if let Ok(operator) = Op::unary_from_str(&self.peek()?.value) {
             if ops.contains(&operator) {
                 let start = self.current_location().clone();
-                self.consume(TokenType::Operator);
-                let operand = self.parse_unary_precedence_level(level);
+                self.consume(TokenType::Operator)?;
+                let operand = self.parse_unary_precedence_level(level)?;
                 let end = operand.end.clone();
-                ASTNode::new(Expression::UnaryExpression {
+                Ok(ASTNode::new(Expression::UnaryExpression {
                     operator,
                     operand: Box::new(operand),
-                }, start, end)
+                }, start, end))
             } else {
                 self.parse_unary_precedence_level(level + 1)
             }
@@ -367,7 +383,7 @@ impl Parser {
         }
     }
 
-    fn parse_binary_precedence_level(&mut self, level: usize) -> ASTNode {
+    fn parse_binary_precedence_level(&mut self, level: usize) -> Result<ASTNode, SyntaxError> {
         if level >= BINARY_OP_PRECEDENCE.len() {
             return self.parse_unary_precedence_level(0);
         }
@@ -376,13 +392,13 @@ impl Parser {
             .get(level)
             .expect("Invalid precedence level");
 
-        let mut left = self.parse_binary_precedence_level(level + 1);
+        let mut left = self.parse_binary_precedence_level(level + 1)?;
 
         loop {
-            if let Ok(operator) = Op::binary_from_str(&self.peek().value) {
+            if let Ok(operator) = Op::binary_from_str(&self.peek()?.value) {
                 if ops.contains(&operator) {
-                    self.consume(TokenType::Operator);
-                    let right = self.parse_binary_precedence_level(level + 1);
+                    self.consume(TokenType::Operator)?;
+                    let right = self.parse_binary_precedence_level(level + 1)?;
                     let start = left.start.clone();
                     let end = right.end.clone();
                     left = ASTNode::new(Expression::BinaryExpression {
@@ -398,53 +414,52 @@ impl Parser {
             }
         }
 
-        left
+        Ok(left)
     }
 
-    fn parse_assignment_expression(&mut self) -> ASTNode {
-        let left = self.parse_binary_precedence_level(0);
+    fn parse_assignment_expression(&mut self) -> Result<ASTNode, SyntaxError> {
+        let left = self.parse_binary_precedence_level(0)?;
         let start = left.start.clone();
-        if let Ok(op) = Op::binary_from_str(&self.peek().value) {
+        if let Ok(op) = Op::binary_from_str(&self.peek()?.value) {
             if let Op::Assign = op {
-                self.consume(TokenType::Operator);
-                let right = self.parse_assignment_expression();
+                self.consume(TokenType::Operator)?;
+                let right = self.parse_assignment_expression()?;
                 let end = right.end.clone();
-                ASTNode::new(Expression::AssignmentExpression {
+                Ok(ASTNode::new(Expression::AssignmentExpression {
                     left: Box::new(left),
                     right: Box::new(right),
-                }, start, end)
+                }, start, end))
             } else {
                 self.parse_binary_precedence_level(0)
             }
         } else {
-            left
+            Ok(left)
         }
     }
 
-    fn parse_expression(&mut self) -> ASTNode {
+    fn parse_expression(&mut self) -> Result<ASTNode, SyntaxError> {
         self.parse_assignment_expression()
     }
 
-    fn parse_variable_declaration(&mut self) -> ASTNode {
+    fn parse_variable_declaration(&mut self) -> Result<ASTNode, SyntaxError> {
         let start = self.current_location().clone();
-        self.consume_with_value(TokenType::Keyword, "var");
-        let id = self.parse_identifier();
+        self.consume_with_value(TokenType::Keyword, "var")?;
+        let id = self.parse_identifier()?;
         let mut type_annotation = None;
-        if self.current_is(":") {
-            self.consume_with_value(TokenType::Punctuation, ":");
-            type_annotation = Some(self.parse_identifier());
+        if self.consume_with_value(TokenType::Punctuation, ":").is_ok() {
+            type_annotation = Some(self.parse_identifier()?);
         }
-        self.consume_with_value(TokenType::Operator, "=");
-        let init = self.parse_expression();
+        self.consume_with_value(TokenType::Operator, "=")?;
+        let init = self.parse_expression()?;
         let end = init.end.clone();
-        ASTNode::new(Expression::VariableDeclaration {
+        Ok(ASTNode::new(Expression::VariableDeclaration {
             id: Box::new(id),
             type_annotation: type_annotation.map(Box::new),
             init: Box::new(init),
-        }, start, end)
+        }, start, end))
     }
 
-    fn parse_statement(&mut self) -> ASTNode {
+    fn parse_statement(&mut self) -> Result<ASTNode, SyntaxError> {
         if self.current_is("var") {
             self.parse_variable_declaration()
         } else {
@@ -452,43 +467,42 @@ impl Parser {
         }
     }
 
-    fn parse_function_definition(&mut self) -> UserDefinedFunction {
-        self.consume_keyword("fun");
-        let id = self.consume(TokenType::Identifier).value;
+    fn parse_function_definition(&mut self) -> Result<UserDefinedFunction, SyntaxError> {
+        self.consume_keyword("fun")?;
+        let id = self.consume(TokenType::Identifier)?.value;
     
-        self.consume_left_paren();
+        self.consume_left_paren()?;
         let mut params: Vec<Param> = vec![];
         if !self.current_is(")") {
             loop {
-                let arg = self.consume(TokenType::Identifier).value;
-                self.consume_with_value(TokenType::Punctuation, ":");
-                let type_annotation = self.consume(TokenType::Identifier).value;
+                let arg = self.consume(TokenType::Identifier)?.value;
+                self.consume_with_value(TokenType::Punctuation, ":")?;
+                let type_annotation = self.consume(TokenType::Identifier)?.value;
                 params.push(Param { name: arg, param_type: type_annotation });
                 if self.current_is(")") {
                     break;
                 }
-                self.consume_comma();
+                self.consume_comma()?;
             }
         }
-        self.consume_right_paren();
+        self.consume_right_paren()?;
 
         let mut return_type = None;
-        if self.current_is(":") {
-            self.consume_with_value(TokenType::Punctuation, ":");
-            return_type = Some(self.consume(TokenType::Identifier).value);
+        if self.consume_with_value(TokenType::Punctuation, ":").is_ok() {
+            return_type = Some(self.consume(TokenType::Identifier)?.value);
         }
 
-        let body = self.parse_block_expression();
+        let body = self.parse_block_expression()?;
 
-        UserDefinedFunction {
+        Ok(UserDefinedFunction {
             id,
             body: Box::new(body),
             params,
             return_type
-        }
+        })
     }
 
-    fn parse_top_level_block(&mut self) -> (ASTNode, Vec<UserDefinedFunction>) {
+    fn parse_top_level_block(&mut self) -> Result<(ASTNode, Vec<UserDefinedFunction>), SyntaxError> {
         let start = self.current_location().clone();
         let mut statements: Vec<Box<ASTNode>> = vec![];
         let mut result = Box::new(ASTNode::new(Expression::Unit, start.clone(), start.clone()));
@@ -496,10 +510,10 @@ impl Parser {
 
         while self.tokens.len() - self.current_index > 0 {
             if self.current_is("fun") {
-                let fun = self.parse_function_definition();
+                let fun = self.parse_function_definition()?;
                 functions.push(fun);
             } else {
-                let stmt = Box::new(self.parse_statement());
+                let stmt = Box::new(self.parse_statement()?);
                 if self.consume_available_semi() {
                     statements.push(stmt);
                 } else {
@@ -510,20 +524,20 @@ impl Parser {
         }
         let end = self.current_location().clone();
 
-        (
+        Ok((
             ASTNode::new(Expression::BlockExpression { statements, result }, start, end),
             functions
-        )
+        ))
     }
 }
 
 
 pub fn parse(tokens: Vec<Token>) -> Result<Module<UserDefinedFunction, ASTNode>, SyntaxError> {
     let mut parser = Parser::new(tokens);
-    let (expr, functions) = parser.parse_top_level_block();
+    let (ast, functions) = parser.parse_top_level_block()?;
 
     if parser.current_index < parser.tokens.len() {
-        let token = parser.peek();
+        let token = parser.peek()?;
         let message = format!("Unexpected token {:?} at {:}", token.token_type, token.location.to_string());
         return Err(SyntaxError {
             message,
@@ -533,7 +547,7 @@ pub fn parse(tokens: Vec<Token>) -> Result<Module<UserDefinedFunction, ASTNode>,
     }
 
     Ok(Module {
-        ast: expr,
+        ast,
         functions,
     })
 }

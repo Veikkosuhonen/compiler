@@ -429,6 +429,12 @@ fn test_example_blocks() {
 }
 
 #[test]
+fn test_unclosed_block() {
+    let source = "{";
+    assert!(parse(tokenize(source).expect("Should've been able to tokenize the source")).is_err())
+}
+
+#[test]
 fn test_variable_declaration() {
     let n = p("
         var x = 42

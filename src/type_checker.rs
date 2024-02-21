@@ -177,16 +177,18 @@ fn typecheck_assignment_expression(
     sym_table: &mut Box<SymTable<Type>>
 )   -> TypedASTNode {
     if let Expression::Identifier { value: id } = left.expr {
+        let variable_type = sym_table.get(&Symbol::Identifier(id.clone()));
         let right = Box::new( typecheck(*right, sym_table) );
-        sym_table.assign(Symbol::Identifier(id.clone()), right.node_type.clone());
-        let node_type = right.node_type.clone();
-        let left = Box::new(TypedASTNode { expr: Expression::Identifier { value: id }, node_type: node_type.clone() });
+        if variable_type != right.node_type {
+            panic!("Variable type and assignment value types differ: {:?} != {:?}", variable_type, right.node_type)
+        }
+        let left = Box::new(TypedASTNode { expr: Expression::Identifier { value: id }, node_type: variable_type.clone() });
         TypedASTNode { 
             expr: Expression::AssignmentExpression { 
                 left,
                 right 
             }, 
-            node_type: node_type.clone()
+            node_type: variable_type.clone()
         }
     } else {
         panic!("Left side of an assignment must be an identifier");
@@ -480,9 +482,15 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected="Type annotation and init expression types differ: Boolean != Integer")]
-    fn type_annotation_bool_error() {
-        t("var x: Bool = 1");
+    fn typed_variable_assignment() {
+        let node = t("var x: Int = 123; x = 456");
+        assert_eq!(node.node_type, Type::Unit);
+    }
+
+    #[test]
+    #[should_panic(expected="Variable type and assignment value types differ: Integer != Boolean")]
+    fn typed_variable_assignment_error() {
+        t("var x: Int = 123; x = false");
     }
 
     #[test]

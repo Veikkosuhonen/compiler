@@ -164,8 +164,10 @@ impl Parser {
         } else {
             Err(SyntaxError {
                 message: format!(
-                    "Expected {:?} {}, got {}",
-                    expected_type, expected_values.join("|"), token.value
+                    "Expected {:?} {}, found '{}'",
+                    expected_type, 
+                    expected_values.iter().map(|v| format!("'{}'", v)).collect::<Vec<String>>().join("|"), 
+                    token.value
                 ),
                 start: token.start,
                 end: token.end,

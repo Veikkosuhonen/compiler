@@ -29,21 +29,26 @@ fn parse_source(contents: String) -> Module<UserDefinedFunction, ASTNode> {
     let module = parser::parse(tokens)
         .or_else(|err| { report_syntax_error(&contents, &err); Err(err) })
         .expect("Should've been able to parse the source");
-    
+
+    module
+}
+
+pub fn parse_file(path: &String) -> Module<UserDefinedFunction, ASTNode> {
+    let contents = read_file(path);
+    let module = parse_source(contents);
+
     module
 }
 
 pub fn interpret_file(path: &String) -> interpreter::Value {
-    let contents = read_file(path);
-    let module = parse_source(contents);
+    let module = parse_file(path);
     let result = interpreter::interpret_program(&module);
 
     result
 }
 
 pub fn typecheck_file(path: &String) -> Module<TypedUserDefinedFunction, TypedASTNode> {
-    let contents = read_file(path);
-    let module = parse_source(contents);
+    let module = parse_file(path);
     let result = type_checker::typecheck_program(module);
 
     result

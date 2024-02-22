@@ -13,7 +13,9 @@ struct Args {
 
 #[derive(Subcommand, Debug)]
 enum Commands {
+    P { path: String },
     I { path: String },
+    T { path: String },
     Ir { path: String },
     Asm { path: String },
     E2e,
@@ -32,6 +34,14 @@ fn main() {
                 interpreter::Value::Function(_) => println!("Function"),
                 interpreter::Value::Unit => println!("Unit"),
             }
+        },
+        Commands::P { path } => {
+            let module = parse_file(&path);
+            println!("{:#?}", module);
+        },
+        Commands::T { path } => {
+            let module = typecheck_file(&path);
+            println!("{:#?}", module);
         },
         Commands::Ir { path } => {
             let typed_ast = typecheck_file(&path);

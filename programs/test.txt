@@ -1,5 +1,5 @@
-var x = {
-    if x {
+var x: Int = {
+    while true do {
         haha();
-    } else 10000
+    }
 }

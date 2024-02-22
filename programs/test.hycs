@@ -3,3 +3,7 @@ var x: Int = {
         haha();
     }
 }
+
+fun haha() {
+    print_int("haha");
+}

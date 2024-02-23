@@ -3,7 +3,7 @@ use compiler::interpreter::Value;
 
 #[test]
 fn basic_test() {
-    let res = interpret_file(&"./programs/basic_test.chi".to_string());
+    let res = interpret_file(&"./test_programs/basic_test.hycs".to_string());
     if let Value::Integer(ival) = res {
         assert_eq!(ival, 42);
     } else {
@@ -13,7 +13,7 @@ fn basic_test() {
 
 #[test]
 fn basic_symbols_test() {
-    let res = interpret_file(&"./programs/basic_symbols_test.chi".to_string());
+    let res = interpret_file(&"./test_programs/basic_symbols_test.hycs".to_string());
     if let Value::Integer(ival) = res {
         assert_eq!(ival, 42);
     } else {
@@ -23,7 +23,7 @@ fn basic_symbols_test() {
 
 #[test]
 fn scopes_test() {
-    let res = interpret_file(&"./programs/scopes_test.chi".to_string());
+    let res = interpret_file(&"./test_programs/scopes_test.hycs".to_string());
     if let Value::Integer(ival) = res {
         assert_eq!(ival, 199);
     } else {

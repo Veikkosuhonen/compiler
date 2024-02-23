@@ -79,8 +79,10 @@ pub fn typecheck_program(module: Module<UserDefinedFunction, ASTNode>) -> Module
     let mut functions: Vec<TypedUserDefinedFunction> = vec![];
 
     for func in module.functions {
-        let typed_function = typecheck_function(func, &mut sym_table);
-        sym_table.symbols.insert(Symbol::Identifier(typed_function.id.clone()), Type::Function(Box::new(typed_function.func_type.clone())));
+        let id = Symbol::Identifier(func.id.clone());
+        let function_type = get_function_type(&func, &sym_table);
+        sym_table.symbols.insert(id, Type::Function(Box::new(function_type.clone())));
+        let typed_function = typecheck_function(func, function_type, &mut sym_table);
         functions.push(typed_function);
     }
 
@@ -137,21 +139,32 @@ fn typecheck(node: ASTNode, sym_table: &mut Box<SymTable<Type>>) -> TypedASTNode
     }
 }
 
-fn typecheck_function(
-    func: UserDefinedFunction,
-    sym_table: &mut Box<SymTable<Type>>
-) -> TypedUserDefinedFunction {
+fn get_function_type(
+    func: &UserDefinedFunction,
+    sym_table: &Box<SymTable<Type>>,
+) -> FunctionType {
     let params: Vec<(Symbol, Type)> = func.params.iter().map(|param| {
         let sym = Symbol::Identifier(param.name.clone());
         (sym, sym_table.get(&Symbol::Identifier(param.param_type.clone())))
     }).collect();
-
-    let return_type_name = func.return_type.unwrap_or(String::from("Unit"));
+    let return_type_name = func.return_type.clone().unwrap_or(String::from("Unit"));
     let return_type = sym_table.get(&Symbol::Identifier(return_type_name));
-    let func_type = FunctionType { 
+    FunctionType { 
         param_types: params.iter().map(|(_, val)| val.clone()).collect(),
         return_type
-    };
+    }
+}
+
+fn typecheck_function(
+    func: UserDefinedFunction,
+    func_type: FunctionType,
+    sym_table: &mut Box<SymTable<Type>>
+) -> TypedUserDefinedFunction {
+    let params = func.params.iter().enumerate().map(|(idx, param)| {
+        let sym = Symbol::Identifier(param.name.clone());
+        (sym, func_type.param_types.get(idx).unwrap().clone())
+    }).collect::<Vec<(Symbol, Type)>>();
+
     let body = sym_table.with_inner_given_args(&params, |inner| {
         typecheck(*func.body, inner)
     });
@@ -500,6 +513,21 @@ mod tests {
                 x + y
             }
             add(1, 2)
+        ");
+        assert_eq!(node.node_type, Type::Integer);
+    }
+
+    #[test]
+    fn recursion() {
+        let node = t("
+        fun recurse(x: Int, i: Int): Int {
+            if i > 10 then {
+                x
+            } else {
+                recurse(2 * x, i + 1)
+            }
+        }
+        recurse(2, 10)
         ");
         assert_eq!(node.node_type, Type::Integer);
     }

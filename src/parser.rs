@@ -86,7 +86,7 @@ pub enum Expression<T> {
 #[derive(Debug)]
 pub struct Module<F, T> {
     pub functions: Vec<F>,
-    pub ast: T,
+    pub ast: Box<T>,
 }
 
 struct Parser {
@@ -555,7 +555,7 @@ pub fn parse(tokens: Vec<Token>) -> Result<Module<UserDefinedFunction, ASTNode>,
     }
 
     Ok(Module {
-        ast,
+        ast: Box::new(ast),
         functions,
     })
 }

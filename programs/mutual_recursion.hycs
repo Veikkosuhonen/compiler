@@ -1,0 +1,17 @@
+fun recurse(x: Int, i: Int) {
+    if i > 10 then {
+        x
+    } else {
+        recurse2(2 * x, i + 1)
+    }
+}
+
+fun recurse2(x: Int, i: Int) {
+    if i > 10 then {
+        x
+    } else {
+        recurse(2 * x, i + 1)
+    }
+}
+
+recurse(1, 0)

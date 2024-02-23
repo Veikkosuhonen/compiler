@@ -84,9 +84,9 @@ pub fn typecheck_program(module: Module<UserDefinedFunction, ASTNode>) -> Module
         functions.push(typed_function);
     }
 
-    let typed_node = typecheck(module.ast, &mut sym_table);
+    let typed_node = typecheck(*module.ast, &mut sym_table);
 
-    Module { functions, ast: typed_node }
+    Module { functions, ast: Box::new(typed_node) }
 }
 
 fn get_toplevel_sym_table() -> Box<SymTable<Type>> {
@@ -360,7 +360,7 @@ mod tests {
         let tokens: Vec<Token> = tokenize(src).expect("Tokenizing to succeed");
         let module = parse(tokens).expect("Parsing to succeed");
         let module = typecheck_program(module);
-        module.ast
+        *module.ast
     }
 
     #[test]

@@ -37,7 +37,7 @@ fn print_int(args: Vec<Value>) -> Value {
 fn print_bool(args: Vec<Value>) -> Value {
     let arg = args.get(0).expect("Number of arguments to print_int should be 1");
     if let Value::Boolean(bval) = arg {
-        println!("{}", bval);
+        println!("{}", if *bval { 1 } else { 0 });
     } else {
         panic!("Tried to print '{:?}' which is not a boolean", arg)
     }

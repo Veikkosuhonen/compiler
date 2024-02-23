@@ -1,7 +1,7 @@
 use std::fs::File;
 use std::os::unix::fs::PermissionsExt;
 use std::{fs, io::Write};
-use std::process::{Command, Stdio};
+use std::process::{Child, Command, Stdio};
 
 use crate::{asm_generator::generate_asm, ir_generator::generate_ir, parse_source, type_checker::typecheck_program};
 
@@ -44,11 +44,37 @@ fn run_test(source: &str) {
         }
     }).collect::<Vec<&str>>().join("\n");
 
-    let node = parse_source(program_source);
+    let node = parse_source(program_source.clone());
     let typed_ast = typecheck_program(node);
     let ir = generate_ir(typed_ast);
     let asm = generate_asm("main", ir);
 
+    if fs::write("./target/temp_source.hycs", program_source).is_err() {
+        panic!("Failed to write to temp file ./target/temp_source.hycs")
+    }
+
+    // Interpret
+    let mut interpret_process = Command::new("cargo")
+        .args(["run", "--", "i", "./target/temp_source.hycs"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .expect("Should've been able to interpret program");
+
+    let mut stdin = interpret_process.stdin.take().expect("Should've been able to open stdin to interpreter process");
+
+    let interpreter_input = inputs.clone();
+    std::thread::spawn(move || {
+        for input in interpreter_input {
+            stdin.write(input.to_string().as_bytes()).expect("Should've been able to write to stdin of interpreter process");
+        }
+    });
+
+    println!("-> Interpreted");
+    check_output(interpret_process, expects.clone());
+    println!("--> Pass");
+
+    // Asm
     if fs::write("./target/temp_asm.s", asm).is_err() {
         panic!("Failed to write to temp file ./target/temp_asm.s")
     }
@@ -85,6 +111,12 @@ fn run_test(source: &str) {
         }
     });
 
+    println!("-> Compiled");
+    check_output(process, expects);
+    println!("--> Pass");
+}
+
+fn check_output(process: Child, expects: Vec<i32>) {
     let output = process.wait_with_output().expect("Should've been able to read process output");
 
     if !output.status.success() {
@@ -92,8 +124,8 @@ fn run_test(source: &str) {
         println!("process exited with status {}", output.status.to_string())
     }
 
-    // Check whether output matches expects
     let outputs = String::from_utf8_lossy(&output.stdout).split("\n").filter_map(|v| {
+        // println!("{}", v);
         if let Ok(v) = v.parse::<i32>() {
             Some(v)
         } else {
@@ -106,6 +138,4 @@ fn run_test(source: &str) {
     for (i, value) in outputs.iter().enumerate() {
         assert_eq!(*value, expects[i], "Output at index {} is incorrect: {} != {}", i, *value, expects[i]);
     }
-
-    println!("Pass");
 }

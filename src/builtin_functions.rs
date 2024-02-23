@@ -54,7 +54,7 @@ fn read_int(args: Vec<Value>) -> Value {
         .read_line(&mut input)
         .expect("Failed to read input");
 
-    let ival: i32 = input.parse().expect("Input is not an integer");
+    let ival: i32 = input.trim().parse().expect("Input is not an integer");
 
     Value::Integer(ival)
 }

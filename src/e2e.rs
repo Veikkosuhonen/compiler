@@ -7,7 +7,7 @@ use crate::{asm_generator::generate_asm, ir_generator::generate_ir, parse_source
 
 pub fn run_tests() {
     let _ = fs::create_dir("./target");
-    fs::read_dir("./test_programs").unwrap()
+    fs::read_dir("./test_programs/e2e").unwrap()
         .filter_map(|res| {
             res.ok()
         })

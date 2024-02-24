@@ -7,14 +7,15 @@ use std::process::{Child, Command, Stdio};
 
 use crate::{asm_generator::generate_asm, ir_generator::generate_ir, parse_source, type_checker::typecheck_program};
 
-pub fn run_tests() {
+pub fn run_tests(compile_only: bool) {
+    let start = Instant::now();
     let _ = fs::create_dir("./target");
     let mut handles = fs::read_dir("./test_programs/e2e").unwrap()
         .filter_map(|res| {
             res.ok()
         })
         .map(|file| {
-            run_test_file(file.path().to_str().unwrap().to_string())
+            run_test_file(file.path().to_str().unwrap().to_string(), compile_only)
         })
         .collect::<Vec<JoinHandle<_>>>();
 
@@ -23,9 +24,11 @@ pub fn run_tests() {
     for handle in handles {
         println!("{}", handle.join().expect("Test job failed").join(""));
     }
+
+    println!("Done in {} s", start.elapsed().as_secs());
 }
 
-fn run_test_file(path: String) -> JoinHandle<Vec<String>> {
+fn run_test_file(path: String, compile_only: bool) -> JoinHandle<Vec<String>> {
     std::thread::spawn(move || {
         let mut lines = vec![];
 
@@ -37,13 +40,13 @@ fn run_test_file(path: String) -> JoinHandle<Vec<String>> {
         let tests = source.split("---").collect::<Vec<&str>>();
         for (i, test_source) in tests.iter().enumerate() {
             lines.push(format!("\n{}/{} ", i + 1, tests.len()));
-            lines.append(&mut run_test(test_source, format!("{test_id}_{i}")));
+            lines.append(&mut run_test(test_source, format!("{test_id}_{i}"), compile_only));
         }
         lines
     })
 }
 
-fn run_test(source: &str, id: String) -> Vec<String> {
+fn run_test(source: &str, id: String, compile_only: bool) -> Vec<String> {
 
     let mut outputs: Vec<String> = vec![];
 
@@ -96,31 +99,33 @@ fn run_test(source: &str, id: String) -> Vec<String> {
         panic!("Failed to write to temp file ./target/{id}.hycs")
     }
 
-    let interpreter_start = Instant::now();
+    if !compile_only {
+        let interpreter_start = Instant::now();
 
-    // Interpret
-    let mut interpret_process = Command::new("./target/debug/compiler")
-        .args(["i", format!("./target/{id}.hycs").as_str()])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .spawn()
-        .expect("Should've been able to interpret program");
+        // Interpret
+        let mut interpret_process = Command::new("./target/debug/compiler")
+            .args(["i", format!("./target/{id}.hycs").as_str()])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()
+            .expect("Should've been able to interpret program");
 
-    let mut stdin = interpret_process.stdin.take().expect("Should've been able to open stdin to interpreter process");
+        let mut stdin = interpret_process.stdin.take().expect("Should've been able to open stdin to interpreter process");
 
-    let interpreter_input = inputs.clone();
-    std::thread::spawn(move || {
-        for input in interpreter_input {
-            stdin.write(input.to_string().as_bytes()).expect("Should've been able to write to stdin of interpreter process");
+        let interpreter_input = inputs.clone();
+        std::thread::spawn(move || {
+            for input in interpreter_input {
+                stdin.write(input.to_string().as_bytes()).expect("Should've been able to write to stdin of interpreter process");
+            }
+        });
+
+        out(format!("-> Interpreted "));
+        if let Err(msg) = check_output(interpret_process, expects.clone(), source) {
+            out(format!("---> FAIL - {} ms\n", interpreter_start.elapsed().as_millis()));
+            out(format!("{msg}\n"));
+        } else {
+            out(format!("---> Pass - {} ms\n", interpreter_start.elapsed().as_millis()));
         }
-    });
-
-    out(format!("-> Interpreted "));
-    if let Err(msg) = check_output(interpret_process, expects.clone(), source) {
-        out(format!("---> FAIL - {} ms\n", interpreter_start.elapsed().as_millis()));
-        out(format!("{msg}\n"));
-    } else {
-        out(format!("---> Pass - {} ms\n", interpreter_start.elapsed().as_millis()));
     }
 
     // Asm
@@ -164,7 +169,7 @@ fn run_test(source: &str, id: String) -> Vec<String> {
 
     out(format!("-> Compiled    "));
     if let Err(msg) = check_output(process, expects, source) {
-        out(format!("---> FAIL - {} ms\n", interpreter_start.elapsed().as_millis()));
+        out(format!("---> FAIL - {} ms\n", run_start.elapsed().as_millis()));
         out(format!("{msg}\n"));
     } else {
         out(format!("---> Pass - {} ms\n", run_start.elapsed().as_millis()));

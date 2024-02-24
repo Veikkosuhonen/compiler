@@ -1,4 +1,4 @@
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, Args};
 
 use compiler::{asm_generator::generate_asm, e2e::run_tests, ir_generator::{generate_ir, generate_ir_code}, *};
 
@@ -6,7 +6,7 @@ use compiler::{asm_generator::generate_asm, e2e::run_tests, ir_generator::{gener
 /// Simple program to greet a person
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
-struct Args {
+struct CliArgs {
     #[command(subcommand)]
     command: Commands,
 }
@@ -18,11 +18,17 @@ enum Commands {
     T { path: String },
     Ir { path: String },
     Asm { path: String },
-    E2e,
+    E2e(E2EArgs),
+}
+
+#[derive(Args, Debug)]
+struct E2EArgs {
+    #[arg(short, long)]
+    compiled_only: Option<bool>
 }
 
 fn main() {
-    let args = Args::parse();
+    let args = CliArgs::parse();
 
     match &args.command {
         Commands::I { path } => {
@@ -55,8 +61,8 @@ fn main() {
             let asm = generate_asm(ir);
             println!("{}", asm);
         },
-        Commands::E2e => {
-            run_tests()
+        Commands::E2e(args) => {
+            run_tests(args.compiled_only.is_some_and(|v| v))
         }
     };
 }

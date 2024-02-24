@@ -121,7 +121,7 @@ lazy_static! {
     static ref BOOLEAN_LITERAL_REGEX: Regex = Regex::new(r"^(true|false)").unwrap();
     static ref OPERATOR_REGEX: Regex = Regex::new(r"^(==|!=|<=|>=|\+|-|\*?\*|/|%|=|<|>|and|or|not)").unwrap();
     static ref PUNCTUATION_REGEX: Regex = Regex::new(r"^(\(|\)|\{|\}|,|;|:)").unwrap();
-    static ref KEYWORD_REGEX: Regex = Regex::new(r"^(while\b|do\b|if\b|then\b|else\b|var\b|fun\b)").unwrap();
+    static ref KEYWORD_REGEX: Regex = Regex::new(r"^(while\b|do\b|if\b|then\b|else\b|var\b|fun\b|return\b)").unwrap();
 
     // Order is significant here. The first match is the one that will be used.
     static ref TOKEN_REGEX_TO_TYPE: Vec<(Regex, TokenType)> = vec![
@@ -338,6 +338,14 @@ mod tests {
     }
 
     #[test]
+    fn return_is_a_keyword() {
+        let tokens = tokenize("
+            return 1
+        ").expect("Shoulve tokenized");
+        assert!(matches!(tokens[0].token_type, TokenType::Keyword     {..}));
+    }
+
+    #[test]
     fn test_function_call() {
         let source = "f(1, 2, 3)";
         let tokens = tokenize(source).expect("Should've been able to tokenize");
@@ -377,5 +385,5 @@ mod tests {
         for t in tokens {
             assert!(matches!(t.token_type, TokenType::Identifier { .. }));
         }
-}
+    }
 }

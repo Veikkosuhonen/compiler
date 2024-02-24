@@ -505,7 +505,7 @@ fn type_annotation() {
 fn regression_1() {
     p("
     fun identity(x: Int): Int {
-        x
+        x // This should parse
     }
     
     fun tuplaa(x: Int): Int {

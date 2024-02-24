@@ -121,7 +121,7 @@ lazy_static! {
     static ref BOOLEAN_LITERAL_REGEX: Regex = Regex::new(r"^(true|false)").unwrap();
     static ref OPERATOR_REGEX: Regex = Regex::new(r"^(==|!=|<=|>=|\+|-|\*?\*|/|%|=|<|>|and|or|not)").unwrap();
     static ref PUNCTUATION_REGEX: Regex = Regex::new(r"^(\(|\)|\{|\}|,|;|:)").unwrap();
-    static ref KEYWORD_REGEX: Regex = Regex::new(r"^(while|do|if|then|else|var|fun)").unwrap();
+    static ref KEYWORD_REGEX: Regex = Regex::new(r"^(while\b|do\b|if\b|then\b|else\b|var\b|fun\b)").unwrap();
 
     // Order is significant here. The first match is the one that will be used.
     static ref TOKEN_REGEX_TO_TYPE: Vec<(Regex, TokenType)> = vec![
@@ -364,4 +364,18 @@ mod tests {
         assert!(matches!(tokens[4].token_type, TokenType::Operator       {..}));
         assert!(matches!(tokens[5].token_type, TokenType::IntegerLiteral {..}));
     }
+
+    #[test]
+    fn identifier_can_start_with_keyword() {
+        let tokens = tokenize("
+            double_big_mac
+            iffy
+            whiley
+            funny
+            variable
+        ").expect("Shoulve tokenized");
+        for t in tokens {
+            assert!(matches!(t.token_type, TokenType::Identifier { .. }));
+        }
+}
 }

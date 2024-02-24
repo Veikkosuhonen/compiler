@@ -1,6 +1,6 @@
 
 use compiler::interpreter::UserDefinedFunction;
-use compiler::parser::{parse, ASTNode, Expression, Module};
+use compiler::parser::{parse, ASTNode, Expr, Module};
 use compiler::tokenizer::{Token,Op,tokenize};
 
 fn p(source: &str) -> Box<ASTNode> {
@@ -9,7 +9,7 @@ fn p(source: &str) -> Box<ASTNode> {
     ).expect("Should've been able to parse the source");
     // Match to block
     match &node.main().body.expr {
-        Expression::BlockExpression { result,.. } => result.clone(),
+        Expr::Block { result,.. } => result.clone(),
         _ => panic!("Parse returned a non block expression")
     }
 }
@@ -32,7 +32,7 @@ fn test_parse_unary_op() {
     let source = "-1";
     let expression = p(source);
     match expression.expr {
-        Expression::UnaryExpression { operator, .. } => assert_eq!(operator, Op::UnarySub),
+        Expr::Unary { operator, .. } => assert_eq!(operator, Op::UnarySub),
         _ => panic!("Expected unary expression"),
     }
 }
@@ -43,11 +43,11 @@ fn test_parse_multiple_unary_op() {
     let node = p(source);
     
     match node.expr {
-        Expression::UnaryExpression { operator, operand } => {
+        Expr::Unary { operator, operand } => {
             assert_eq!(operator, Op::Not);
-            if let Expression::UnaryExpression { operand,.. } = operand.expr {
-                if let Expression::UnaryExpression { operand,.. } = operand.expr {
-                    if let Expression::BooleanLiteral { value } = operand.expr {
+            if let Expr::Unary { operand,.. } = operand.expr {
+                if let Expr::Unary { operand,.. } = operand.expr {
+                    if let Expr::BooleanLiteral { value } = operand.expr {
                         assert!(!value)
                     } else {
                         panic!("Perkele!")
@@ -70,7 +70,7 @@ fn test_parse_binary_op() {
     let node = p(source);
     
     match node.expr {
-        Expression::BinaryExpression { operator, .. } => {
+        Expr::Binary { operator, .. } => {
             assert_eq!(operator, Op::Add);
         },
         _ => panic!("Expected binary expression"),
@@ -84,16 +84,16 @@ fn test_associative_binary_op() {
     let node = p(source);
     
     match node.expr {
-        Expression::BinaryExpression { operator, left ,.. } => {
+        Expr::Binary { operator, left ,.. } => {
             assert_eq!(operator, Op::Sub);
             match left.expr {
-                Expression::BinaryExpression { operator, left, .. } => {
+                Expr::Binary { operator, left, .. } => {
                     assert_eq!(operator, Op::Add);
                     match left.expr {
-                        Expression::BinaryExpression { operator, left, .. } => {
+                        Expr::Binary { operator, left, .. } => {
                             assert_eq!(operator, Op::Sub);
                             match left.expr {
-                                Expression::Identifier { value } => {
+                                Expr::Identifier { value } => {
                                     assert_eq!(value, "minttujam");
                                 },
                                 _ => panic!("Expected literal minttujam"),
@@ -116,19 +116,19 @@ fn test_precedence_binary_op() {
     let node = p(source);
     
     match node.expr {
-        Expression::BinaryExpression { operator, left, .. } => {
+        Expr::Binary { operator, left, .. } => {
             assert_eq!(operator, Op::Sub);
             match left.expr {
-                Expression::BinaryExpression { operator, left, right } => {
+                Expr::Binary { operator, left, right } => {
                     assert_eq!(operator, Op::Add);
                     match left.expr {
-                        Expression::IntegerLiteral { value, .. } => {
+                        Expr::IntegerLiteral { value, .. } => {
                             assert_eq!(value, 1);
                             match right.expr {
-                                Expression::BinaryExpression { operator, left, .. }  => {
+                                Expr::Binary { operator, left, .. }  => {
                                     assert_eq!(operator, Op::Mul);
                                     match left.expr {
-                                        Expression::IntegerLiteral { value } => {
+                                        Expr::IntegerLiteral { value } => {
                                             assert_eq!(value, 2);
                                         },
                                         _ => panic!("Expected literal 2"),
@@ -154,13 +154,13 @@ fn test_parentheses() {
     let node = p(source);
     
     match node.expr {
-        Expression::BinaryExpression { operator, left, .. } => {
+        Expr::Binary { operator, left, .. } => {
             assert_eq!(operator, Op::Mul);
             match left.expr {
-                Expression::BinaryExpression { operator, left,.. } => {
+                Expr::Binary { operator, left,.. } => {
                     assert_eq!(operator, Op::Add);
                     match left.expr {
-                        Expression::IntegerLiteral { value } => {
+                        Expr::IntegerLiteral { value } => {
                             assert_eq!(value, 1);
                         },
                         _ => panic!("Expected literal 1"),
@@ -180,7 +180,7 @@ fn test_parse_int_literal() {
     let node = p(source);
     
     match node.expr {
-        Expression::IntegerLiteral { value, .. } => {
+        Expr::IntegerLiteral { value, .. } => {
             assert_eq!(value, 42);
         },
         _ => panic!("Expected literal"),
@@ -194,7 +194,7 @@ fn test_parse_identifier() {
     let node = p(source);
     
     match node.expr {
-        Expression::Identifier { value, .. } => {
+        Expr::Identifier { value, .. } => {
             assert_eq!(value, "identifieeeer");
         },
         _ => panic!("Expected identifier"),
@@ -206,7 +206,7 @@ fn complex_test_1() {
     let source = "((never + gonna * (give - you)) / (up))";
     let node = p(source);
     match node.expr {
-        Expression::BinaryExpression { operator, .. } => {
+        Expr::Binary { operator, .. } => {
             assert_eq!(operator, Op::Div);
         },
         _ => panic!("Expected binary expression"),
@@ -218,13 +218,13 @@ fn test_complex_unary() {
     let node = p("2 * -2 + -2");
 
     match node.expr {
-        Expression::BinaryExpression { left, operator, .. } => {
+        Expr::Binary { left, operator, .. } => {
             assert_eq!(operator, Op::Add);
             match left.expr {
-                Expression::BinaryExpression { operator, right,.. } => {
+                Expr::Binary { operator, right,.. } => {
                     assert_eq!(operator, Op::Mul);
                     match right.expr {
-                        Expression::UnaryExpression { operator,.. } => {
+                        Expr::Unary { operator,.. } => {
                             assert_eq!(operator, Op::UnarySub)
                         },
                         _ => panic!("Expected - unary expression")
@@ -243,15 +243,15 @@ fn test_if_else_expression() {
     let source = "if 1 then 2 else 3";
     let node = p(source);
     match node.expr {
-        Expression::IfExpression { condition, then_branch, else_branch } => {
+        Expr::If { condition, then_branch, else_branch } => {
             match condition.expr {
-                Expression::IntegerLiteral { value } => {
+                Expr::IntegerLiteral { value } => {
                     assert_eq!(value, 1);
                 },
                 _ => panic!("Expected literal 1"),
             }
             match then_branch.expr {
-                Expression::IntegerLiteral { value } => {
+                Expr::IntegerLiteral { value } => {
                     assert_eq!(value, 2);
                 },
                 _ => panic!("Expected literal 2"),
@@ -259,7 +259,7 @@ fn test_if_else_expression() {
             match else_branch {
                 Some(else_branch) => {
                     match else_branch.expr {
-                        Expression::IntegerLiteral { value } => {
+                        Expr::IntegerLiteral { value } => {
                             assert_eq!(value, 3)
                         },
                         _ => panic!("Expected literal 3")
@@ -277,15 +277,15 @@ fn test_if_expression() {
     let source = "if 1 then 2";
     let node = p(source);
     match node.expr {
-        Expression::IfExpression { condition, then_branch, else_branch } => {
+        Expr::If { condition, then_branch, else_branch } => {
             match condition.expr {
-                Expression::IntegerLiteral { value } => {
+                Expr::IntegerLiteral { value } => {
                     assert_eq!(value, 1);
                 },
                 _ => panic!("Expected literal 1"),
             }
             match then_branch.expr {
-                Expression::IntegerLiteral { value } => {
+                Expr::IntegerLiteral { value } => {
                     assert_eq!(value, 2);
                 },
                 _ => panic!("Expected literal 2"),
@@ -304,11 +304,11 @@ fn test_complex_if_expression() {
     let source = "1 + (if 1 then 2 else 3) * 2";
     let node = p(source);
     match node.expr {
-        Expression::BinaryExpression { right , ..} => {
+        Expr::Binary { right , ..} => {
             match right.expr {
-                Expression::BinaryExpression { left , ..} => {
+                Expr::Binary { left , ..} => {
                     match left.expr {
-                        Expression::IfExpression { .. } => {
+                        Expr::If { .. } => {
                             //
                         }
                         _ => panic!("Expected if expression"),
@@ -326,7 +326,7 @@ fn test_boolean_literal() {
     let source = "true";
     let node = p(source);
     match node.expr {
-        Expression::BooleanLiteral { value } => {
+        Expr::BooleanLiteral { value } => {
             assert_eq!(value, true)
         },
         _ => panic!("Not a boolean")
@@ -338,9 +338,9 @@ fn test_function_call_without_args() {
     let source = "f()";
     let node = p(source);
     match node.expr {
-        Expression::CallExpression { arguments, callee } => {
+        Expr::Call { arguments, callee } => {
             match callee.expr {
-                Expression::Identifier { value } => {
+                Expr::Identifier { value } => {
                     assert_eq!(value, "f");
                 },
                 _ => panic!("Callee not identifier")
@@ -356,9 +356,9 @@ fn test_function_call_with_arg() {
     let source = "f(1 + 1)";
     let node = p(source);
     match node.expr {
-        Expression::CallExpression { arguments, callee } => {
+        Expr::Call { arguments, callee } => {
             match callee.expr {
-                Expression::Identifier { value } => {
+                Expr::Identifier { value } => {
                     assert_eq!(value, "f");
                 },
                 _ => panic!("Callee not identifier")
@@ -374,9 +374,9 @@ fn test_function_call_with_args() {
     let source = "f(1, 2, 3)";
     let node = p(source);
     match node.expr {
-        Expression::CallExpression { arguments, callee } => {
+        Expr::Call { arguments, callee } => {
             match callee.expr {
-                Expression::Identifier { value } => {
+                Expr::Identifier { value } => {
                     assert_eq!(value, "f");
                 },
                 _ => panic!("Callee not identifier")
@@ -391,9 +391,9 @@ fn test_function_call_with_args() {
 fn test_assignment() {
     let source = "x = 42 + 58";
     let node = p(source);
-    if let Expression::AssignmentExpression { left, right } = node.expr {
-        assert!(matches!(left.expr, Expression::Identifier { .. }));
-        assert!(matches!(right.expr, Expression::BinaryExpression { .. }));
+    if let Expr::Assignment { left, right } = node.expr {
+        assert!(matches!(left.expr, Expr::Identifier { .. }));
+        assert!(matches!(right.expr, Expr::Binary { .. }));
     } else {
         panic!("Wrong!")
     }
@@ -402,7 +402,7 @@ fn test_assignment() {
 #[test]
 fn test_block() {
     let n = p("{}");
-    assert!(matches!(n.expr, Expression::BlockExpression { .. }));
+    assert!(matches!(n.expr, Expr::Block { .. }));
 }
 
 #[test]
@@ -439,7 +439,7 @@ fn test_variable_declaration() {
     let n = p("
         var x = 42
     ");
-    assert!(matches!(n.expr, Expression::VariableDeclaration { .. }))
+    assert!(matches!(n.expr, Expr::VariableDeclaration { .. }))
 }
 
 #[test]
@@ -448,7 +448,7 @@ fn test_many_variable_declarations() {
         var x = 42;
         var x = if false then { never() } else { always() }
     ");
-    assert!(matches!(n.expr, Expression::VariableDeclaration { .. }))
+    assert!(matches!(n.expr, Expr::VariableDeclaration { .. }))
 }
 
 #[test]
@@ -471,8 +471,8 @@ fn function_definition() {
 
     assert_eq!(fun.params.len(), 0);
 
-    if let Expression::BlockExpression { result, .. } = &fun.body.expr {
-        if let Expression::IntegerLiteral { value } = result.expr {
+    if let Expr::Block { result, .. } = &fun.body.expr {
+        if let Expr::IntegerLiteral { value } = result.expr {
             assert_eq!(value, 313)
         }
     } else {
@@ -480,18 +480,26 @@ fn function_definition() {
     }
 }
 
+#[test]
+fn return_expression() {
+    let n = p("
+        var x = 42
+    ");
+    assert!(matches!(n.expr, Expr::VariableDeclaration { .. }))
+}
+
 
 #[test]
 fn type_annotation() {
     let node = p("var x: Int = 313");
-    if let Expression::VariableDeclaration { id, type_annotation, .. } = &node.expr {
-        if let Expression::Identifier { value } = &id.expr {
+    if let Expr::VariableDeclaration { id, type_annotation, .. } = &node.expr {
+        if let Expr::Identifier { value } = &id.expr {
             assert_eq!(value, "x");
         } else {
             panic!("Id is not Identifier")
         }
         let type_annotation = type_annotation.as_ref().unwrap();
-        if let Expression::Identifier { value } = &type_annotation.expr {
+        if let Expr::Identifier { value } = &type_annotation.expr {
             assert_eq!(value, "Int");
         } else {
             panic!("Type annotation is not Identifier")

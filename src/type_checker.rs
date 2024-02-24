@@ -1,7 +1,7 @@
 use crate::builtin_functions::get_builtin_function_symbol_type_mappings;
 use crate::interpreter::UserDefinedFunction;
 use crate::sym_table::{SymTable, Symbol};
-use crate::parser::{ASTNode, Expression, Module};
+use crate::parser::{ASTNode, Expr, Module};
 use crate::tokenizer::Op;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -56,7 +56,7 @@ pub enum Type {
 
 #[derive(Debug, Clone)]
 pub struct TypedASTNode {
-    pub expr: Expression<TypedASTNode>,
+    pub expr: Expr<TypedASTNode>,
     pub node_type: Type,
 }
 
@@ -120,32 +120,32 @@ fn get_toplevel_sym_table() -> Box<SymTable<Type>> {
 
 fn typecheck(node: ASTNode, sym_table: &mut Box<SymTable<Type>>) -> TypedASTNode {
     match node.expr {
-        Expression::Unit => TypedASTNode { expr: Expression::Unit, node_type: Type::Unit },
-        Expression::IntegerLiteral { value } => TypedASTNode { expr: Expression::IntegerLiteral { value }, node_type: Type::Integer },
-        Expression::BooleanLiteral { value } => TypedASTNode { expr: Expression::BooleanLiteral { value }, node_type: Type::Boolean },
-        Expression::Identifier { value } => typecheck_identifier(value, sym_table),
-        Expression::BinaryExpression { left, operator, right } => {
+        Expr::Unit => TypedASTNode { expr: Expr::Unit, node_type: Type::Unit },
+        Expr::IntegerLiteral { value } => TypedASTNode { expr: Expr::IntegerLiteral { value }, node_type: Type::Integer },
+        Expr::BooleanLiteral { value } => TypedASTNode { expr: Expr::BooleanLiteral { value }, node_type: Type::Boolean },
+        Expr::Identifier { value } => typecheck_identifier(value, sym_table),
+        Expr::Binary { left, operator, right } => {
             typecheck_binary_op(left, right, operator, sym_table)
         },
-        Expression::UnaryExpression { operand, operator } => {
+        Expr::Unary { operand, operator } => {
             typecheck_unary_op(operand, operator, sym_table)
         }
-        Expression::IfExpression { condition, then_branch, else_branch } => {
+        Expr::If { condition, then_branch, else_branch } => {
             typecheck_if_expression(condition, then_branch, else_branch, sym_table)
         },
-        Expression::WhileExpression { condition, body } => {
+        Expr::While { condition, body } => {
             typecheck_while_expression(condition, body, sym_table)
         },
-        Expression::BlockExpression { statements, result } => {
+        Expr::Block { statements, result } => {
             typecheck_block_expression(statements, result, sym_table)
         },
-        Expression::AssignmentExpression { left, right } => {
+        Expr::Assignment { left, right } => {
             typecheck_assignment_expression(left, right, sym_table)
         },
-        Expression::VariableDeclaration { id, init, type_annotation } => {
+        Expr::VariableDeclaration { id, init, type_annotation } => {
             typecheck_variable_declaration(id, init, type_annotation, sym_table)
         },
-        Expression::CallExpression { callee, arguments } => {
+        Expr::Call { callee, arguments } => {
             typecheck_call_expression(callee, arguments, sym_table)
         },
     }
@@ -193,7 +193,7 @@ fn typecheck_identifier(
     value: String,
     sym_table: &mut Box<SymTable<Type>>,
 ) -> TypedASTNode {
-    TypedASTNode { expr: Expression::Identifier { value: value.clone() }, node_type: sym_table.get(&Symbol::Identifier(value)) }
+    TypedASTNode { expr: Expr::Identifier { value: value.clone() }, node_type: sym_table.get(&Symbol::Identifier(value)) }
 }
 
 fn typecheck_assignment_expression(
@@ -201,15 +201,15 @@ fn typecheck_assignment_expression(
     right: Box<ASTNode>, 
     sym_table: &mut Box<SymTable<Type>>
 )   -> TypedASTNode {
-    if let Expression::Identifier { value: id } = left.expr {
+    if let Expr::Identifier { value: id } = left.expr {
         let variable_type = sym_table.get(&Symbol::Identifier(id.clone()));
         let right = Box::new( typecheck(*right, sym_table) );
         if variable_type != right.node_type {
             panic!("Variable type and assignment value types differ: {:?} != {:?}", variable_type, right.node_type)
         }
-        let left = Box::new(TypedASTNode { expr: Expression::Identifier { value: id }, node_type: variable_type.clone() });
+        let left = Box::new(TypedASTNode { expr: Expr::Identifier { value: id }, node_type: variable_type.clone() });
         TypedASTNode { 
-            expr: Expression::AssignmentExpression { 
+            expr: Expr::Assignment { 
                 left,
                 right 
             }, 
@@ -243,7 +243,7 @@ fn typecheck_if_expression(
     }
 
     TypedASTNode {
-        expr: Expression::IfExpression { condition, then_branch, else_branch: else_branch_opt },
+        expr: Expr::If { condition, then_branch, else_branch: else_branch_opt },
         node_type,
     }
 }
@@ -261,7 +261,7 @@ fn typecheck_while_expression(
     let node_type = body.node_type.clone();
 
     TypedASTNode {
-        expr: Expression::WhileExpression { condition, body },
+        expr: Expr::While { condition, body },
         node_type,
     }
 }
@@ -278,7 +278,7 @@ fn typecheck_block_expression(
         }
         let result = Box::new(typecheck(*result, inner_sym_table));
         let node_type = result.node_type.clone();
-        TypedASTNode { expr: Expression::BlockExpression { statements: typed_statements, result }, node_type }
+        TypedASTNode { expr: Expr::Block { statements: typed_statements, result }, node_type }
     })
 }
 
@@ -288,11 +288,11 @@ fn typecheck_variable_declaration(
     type_annotation: Option<Box<ASTNode>>,
     sym_table: &mut Box<SymTable<Type>>
 )   -> TypedASTNode {
-    if let Expression::Identifier { value } = id.expr {
+    if let Expr::Identifier { value } = id.expr {
         let init = typecheck(*init, sym_table);
         if let Some(type_annotation) = type_annotation {
             let type_name = match type_annotation.expr {
-                Expression::Identifier { value } => value,
+                Expr::Identifier { value } => value,
                 _ => panic!("Type annotation must be an identifier")
             };
             let annotated_type = sym_table.get(&Symbol::Identifier(type_name));
@@ -302,8 +302,8 @@ fn typecheck_variable_declaration(
         }
         sym_table.symbols.insert(Symbol::Identifier(value.clone()), init.node_type.clone());
         TypedASTNode { 
-            expr: Expression::VariableDeclaration { 
-                id: Box::new(TypedASTNode { expr: Expression::Identifier { value }, node_type: init.node_type.clone() }), 
+            expr: Expr::VariableDeclaration { 
+                id: Box::new(TypedASTNode { expr: Expr::Identifier { value }, node_type: init.node_type.clone() }), 
                 init: Box::new(init),
                 type_annotation: None,
             }, 
@@ -324,7 +324,7 @@ fn typecheck_binary_op(
         let left  = Box::new(typecheck(*left_expr, sym_table));
         let right = Box::new(typecheck(*right_expr, sym_table));
         let node_type = op_function.typecheck_operator_call(operator, &vec![&left, &right]);
-        TypedASTNode { expr: Expression::BinaryExpression { left, operator, right }, node_type }
+        TypedASTNode { expr: Expr::Binary { left, operator, right }, node_type }
     } else {
         panic!("Undefined operator {:?}", operator)
     }
@@ -338,7 +338,7 @@ fn typecheck_unary_op(
     if let Type::Function(op_function) = sym_table.get(&mut Symbol::Operator(operator)) {
         let operand = Box::new(typecheck(*operand, sym_table));
         let node_type = op_function.typecheck_operator_call(operator, &vec![&operand]);
-        TypedASTNode { expr: Expression::UnaryExpression { operand, operator }, node_type }
+        TypedASTNode { expr: Expr::Unary { operand, operator }, node_type }
     } else {
         panic!("Undefined operator {:?}", operator)
     }
@@ -349,7 +349,7 @@ fn typecheck_call_expression(
     argument_expr: Vec<Box<ASTNode>>,
     sym_table: &mut Box<SymTable<Type>>
 ) -> TypedASTNode {
-    if let Expression::Identifier { value: function_id } = callee.expr {
+    if let Expr::Identifier { value: function_id } = callee.expr {
         let called_function = sym_table.get(&Symbol::Identifier(function_id.to_string()));
         if let Type::Function(called_function) = called_function {
             let mut typed_argument_expr: Vec<Box<TypedASTNode>> = vec![];
@@ -361,7 +361,7 @@ fn typecheck_call_expression(
                 &typed_argument_expr.iter().collect()
             );
             TypedASTNode {
-                expr: Expression::CallExpression { 
+                expr: Expr::Call { 
                     callee: Box::new(typecheck_identifier(function_id, sym_table)),
                     arguments: typed_argument_expr, 
                 },
@@ -400,9 +400,9 @@ mod tests {
         // ASTNode { expr: BlockExpression { statements: [], result: ASTNode { expr: VariableDeclaration { id: ASTNode { expr: Identifier { value: "x" } }, init: ASTNode { expr: IntegerLiteral { value: 789 } } } } } }
         assert_eq!(Type::Unit, res.node_type);
 
-        if let Expression::BlockExpression { result,.. } = &res.expr {
-            if let Expression::BlockExpression { result,.. } = &result.expr {
-                if let Expression::VariableDeclaration { id, init,.. } = &result.expr {
+        if let Expr::Block { result,.. } = &res.expr {
+            if let Expr::Block { result,.. } = &result.expr {
+                if let Expr::VariableDeclaration { id, init,.. } = &result.expr {
                     assert_eq!(id.node_type, Type::Integer);
                     assert_eq!(init.node_type, Type::Integer);
                 } else {
@@ -446,10 +446,10 @@ mod tests {
         let node = &node.main().body;
 
         assert_eq!(node.node_type, Type::Boolean);
-        if let Expression::BlockExpression { result,.. } = &node.expr {
-            if let Expression::IfExpression { condition, .. } = &result.expr {
+        if let Expr::Block { result,.. } = &node.expr {
+            if let Expr::If { condition, .. } = &result.expr {
                 assert_eq!(condition.node_type, Type::Boolean);
-                if let Expression::BinaryExpression { left, right, .. } = &condition.expr {
+                if let Expr::Binary { left, right, .. } = &condition.expr {
                     assert_eq!(left.node_type, Type::Integer);
                     assert_eq!(right.node_type, Type::Integer);
                 } else {

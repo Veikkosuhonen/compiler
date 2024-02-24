@@ -23,19 +23,19 @@ pub struct SyntaxError {
 
 #[derive(Debug, Clone)]
 pub struct ASTNode {
-    pub expr: Expression<ASTNode>,
+    pub expr: Expr<ASTNode>,
     pub start: SourceLocation,
     pub end: SourceLocation,
 }
 
 impl ASTNode {
-    pub fn new(expr: Expression<ASTNode>, start: SourceLocation, end: SourceLocation) -> ASTNode {
+    pub fn new(expr: Expr<ASTNode>, start: SourceLocation, end: SourceLocation) -> ASTNode {
         ASTNode { expr, start, end }
     }
 }
 
 #[derive(Debug, Clone)]
-pub enum Expression<T> {
+pub enum Expr<T> {
     Unit,
     IntegerLiteral {
         value: i32,
@@ -46,11 +46,11 @@ pub enum Expression<T> {
     Identifier {
         value: String,
     },
-    BlockExpression {
+    Block {
         statements: Vec<Box<T>>,
         result: Box<T>,
     },
-    AssignmentExpression {
+    Assignment {
         left: Box<T>,
         right: Box<T>,
     },
@@ -59,25 +59,25 @@ pub enum Expression<T> {
         type_annotation: Option<Box<T>>,
         init: Box<T>,
     },
-    BinaryExpression {
+    Binary {
         left: Box<T>,
         operator: Op,
         right: Box<T>,
     },
-    UnaryExpression {
+    Unary {
         operand: Box<T>,
         operator: Op,
     },
-    IfExpression {
+    If {
         condition: Box<T>,
         then_branch: Box<T>,
         else_branch: Option<Box<T>>,
     },
-    WhileExpression {
+    While {
         condition: Box<T>,
         body: Box<T>,
     },
-    CallExpression {
+    Call {
         callee: Box<T>,
         arguments: Vec<Box<T>>,
     },
@@ -221,7 +221,7 @@ impl Parser {
             TokenType::BooleanLiteral,
             &["true".to_string(), "false".to_string()],
         )?;
-        Ok(ASTNode::new(Expression::BooleanLiteral {
+        Ok(ASTNode::new(Expr::BooleanLiteral {
             value: token.value.starts_with('t'),
         }, token.start, token.end))
     }
@@ -229,14 +229,14 @@ impl Parser {
     fn parse_int_literal(&mut self) -> Result<ASTNode, SyntaxError>  {
         let token = self.consume(TokenType::IntegerLiteral)?;
 
-        Ok(ASTNode::new(Expression::IntegerLiteral {
+        Ok(ASTNode::new(Expr::IntegerLiteral {
             value: token.value.parse().expect("Not a valid number"),
         }, token.start, token.end))
     }
 
     fn parse_identifier(&mut self) -> Result<ASTNode, SyntaxError> {
         let token = self.consume(TokenType::Identifier)?;
-        Ok(ASTNode::new(Expression::Identifier { value: token.value }, token.start, token.end))
+        Ok(ASTNode::new(Expr::Identifier { value: token.value }, token.start, token.end))
     }
 
     fn parse_call_expression(&mut self) -> Result<ASTNode, SyntaxError> {
@@ -258,7 +258,7 @@ impl Parser {
         let end = self.current_end().clone();
         self.consume_right_paren()?;
 
-        Ok(ASTNode::new(Expression::CallExpression {
+        Ok(ASTNode::new(Expr::Call {
             callee: Box::new(callee),
             arguments,
         }, start, end))
@@ -274,14 +274,14 @@ impl Parser {
         if self.consume_keyword("else").is_ok() {
             let else_branch = self.parse_expression()?;
             let end = else_branch.end.clone();
-            Ok(ASTNode::new(Expression::IfExpression {
+            Ok(ASTNode::new(Expr::If {
                 condition: Box::new(condition),
                 then_branch: Box::new(then_branch),
                 else_branch: Some(Box::new(else_branch)),
             }, start, end))
         } else {
             let end = then_branch.end.clone();
-            Ok(ASTNode::new(Expression::IfExpression {
+            Ok(ASTNode::new(Expr::If {
                 condition: Box::new(condition),
                 then_branch: Box::new(then_branch),
                 else_branch: None,
@@ -297,7 +297,7 @@ impl Parser {
         let body = self.parse_expression()?;
         let end = body.end.clone();
 
-        Ok(ASTNode::new(Expression::WhileExpression {
+        Ok(ASTNode::new(Expr::While {
             condition: Box::new(condition),
             body: Box::new(body),
         }, start, end))
@@ -317,15 +317,15 @@ impl Parser {
         loop {
             if self.consume_right_curly().is_ok() {
                 let end = self.current_end().clone();
-                return Ok(ASTNode::new(Expression::BlockExpression {
+                return Ok(ASTNode::new(Expr::Block {
                     statements,
-                    result: Box::new(ASTNode::new(Expression::Unit, end.clone(), end.clone())),
+                    result: Box::new(ASTNode::new(Expr::Unit, end.clone(), end.clone())),
                 }, start, end));
             }
             let statement = self.parse_statement()?;
             if self.consume_right_curly().is_ok() {
                 let end = self.current_end().clone();
-                return Ok(ASTNode::new(Expression::BlockExpression {
+                return Ok(ASTNode::new(Expr::Block {
                     statements,
                     result: Box::new(statement),
                 }, start, end));
@@ -384,7 +384,7 @@ impl Parser {
                 self.consume(TokenType::Operator)?;
                 let operand = self.parse_unary_precedence_level(level)?;
                 let end = operand.end.clone();
-                Ok(ASTNode::new(Expression::UnaryExpression {
+                Ok(ASTNode::new(Expr::Unary {
                     operator,
                     operand: Box::new(operand),
                 }, start, end))
@@ -414,7 +414,7 @@ impl Parser {
                     let right = self.parse_binary_precedence_level(level + 1)?;
                     let start = left.start.clone();
                     let end = right.end.clone();
-                    left = ASTNode::new(Expression::BinaryExpression {
+                    left = ASTNode::new(Expr::Binary {
                         left: Box::new(left),
                         operator,
                         right: Box::new(right),
@@ -438,7 +438,7 @@ impl Parser {
                 self.consume(TokenType::Operator)?;
                 let right = self.parse_assignment_expression()?;
                 let end = right.end.clone();
-                Ok(ASTNode::new(Expression::AssignmentExpression {
+                Ok(ASTNode::new(Expr::Assignment {
                     left: Box::new(left),
                     right: Box::new(right),
                 }, start, end))
@@ -465,7 +465,7 @@ impl Parser {
         self.consume_with_value(TokenType::Operator, "=")?;
         let init = self.parse_expression()?;
         let end = init.end.clone();
-        Ok(ASTNode::new(Expression::VariableDeclaration {
+        Ok(ASTNode::new(Expr::VariableDeclaration {
             id: Box::new(id),
             type_annotation: type_annotation.map(Box::new),
             init: Box::new(init),
@@ -518,7 +518,7 @@ impl Parser {
     fn parse_top_level_block(&mut self) -> Result<(ASTNode, Vec<UserDefinedFunction>), SyntaxError> {
         let start = self.current_start().clone();
         let mut statements: Vec<Box<ASTNode>> = vec![];
-        let mut result = Box::new(ASTNode::new(Expression::Unit, start.clone(), start.clone()));
+        let mut result = Box::new(ASTNode::new(Expr::Unit, start.clone(), start.clone()));
         let mut functions: Vec<UserDefinedFunction> = vec![];
 
         while self.tokens.len() - self.current_index > 0 {
@@ -538,7 +538,7 @@ impl Parser {
         let end = self.current_end().clone();
 
         Ok((
-            ASTNode::new(Expression::BlockExpression { statements, result }, start, end),
+            ASTNode::new(Expr::Block { statements, result }, start, end),
             functions
         ))
     }

@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::{builtin_functions::get_builtin_function_ir_vars, parser::{Expression, Module}, type_checker::{Type, TypedASTNode, TypedUserDefinedFunction}};
+use crate::{builtin_functions::get_builtin_function_ir_vars, parser::{Expr, Module}, type_checker::{Type, TypedASTNode, TypedUserDefinedFunction}};
 
 #[derive(Clone, Debug)]
 pub struct IRVar {
@@ -155,8 +155,8 @@ fn create_top_level_var_table(global_functions: &Vec<TypedUserDefinedFunction>, 
 
 fn generate(node: &TypedASTNode, instructions: &mut Vec<IREntry>, var_table: &mut IRVarTable, dest_name: String) -> IRVar {
     match &node.expr {
-        Expression::Unit => IRVar::unit(),
-        Expression::IntegerLiteral { value } => {
+        Expr::Unit => IRVar::unit(),
+        Expr::IntegerLiteral { value } => {
             let dest = var_table.create_unnamed(node.node_type.clone());
             instructions.push(IREntry { 
                 // location: , 
@@ -167,7 +167,7 @@ fn generate(node: &TypedASTNode, instructions: &mut Vec<IREntry>, var_table: &mu
             });
             dest
         },
-        Expression::BooleanLiteral { value } => {
+        Expr::BooleanLiteral { value } => {
             let dest = var_table.create_unnamed( node.node_type.clone());
             instructions.push(IREntry { 
                 // location: , 
@@ -178,11 +178,11 @@ fn generate(node: &TypedASTNode, instructions: &mut Vec<IREntry>, var_table: &mu
             });
             dest
         },
-        Expression::Identifier { value } => {
+        Expr::Identifier { value } => {
             var_table.get(value)
         },
-        Expression::VariableDeclaration { id, init,.. } => {
-            if let Expression::Identifier { value } = &id.expr {
+        Expr::VariableDeclaration { id, init,.. } => {
+            if let Expr::Identifier { value } = &id.expr {
                 let init = generate(&init, instructions, var_table, value.clone());
                 var_table.vars.insert(value.clone(), init.clone());
                 init
@@ -190,7 +190,7 @@ fn generate(node: &TypedASTNode, instructions: &mut Vec<IREntry>, var_table: &mu
                 panic!("Id of a variable declaration must be an Identifier")
             }
         },
-        Expression::UnaryExpression { operand, operator } => {
+        Expr::Unary { operand, operator } => {
             let dest = var_table.create_unnamed(node.node_type.clone());
             let operand = generate(&operand, instructions, var_table, dest.name.clone());
             let fun = var_table.get(&operator.to_string());
@@ -205,7 +205,7 @@ fn generate(node: &TypedASTNode, instructions: &mut Vec<IREntry>, var_table: &mu
             });
             dest
         },
-        Expression::BinaryExpression { left, operator, right } => {
+        Expr::Binary { left, operator, right } => {
             let dest = var_table.create_unnamed(node.node_type.clone());
             let left = generate(&left, instructions, var_table, dest.name.clone());
             let right = generate(&right, instructions, var_table, dest.name.clone());
@@ -221,8 +221,8 @@ fn generate(node: &TypedASTNode, instructions: &mut Vec<IREntry>, var_table: &mu
             });
             dest
         },
-        Expression::CallExpression { callee, arguments } => {
-            if let Expression::Identifier { value } = &callee.expr {
+        Expr::Call { callee, arguments } => {
+            if let Expr::Identifier { value } = &callee.expr {
                 let dest = var_table.create_unnamed(node.node_type.clone());
                 let mut argument_vars: Vec<Box<IRVar>> = vec![];
                 for arg in arguments {
@@ -243,7 +243,7 @@ fn generate(node: &TypedASTNode, instructions: &mut Vec<IREntry>, var_table: &mu
                 panic!("Callee must be an identifier");
             }
         },
-        Expression::AssignmentExpression { left, right } => {
+        Expr::Assignment { left, right } => {
             let left = generate(&left, instructions, var_table, dest_name.clone());
             let right = generate(&right, instructions, var_table, dest_name.clone());
             instructions.push(IREntry {
@@ -251,13 +251,13 @@ fn generate(node: &TypedASTNode, instructions: &mut Vec<IREntry>, var_table: &mu
             });
             right
         },
-        Expression::BlockExpression { statements, result } => {
+        Expr::Block { statements, result } => {
             for stmnt in statements {
                 generate(&stmnt, instructions, var_table, dest_name.clone());
             }
             generate(&result, instructions, var_table, dest_name)
         },
-        Expression::IfExpression { condition, then_branch, else_branch } => {
+        Expr::If { condition, then_branch, else_branch } => {
             let then_label = var_table.create_local_label();
             let end_label = var_table.create_local_label();
             let else_label = if else_branch.is_some() { var_table.create_local_label() } else { end_label.clone() };
@@ -285,7 +285,7 @@ fn generate(node: &TypedASTNode, instructions: &mut Vec<IREntry>, var_table: &mu
 
             dest
         },
-        Expression::WhileExpression { condition, body } => {
+        Expr::While { condition, body } => {
             let while_label = var_table.create_local_label();
             let do_label = var_table.create_local_label();
             let end_label = var_table.create_local_label();

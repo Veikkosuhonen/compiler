@@ -2,7 +2,7 @@ use std::rc::Rc;
 use std::vec;
 
 use crate::sym_table::{SymTable, Symbol};
-use crate::parser::{ASTNode, Expression, Module};
+use crate::parser::{ASTNode, Expr, Module};
 use crate::tokenizer::Op;
 use crate::builtin_functions::*;
 
@@ -95,7 +95,7 @@ fn eval_call_expression(
     argument_expr: &Vec<Box<ASTNode>>,
     sym_table: &mut Box<SymTable<Value>>
 ) -> Value {
-    if let Expression::Identifier { value: function_id } = &callee.expr {
+    if let Expr::Identifier { value: function_id } = &callee.expr {
         let called_function = sym_table.get(&Symbol::Identifier(function_id.to_string()));
         if let Value::Function(called_function) = called_function {
             match called_function {
@@ -143,19 +143,19 @@ fn eval_user_defined_function(
 
 fn interpret(node: &ASTNode, sym_table: &mut Box<SymTable<Value>>) -> Value {
     match &node.expr {
-        Expression::IntegerLiteral { value } => {
+        Expr::IntegerLiteral { value } => {
             Value::Integer(*value)
         },
-        Expression::BooleanLiteral { value } => {
+        Expr::BooleanLiteral { value } => {
             Value::Boolean(*value)
         }
-        Expression::BinaryExpression { left, operator, right } => {
+        Expr::Binary { left, operator, right } => {
             eval_binary_op(left, right, operator, sym_table)
         },
-        Expression::UnaryExpression { operand, operator } => {
+        Expr::Unary { operand, operator } => {
             eval_unary_op(operand, operator, sym_table)
         }
-        Expression::IfExpression { condition, then_branch, else_branch } => {
+        Expr::If { condition, then_branch, else_branch } => {
             let condition_result = interpret(&condition, sym_table);
             match condition_result {
                 Value::Boolean(condition_val) => {
@@ -170,14 +170,14 @@ fn interpret(node: &ASTNode, sym_table: &mut Box<SymTable<Value>>) -> Value {
                 _ => panic!("If expression condition must be a boolean"),
             }
         },
-        Expression::WhileExpression { condition, body } => {
+        Expr::While { condition, body } => {
             let mut value = Value::Unit;
             while interpret(&condition, sym_table).try_into().expect("While expression condition must return a boolean") {
                 value = interpret(&body, sym_table);
             }
             value
         },
-        Expression::BlockExpression { statements, result } => {
+        Expr::Block { statements, result } => {
             sym_table.with_inner(|inner_sym_table| {
                 for expr in statements {
                     interpret(&expr, inner_sym_table);
@@ -185,17 +185,17 @@ fn interpret(node: &ASTNode, sym_table: &mut Box<SymTable<Value>>) -> Value {
                 interpret(&result, inner_sym_table)
             })
         },
-        Expression::Identifier { value } => sym_table.get(&Symbol::Identifier(value.clone())),
-        Expression::AssignmentExpression { left, right } => {
-            if let Expression::Identifier { value: id } = &left.expr {
+        Expr::Identifier { value } => sym_table.get(&Symbol::Identifier(value.clone())),
+        Expr::Assignment { left, right } => {
+            if let Expr::Identifier { value: id } = &left.expr {
                 let value = interpret(&right, sym_table);
                 sym_table.assign(Symbol::Identifier(id.clone()), value)
             } else {
                 panic!("Left side of an assignment must be an identifier");
             }
         },
-        Expression::VariableDeclaration { id, init,.. } => {
-            if let Expression::Identifier { value } = &id.expr {
+        Expr::VariableDeclaration { id, init,.. } => {
+            if let Expr::Identifier { value } = &id.expr {
                 let init_value = interpret(&init, sym_table);
                 sym_table.symbols.insert(Symbol::Identifier(value.clone()), init_value);
                 Value::Unit
@@ -203,10 +203,10 @@ fn interpret(node: &ASTNode, sym_table: &mut Box<SymTable<Value>>) -> Value {
                 panic!("Id of a variable declaration must be an identifier");
             }
         },
-        Expression::CallExpression { callee, arguments } => {
+        Expr::Call { callee, arguments } => {
             eval_call_expression(callee, arguments, sym_table)
         },
-        Expression::Unit => Value::Unit,
+        Expr::Unit => Value::Unit,
     }
 }
 

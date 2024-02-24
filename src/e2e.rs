@@ -53,16 +53,19 @@ fn run_test(source: &str, id: String) -> Vec<String> {
 
     let mut inputs: Vec<i32> = vec![];
 
-    let mut expects: Vec<i32> = vec![];
+    let mut expects: Vec<(usize, i32)> = vec![];
 
     let mut name: Option<String> = None;
 
-    let program_source = source.split("\n").filter(|line| {
+    let program_source = source.split("\n").enumerate().filter(|(line_number, line)| {
         if line.trim_start().starts_with("input") {
             inputs.push(line.split_whitespace().last().unwrap().parse().expect("Should've been able to parse i32 after 'input'"));
             false
         } else if line.trim_start().starts_with("expect") {
-            expects.push(line.split_whitespace().last().unwrap().parse().expect("Should've been able to parse i32 after 'expect'"));
+            expects.push((
+                *line_number,
+                line.split_whitespace().last().unwrap().parse().expect("Should've been able to parse i32 after 'expect'")
+            ));
             false
         } else if line.trim_start().starts_with("name") {
             name = Some(line.split_whitespace()
@@ -74,7 +77,7 @@ fn run_test(source: &str, id: String) -> Vec<String> {
         } else {
             true
         }
-    }).collect::<Vec<&str>>().join("\n");
+    }).map(|(_, line)| { line }).collect::<Vec<&str>>().join("\n");
 
     if let Some(name) = name {
         out(format!("- {name} "));
@@ -113,9 +116,9 @@ fn run_test(source: &str, id: String) -> Vec<String> {
     });
 
     out(format!("-> Interpreted "));
-    if let Err(msg) = check_output(interpret_process, expects.clone()) {
+    if let Err(msg) = check_output(interpret_process, expects.clone(), source) {
         out(format!("---> FAIL - {} ms\n", interpreter_start.elapsed().as_millis()));
-        out(msg);
+        out(format!("{msg}\n"));
     } else {
         out(format!("---> Pass - {} ms\n", interpreter_start.elapsed().as_millis()));
     }
@@ -160,9 +163,9 @@ fn run_test(source: &str, id: String) -> Vec<String> {
     });
 
     out(format!("-> Compiled    "));
-    if let Err(msg) = check_output(process, expects) {
+    if let Err(msg) = check_output(process, expects, source) {
         out(format!("---> FAIL - {} ms\n", interpreter_start.elapsed().as_millis()));
-        out(msg);
+        out(format!("{msg}\n"));
     } else {
         out(format!("---> Pass - {} ms\n", run_start.elapsed().as_millis()));
     }
@@ -170,7 +173,7 @@ fn run_test(source: &str, id: String) -> Vec<String> {
     outputs
 }
 
-fn check_output(process: Child, expects: Vec<i32>) -> Result<(), String> {
+fn check_output(process: Child, expects: Vec<(usize, i32)>, source: &str) -> Result<(), String> {
     let output = process.wait_with_output().expect("Should've been able to read process output");
 
     if !output.status.success() {
@@ -186,14 +189,28 @@ fn check_output(process: Child, expects: Vec<i32>) -> Result<(), String> {
         }
     }).collect::<Vec<i32>>();
 
+    let mut err_lines: Vec<String> = vec![];
+
     if outputs.len() != expects.len() {
-        return Err(format!("Number of actual outputs {} != number of expected outputs {}\n", outputs.len(), expects.len()));
+        err_lines.push(format!("Number of actual outputs {} != number of expected outputs {}\n", outputs.len(), expects.len()));
     }
 
     for (i, value) in outputs.iter().enumerate() {
-        if *value != expects[i] {
-            return Err(format!("Output at index {} is incorrect: {} != {}\n", i, *value, expects[i]))
+        if i < expects.len() && *value != expects[i].1 {
+            let line_n = expects[i].0;
+            err_lines.push(format!("Test error at line {}: Found {} != {} expected", line_n, *value, expects[i].1));
+            source.split("\n")
+                .enumerate()
+                .filter(|(current_line_n, _)| {
+                    *current_line_n > line_n - 2 && *current_line_n <= line_n
+                }).for_each(|(line_n, line)| {
+                    err_lines.push(format!("{}| {}", line_n, line.to_string()))
+                })
         }
+    }
+
+    if err_lines.len() > 0 {
+        return Err(err_lines.join("\n"))
     }
 
     Ok(())

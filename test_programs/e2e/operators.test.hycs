@@ -1,5 +1,5 @@
 
-name "Boolean ops"
+name "GT"
 
 print_bool(2 > 1);
 expect 1
@@ -7,11 +7,19 @@ expect 1
 print_bool(1 > 2);
 expect 0
 
+---
+
+name "GTE"
+
 print_bool(1 >= 1);
 expect 1
 
 print_bool(1 >= 2);
 expect 0
+
+---
+
+name "LT"
 
 print_bool(1 < 2);
 expect 1
@@ -19,11 +27,19 @@ expect 1
 print_bool(2 < 1);
 expect 0
 
+---
+
+name "LTE"
+
 print_bool(1 <= 1);
 expect 1
 
 print_bool(2 <= 1);
 expect 0
+
+---
+
+name "Equals<Int>"
 
 print_bool(123 == 123);
 expect 1
@@ -31,11 +47,19 @@ expect 1
 print_bool(122 == 123);
 expect 0
 
+---
+
+name "Equals<Bool>"
+
 print_bool(true == true);
 expect 1
 
 print_bool(true == false);
 expect 0
+
+---
+
+name "NotEquals<Int>"
 
 print_bool(122 != 123);
 expect 1
@@ -43,11 +67,19 @@ expect 1
 print_bool(123 != 123);
 expect 0
 
+---
+
+name "NotEquals<Bool>"
+
 print_bool(true != false);
 expect 1
 
 print_bool(true != true);
 expect 0
+
+---
+
+name "Not"
 
 print_bool(not false);
 expect 1
@@ -55,11 +87,19 @@ expect 1
 print_bool(not true);
 expect 0
 
+---
+
+name "And"
+
 print_bool(true and true);
 expect 1
 
 print_bool(false and true);
 expect 0
+
+---
+
+name "Or"
 
 print_bool(true or true);
 expect 1
@@ -72,22 +112,42 @@ expect 0
 
 ---
 
-name "Arithmetic ops"
+name "Mul"
 
 print_int(7 * 7);
 expect 49
 
+---
+
+name "Div"
+
 print_int(7 / 7);
 expect 1
+
+---
+
+name "Mod"
 
 print_int(7 % 6);
 expect 1
 
+---
+
+name "Add"
+
 print_int(7 + 7);
 expect 14
 
+---
+
+name "Sub"
+
 print_int(7 - 7);
 expect 0
+
+---
+
+name "Mul & UnarySub"
 
 print_int(7 * -7);
 expect -49

@@ -61,7 +61,7 @@ impl Op {
             Op::Div => "/",
             Op::Mod => "%",
             Op::Exp => "**",
-            Op::Not => "!",
+            Op::Not => "not",
             Op::Equals => "==",
             Op::NotEquals => "!=",
             Op::LT => "<",

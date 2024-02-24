@@ -1,9 +1,5 @@
-var x: Int = {
-    while true do {
-        haha();
-    }
+fun id(x: Int): Int {
+    x
 }
 
-fun haha() {
-    print_int("haha");
-}
+print_int(id(5000))

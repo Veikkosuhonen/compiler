@@ -1,5 +1,5 @@
-
-fun recurse(x: Int, i: Int) {
+fun recurse(x: Int, i: Int): Int {
+    print_int(x);
     if i > 10 then {
         x
     } else {
@@ -7,4 +7,6 @@ fun recurse(x: Int, i: Int) {
     }
 }
 
-print_int(recurse(1, 0));
+var n = 5;
+
+print_int(recurse(n, 0));

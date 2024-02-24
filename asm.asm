@@ -13,12 +13,9 @@
         pushq %rbp
         movq %rsp, %rbp
         subq $88, %rsp
-        # param backups (2)
-        movq %rdi, -8(%rbp)
-        movq %rsi, -32(%rbp)
 
         # Call(print_int, [p0], x0)
-        movq -8(%rbp), %rsi
+        movq %rdi, %rsi
         movq $print_format, %rdi
         call printf
 
@@ -27,25 +24,25 @@
 
         # Call(>, [p1,x2], x3)
         xor %rax, %rax
-        movq -32(%rbp), %rdx
+        movq %rsi, %rdx
         cmpq -24(%rbp), %rdx
         setg %al
         movq %rax, -40(%rbp)
 
         # CondJump(x3, .Lrecurse_0, .Lrecurse_2)
         cmpq $0, -40(%rbp)
-        jne .Lrecurse_0
-        jmp .Lrecurse_2
+        jne ..Lrecurse_0
+        jmp ..Lrecurse_2
 
         # Label(.Lrecurse_0)
         .Lrecurse_0:
 
         # Copy(p0, x1)
-        movq -8(%rbp), %rax
+        movq %rdi, %rax
         movq %rax, -48(%rbp)
 
         # Jump(.Lrecurse_1)
-        jmp .Lrecurse_1
+        jmp ..Lrecurse_1
 
         # Label(.Lrecurse_2)
         .Lrecurse_2:
@@ -54,7 +51,7 @@
         movq $2, -56(%rbp)
 
         # Call(*, [x4,p0], x5)
-        movq -8(%rbp), %rax 
+        movq %rdi, %rax 
         imulq -56(%rbp), %rax 
         movq %rax, -64(%rbp)
 
@@ -63,7 +60,7 @@
 
         # Call(+, [p1,x6], x7)
         movq -72(%rbp), %rax 
-        addq -32(%rbp), %rax 
+        addq %rsi, %rax 
         movq %rax, -80(%rbp)
 
         # Call(recurse, [x5,x7], x8)
@@ -96,7 +93,6 @@
         pushq %rbp
         movq %rsp, %rbp
         subq $32, %rsp
-        # param backups (0)
 
         # LoadIntConst(5, x0)
         movq $5, -8(%rbp)

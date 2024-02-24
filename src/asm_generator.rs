@@ -2,16 +2,32 @@ use std::collections::HashMap;
 
 use crate::{ir_generator::{IREntry, IRVar, Instruction}, sym_table::Symbol, tokenizer::Op};
 
-pub fn generate_asm(fun_name: &str, ir: HashMap<String, Vec<IREntry>>) -> String {
+pub fn generate_asm(ir: HashMap<String, Vec<IREntry>>) -> String {
+    let functions_code = ir.iter().map(|(fun_name, ir)| {
+        generate_function_asm(fun_name, ir)
+    }).collect::<Vec<String>>();
 
-    let fun_ir = ir.get(fun_name).unwrap();
+    let source = functions_code.join("\n\n        ");
 
-    let mut locations = HashMap::new();
+    add_stdlib_code(source)
+}
+
+pub fn generate_function_asm(fun_name: &str, fun_ir: &Vec<IREntry>) -> String {
+    let mut locals_addresses: HashMap<String, String> = HashMap::new();
+    let mut params_backups: Vec<(String, String)> = vec![];
     let mut next_stack_loc = -8;
 
-    let mut add_var = |name: &Symbol| {
-        if !locations.contains_key(name) {
-            locations.insert(name.clone(), format!("{next_stack_loc}(%rbp)"));
+    let mut add_var = |name: &String| {
+        if !locals_addresses.contains_key(name) {
+            let address = format!("{next_stack_loc}(%rbp)");
+            locals_addresses.insert(name.clone(), address.clone());
+
+            if name.starts_with("p") {
+                let param_idx = name.get(1..).map(|n| n.parse::<usize>().unwrap()).unwrap();
+                let source_reg = get_argument_register(param_idx);
+                params_backups.push((source_reg, address));
+            }
+            
             next_stack_loc -= 8;
         }
     };
@@ -34,19 +50,21 @@ pub fn generate_asm(fun_name: &str, ir: HashMap<String, Vec<IREntry>>) -> String
         }
     }
 
-    let locals_size = 8 * locations.len();
+    // println!("{fun_name}: {:?}", locals_addresses);
 
-    let function_code = fun_ir.iter().map(|entry| {
+    let locals_size = 8 * locals_addresses.len();
+
+    let function_body = fun_ir.iter().map(|entry| {
 
         let asm = match &entry.instruction {
             Instruction::LoadIntConst { value, dest } => {
-                let dest_loc = locations.get(&dest.name).unwrap();
+                let dest_loc = get_var_address(&dest.name, &locals_addresses);
                 vec![
                     format!("movq ${}, {}", value, dest_loc)
                 ]
             },
             Instruction::LoadBoolConst { value, dest } => {
-                let dest_loc = locations.get(&dest.name).unwrap();
+                let dest_loc = get_var_address(&dest.name, &locals_addresses);
                 let byte_val = if *value { 1 } else { 0 };
                 vec![
                     format!("movq ${}, {}", byte_val, dest_loc)
@@ -54,13 +72,13 @@ pub fn generate_asm(fun_name: &str, ir: HashMap<String, Vec<IREntry>>) -> String
             },
             Instruction::Call { fun, args, dest } => {
                 vec![
-                    intrisic(fun, args, dest, &locations)
+                    generate_call(fun, args, dest, &locals_addresses)
                 ]
             },
             Instruction::Copy { source, dest } => {
-                let src_loc = locations.get(&source.name).unwrap();
+                let src_loc = get_var_address(&source.name, &locals_addresses);
                 let src_reg = "%rax";
-                let dest_loc = locations.get(&dest.name).unwrap();
+                let dest_loc = get_var_address(&dest.name, &locals_addresses);
 
                 vec![
                     format!("movq {}, {}", src_loc, src_reg), 
@@ -69,104 +87,88 @@ pub fn generate_asm(fun_name: &str, ir: HashMap<String, Vec<IREntry>>) -> String
             },
             Instruction::Label(name) => {
                 vec![
-                    format!(".{}:", name)
+                    format!("{name}:")
                 ]
+            },
+            Instruction::FunctionLabel(name) => {
+                let mut lines = vec![
+                    format!(".global {name}"),
+                    format!(".type {name}, @function"),
+                    format!("{name}:"),
+                    format!("pushq %rbp"),
+                    format!("movq %rsp, %rbp"),
+                    format!("subq ${locals_size}, %rsp"),
+                    format!("# param backups ({})", params_backups.len()),
+                ];
+                for (source_reg, dest_address) in &params_backups {
+                    lines.push(format!("movq {source_reg}, {dest_address}"));
+                }
+                lines
             },
             Instruction::Jump(label) => {
                 vec![
-                    format!("jmp .{}", label)
+                    format!("jmp {}", label)
                 ]
             },
             Instruction::CondJump { cond, then_label, else_label } => {
-                let cond_loc = locations.get(&cond.name).unwrap();
+                let cond_loc = get_var_address(&cond.name, &locals_addresses);
                 vec![
                     format!("cmpq $0, {}", cond_loc),
-                    format!("jne .{}", then_label), 
-                    format!("jmp .{}", else_label)
+                    format!("jne {}", then_label), 
+                    format!("jmp {}", else_label)
                 ]
             },
-            Instruction::Return => {
+            Instruction::Return { source } => {
+                let source_loc = get_var_address(&source.name, &locals_addresses);
                 vec![
-                    format!("# return")
+                    format!("movq {}, %rax", source_loc)
                 ]
             },
-        }.join("\n");
+        }.join("\n        ");
 
-        format!("# {:?}\n{}", entry.instruction, asm)
+        format!("# {}\n        {}", entry.to_string(), asm)
 
 
-    }).collect::<Vec<String>>().join("\n\n");
+    }).collect::<Vec<String>>().join("\n\n        ");
 
     format!("
-# Metadata for debuggers and other tools
-.global main
-.type main, @function
-.extern printf
-.extern scanf
+        {function_body}
 
-.section .text  # Begins code and data
-
-# Label that marks beginning of main function
-main:
-# Function stack setup
-pushq %rbp
-movq %rsp, %rbp
-subq ${}, %rsp
-
-{}
-
-# Labels starting with \".L\" are local to this function,
-# i.e. another function than \"main\" could have its own \".Lend\".
-.Lend:
-# Return from main with status code 0
-movq $0, %rax
-movq %rbp, %rsp
-popq %rbp
-ret
-
-# String data that we pass to functions 'scanf' and 'printf'
-scan_format:
-.asciz \"%ld\"
-
-print_format:
-.asciz \"%ld\\n\"
-
-print_bool_format:
-.asciz \"%s\\n\"
-
-true_str:
-    .ascii \"true\\n\"
-
-false_str:
-    .ascii \"false\\n\"
-
-", locals_size, function_code)
-
+        # Restore stack pointer
+        movq %rbp, %rsp
+        popq %rbp
+        ret
+")
 }
 
-fn intrisic(fun: &Box<IRVar>, args: &Vec<Box<IRVar>>, dest: &Box<IRVar>, locations: &HashMap<Symbol, String>) -> String {
-    let dest_loc = locations.get(&dest.name).unwrap();
+fn generate_call(fun: &Box<IRVar>, args: &Vec<Box<IRVar>>, dest: &Box<IRVar>, addresses: &HashMap<String, String>) -> String {
+    let dest_loc = get_var_address(&dest.name, addresses);
+    let callee = match args.len() {
+        1 => Op::unary_from_str(&fun.name).map(Symbol::Operator),
+        2 => Op::binary_from_str(&fun.name).map(Symbol::Operator),
+        _ => Err("")
+    }.unwrap_or(Symbol::Identifier(fun.name.clone()));
 
-    match &fun.name {
+    match callee {
         Symbol::Operator(op) => {
-            let arg_1_loc = locations.get(&args[0].name).unwrap();
-            let arg_2_opt = &args.get(1).and_then(|irvar| locations.get(&irvar.name));
+            let arg_1_loc = get_var_address(&args[0].name, addresses);
+            let arg_2_opt = &args.get(1).map(|ir_var| get_var_address(&ir_var.name, addresses));
 
             if let Some(arg_2_loc) = arg_2_opt {
                 match op {
                     Op::Add => {
                         vec![
-                            bin_op(arg_1_loc, arg_2_loc, dest_loc, "addq")
+                            bin_op(&arg_1_loc, arg_2_loc, &dest_loc, "addq")
                         ]
                     },
                     Op::Sub => {
                         vec![
-                            bin_op(arg_1_loc, arg_2_loc, dest_loc, "subq")
+                            bin_op(&arg_1_loc, arg_2_loc, &dest_loc, "subq")
                         ]
                     },
                     Op::Mul => {
                         vec![
-                            bin_op(arg_1_loc, arg_2_loc, dest_loc, "imulq")
+                            bin_op(&arg_1_loc, arg_2_loc, &dest_loc, "imulq")
                         ]
                     },
                     Op::Div => {
@@ -187,32 +189,32 @@ fn intrisic(fun: &Box<IRVar>, args: &Vec<Box<IRVar>>, dest: &Box<IRVar>, locatio
                     },
                     Op::Equals => {
                         vec![
-                            comparison(arg_1_loc, arg_2_loc, dest_loc, "sete"),
+                            comparison(&arg_1_loc, arg_2_loc, &dest_loc, "sete"),
                         ]
                     },
                     Op::NotEquals => {
                         vec![
-                            comparison(arg_1_loc, arg_2_loc, dest_loc, "setne"),
+                            comparison(&arg_1_loc, arg_2_loc, &dest_loc, "setne"),
                         ]
                     },
                     Op::GT => {
                         vec![
-                            comparison(arg_1_loc, arg_2_loc, dest_loc, "setg"),
+                            comparison(&arg_1_loc, arg_2_loc, &dest_loc, "setg"),
                         ]
                     },
                     Op::GTE => {
                         vec![
-                            comparison(arg_1_loc, arg_2_loc, dest_loc, "setge"),
+                            comparison(&arg_1_loc, arg_2_loc, &dest_loc, "setge"),
                         ]
                     },
                     Op::LT => {
                         vec![
-                            comparison(arg_1_loc, arg_2_loc, dest_loc, "setl"),
+                            comparison(&arg_1_loc, arg_2_loc, &dest_loc, "setl"),
                         ]
                     },
                     Op::LTE => {
                         vec![
-                            comparison(arg_1_loc, arg_2_loc, dest_loc, "setle"),
+                            comparison(&arg_1_loc, arg_2_loc, &dest_loc, "setle"),
                         ]
                     },
                     Op::And => {
@@ -254,7 +256,7 @@ fn intrisic(fun: &Box<IRVar>, args: &Vec<Box<IRVar>>, dest: &Box<IRVar>, locatio
         Symbol::Identifier(name) => {
             match name.as_str() {
                 "print_int" => {
-                    let arg_loc = locations.get(&args[0].name).unwrap();
+                    let arg_loc = get_var_address(&args[0].name, addresses);
 
                     vec![
                         format!("movq {}, %rsi", arg_loc),
@@ -263,7 +265,7 @@ fn intrisic(fun: &Box<IRVar>, args: &Vec<Box<IRVar>>, dest: &Box<IRVar>, locatio
                     ]
                 },
                 "print_bool" => {
-                    let arg_loc = locations.get(&args[0].name).unwrap();
+                    let arg_loc = get_var_address(&args[0].name, addresses);
 
                     vec![
                         format!("movq {}, %rsi", arg_loc),
@@ -281,14 +283,46 @@ fn intrisic(fun: &Box<IRVar>, args: &Vec<Box<IRVar>>, dest: &Box<IRVar>, locatio
                         format!("jne .Lend"),
                     ]
                 },
-                _ => todo!("{}", name)
+                _ => generate_function_call(&name, args, dest, addresses)
             }
         }
-    }.join("\n")
+    }.join("\n        ")
 }
 
-fn bin_op(arg_1: &String, arg_2: &String, dest: &String, op: &str) -> String {
-    format!("movq {}, %rax \n{} {}, %rax \nmovq %rax, {}", arg_2, op, arg_1, dest)
+fn generate_function_call(fun_name: &String, args: &Vec<Box<IRVar>>, dest: &Box<IRVar>, addresses: &HashMap<String, String>) -> Vec<String> {
+    let dest = get_var_address(&dest.name, addresses);
+    let mut asm: Vec<String> = vec![];
+    for (idx, arg) in args.iter().enumerate() {
+        let register = get_argument_register(idx);
+        let arg_loc = get_var_address(&arg.name, addresses);
+        asm.push(format!("movq {}, {}", arg_loc, register));
+    }
+    asm.push(format!("call {}", fun_name));
+    asm.push(format!("movq %rax, {}", dest));
+    asm
+}
+
+fn get_var_address(name: &String, addresses: &HashMap<String, String>) -> String {
+    if name == "U" {
+        String::from("$0")
+    } else {
+        addresses.get(name).expect(format!("Address of var {name} to be defined").as_str()).clone()
+    }
+}
+
+fn get_argument_register(idx: usize) -> String {
+    vec![
+        "%rdi",
+        "%rsi",
+        "%rdx",
+        "%rcx",
+        "%r8",
+        "%r9",
+    ].get(idx).expect("Argument idx to be < 6").to_string()
+}
+
+fn bin_op(arg_1: &String, arg_2: &String, dest: &String, op: &str) -> String { // todo fix this formatting
+    format!("movq {}, %rax \n        {} {}, %rax \n        movq %rax, {}", arg_2, op, arg_1, dest)
 }
 
 fn comparison(arg1: &String, arg2: &String, dest: &String, op: &str) -> String {
@@ -298,5 +332,42 @@ fn comparison(arg1: &String, arg2: &String, dest: &String, op: &str) -> String {
         format!("cmpq {}, %rdx", arg2),
         format!("{} %al", op),
         format!("movq %rax, {}", dest),
-    ].join("\n")
+    ].join("\n        ")
+}
+
+fn add_stdlib_code(source: String) -> String {
+    format!("
+# Metadata for debuggers and other tools
+.extern printf
+.extern scanf
+
+.section .text  # Begins code and data
+
+{}
+
+# Actual end
+.Lend:
+        # Return from main with status code 0
+        movq $0, %rax
+        movq %rbp, %rsp
+        popq %rbp
+        ret
+
+# String data that we pass to functions 'scanf' and 'printf'
+scan_format:
+.asciz \"%ld\"
+
+print_format:
+.asciz \"%ld\\n\"
+
+print_bool_format:
+.asciz \"%s\\n\"
+
+true_str:
+    .ascii \"true\\n\"
+
+false_str:
+    .ascii \"false\\n\"
+
+", source)
 }

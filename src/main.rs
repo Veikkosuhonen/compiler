@@ -52,7 +52,7 @@ fn main() {
         Commands::Asm { path } => {
             let typed_ast = typecheck_file(&path);
             let ir = generate_ir(typed_ast);
-            let asm = generate_asm("main", ir);
+            let asm = generate_asm(ir);
             println!("{}", asm);
         },
         Commands::E2e => {

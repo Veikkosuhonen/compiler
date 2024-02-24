@@ -47,7 +47,7 @@ fn run_test(source: &str) {
     let node = parse_source(program_source.clone());
     let typed_ast = typecheck_program(node);
     let ir = generate_ir(typed_ast);
-    let asm = generate_asm("main", ir);
+    let asm = generate_asm(ir);
 
     if fs::write("./target/temp_source.hycs", program_source).is_err() {
         panic!("Failed to write to temp file ./target/temp_source.hycs")

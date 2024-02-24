@@ -78,12 +78,20 @@ pub fn typecheck_program(module: Module<UserDefinedFunction, ASTNode>) -> Module
     let mut sym_table = get_toplevel_sym_table();
     let mut functions: Vec<TypedUserDefinedFunction> = vec![];
 
-    for func in module.functions {
+    for func in &module.functions {
         let id = Symbol::Identifier(func.id.clone());
         let function_type = get_function_type(&func, &sym_table);
         sym_table.symbols.insert(id, Type::Function(Box::new(function_type.clone())));
-        let typed_function = typecheck_function(func, function_type, &mut sym_table);
-        functions.push(typed_function);
+    }
+
+    for func in module.functions {
+        let function_type = sym_table.get(&Symbol::Identifier(func.id.clone()));
+        if let Type::Function(function_type) = function_type {
+            let typed_function = typecheck_function(func, *function_type, &mut sym_table);
+            functions.push(typed_function);
+        } else {
+            panic!("{}'s declared type is not a function", func.id)
+        }
     }
 
     let typed_node = typecheck(*module.ast, &mut sym_table);
@@ -530,5 +538,21 @@ mod tests {
         recurse(2, 10)
         ");
         assert_eq!(node.node_type, Type::Integer);
+    }
+
+    #[test]
+    fn global_function_references() {
+        let node = t("
+        f1();
+
+        fun f1() {
+            f2();
+        }
+        
+        fun f2() {
+            f1();
+        }
+        ");
+        assert_eq!(node.node_type, Type::Unit);
     }
 }

@@ -51,7 +51,7 @@ fun mut_rec1(i: Int): Int {
     if i > 4 then {
         i
     } else {
-        mut_rec2(i)
+        mut_rec2(i + 1)
     }
 }
 
@@ -60,7 +60,7 @@ fun mut_rec2(i: Int): Int {
     if i > 4 then {
         i
     } else {
-        mut_rec1(i)
+        mut_rec1(i + 1)
     }
 }
 
@@ -70,3 +70,4 @@ expect 1
 expect 2
 expect 1
 expect 2
+expect 1

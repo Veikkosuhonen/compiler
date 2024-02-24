@@ -9,12 +9,8 @@ pub struct IRVar {
 }
 
 impl IRVar {
-    fn new(var_idx: usize, var_type: Type) -> IRVar {
-        IRVar { name: format!("x{}", var_idx), var_type }
-    }
-
-    fn new_param(var_idx: usize, var_type: Type) -> IRVar {
-        IRVar { name: format!("p{}", var_idx), var_type }
+    fn new(name: String, var_type: Type) -> IRVar {
+        IRVar { name, var_type }
     }
 
     fn unit() -> IRVar {
@@ -29,29 +25,19 @@ impl IRVar {
 struct IRVarTable {
     vars: HashMap<String, IRVar>,
     var_idx: usize,
-    param_idx: usize,
     label_idx: usize,
     fun_name: String,
 }
 
 impl IRVarTable {
     fn new(fun_name: String) -> IRVarTable {
-        IRVarTable { vars: HashMap::new(), var_idx: 0, param_idx: 0, label_idx: 0, fun_name }
+        IRVarTable { vars: HashMap::new(), var_idx: 0, label_idx: 0, fun_name }
     }
 
-    fn create(&mut self, var_type: Type) -> IRVar {
-        let var = IRVar::new(self.var_idx, var_type);
+    fn create(&mut self, name: String, var_type: Type) -> IRVar {
+        let var = IRVar::new(name, var_type);
         self.var_idx += 1;
         var
-    }
-
-    fn create_param(&mut self, var_type: Type) -> IRVar {
-        if self.param_idx >= 5 {
-            panic!("Max number of function params is 6")
-        }
-        let param = IRVar::new_param(self.param_idx, var_type);
-        self.param_idx += 1;
-        param
     }
 
     fn get(&self, name: &String) -> IRVar {
@@ -73,7 +59,7 @@ pub enum Instruction {
     Call { fun: Box<IRVar>, args: Vec<Box<IRVar>>, dest: Box<IRVar> },
     Jump(String),
     CondJump { cond: Box<IRVar>, then_label: String, else_label: String },
-    FunctionLabel(String),
+    FunctionLabel { name: String, params: Vec<IRVar> },
     Label(String),
     Return { source: Box<IRVar> },
 }
@@ -89,7 +75,7 @@ impl IREntry {
         match &self.instruction {
             Instruction::Return { source } => format!("Return({})", source.to_string()),
             Instruction::Label(label) => format!("Label({})", label.clone()),
-            Instruction::FunctionLabel(label) => format!("Function({})", label.clone()),
+            Instruction::FunctionLabel { name, params } => format!("Function({}({}))", name.clone(), params.iter().map(|p| { p.name.clone() }).collect::<Vec<String>>().join(", ")),
             Instruction::Jump(label) => format!("Jump({})", label.clone()),
             Instruction::CondJump { cond, else_label, then_label } => format!("CondJump({}, {}, {})", cond.to_string(), then_label.clone(), else_label.clone()),
             Instruction::LoadIntConst { value, dest } => format!("LoadIntConst({}, {})", value, dest.to_string()),
@@ -104,32 +90,36 @@ pub fn generate_ir_code(ir: HashMap<String, Vec<IREntry>>) -> String {
     ir.iter().map(|(_, ir)| ir).map(|func_ir| { func_ir.iter().map(|ir| { ir.to_string() }).collect::<Vec<String>>().join("\n") }).collect::<Vec<String>>().join("\n\n")
 }
 
-pub fn generate_ir(module: Module<TypedUserDefinedFunction, TypedASTNode>) -> HashMap<String, Vec<IREntry>> {
-    let var_table = create_top_level_var_table(&module.functions, &String::from("main"));
+pub fn generate_ir(module: Module<TypedUserDefinedFunction>) -> HashMap<String, Vec<IREntry>> {
 
     let mut module_functions_ir: HashMap<String, Vec<IREntry>> = HashMap::new();
 
-    let main_instructions = generate_function_ir(String::from("main"), &module.ast, var_table);
+    let main = module.functions.iter().find(|func| func.id == "main").expect("Main does not exist");
+    let var_table = create_top_level_var_table(&module.functions, &main.id);
+    
+    let main_instructions = generate_function_ir(main, vec![], var_table);
     module_functions_ir.insert(String::from("main"), main_instructions);
 
     for function in &module.functions {
         let mut var_table = create_top_level_var_table(&module.functions, &function.id);
+        let mut params: Vec<IRVar> = vec![];
         for (idx, param_name) in function.params.iter().enumerate() {
             let param_type = function.func_type.param_types.get(idx).unwrap();
-            let ir_var = var_table.create_param(param_type.clone());
-            var_table.vars.insert(param_name.clone(), ir_var);
+            let ir_var = var_table.create(param_name.clone(), param_type.clone());
+            var_table.vars.insert(param_name.clone(), ir_var.clone());
+            params.push(ir_var);
         }
-        let function_ir = generate_function_ir(function.id.clone(), &function.body, var_table);
+        let function_ir = generate_function_ir(function, params, var_table);
         module_functions_ir.insert(function.id.to_string(), function_ir);
     }
     
     module_functions_ir
 }
 
-fn generate_function_ir(id: String, body: &Box<TypedASTNode>, mut var_table: IRVarTable) -> Vec<IREntry> {
+fn generate_function_ir(func: &TypedUserDefinedFunction, params: Vec<IRVar>, mut var_table: IRVarTable) -> Vec<IREntry> {
     let mut function_instructions: Vec<IREntry> = vec![];
-    function_instructions.push(IREntry { instruction: Instruction::FunctionLabel(id) });
-    let return_var = generate(&body, &mut function_instructions, &mut var_table);
+    function_instructions.push(IREntry { instruction: Instruction::FunctionLabel { name: func.id.clone(), params  } });
+    let return_var = generate(&func.body, &mut function_instructions, &mut var_table, String::from(format!("{}_return", func.id)));
     function_instructions.push(IREntry { instruction: Instruction::Return { source: Box::new(return_var) } });
     function_instructions
 }
@@ -152,11 +142,11 @@ fn create_top_level_var_table(global_functions: &Vec<TypedUserDefinedFunction>, 
     var_table
 }
 
-fn generate(node: &TypedASTNode, instructions: &mut Vec<IREntry>, var_table: &mut IRVarTable) -> IRVar {
+fn generate(node: &TypedASTNode, instructions: &mut Vec<IREntry>, var_table: &mut IRVarTable, dest_name: String) -> IRVar {
     match &node.expr {
         Expression::Unit => IRVar::unit(),
         Expression::IntegerLiteral { value } => {
-            let dest = var_table.create(node.node_type.clone());
+            let dest = var_table.create(dest_name, node.node_type.clone());
             instructions.push(IREntry { 
                 // location: , 
                 instruction: Instruction::LoadIntConst { 
@@ -167,7 +157,7 @@ fn generate(node: &TypedASTNode, instructions: &mut Vec<IREntry>, var_table: &mu
             dest
         },
         Expression::BooleanLiteral { value } => {
-            let dest = var_table.create(node.node_type.clone());
+            let dest = var_table.create(dest_name, node.node_type.clone());
             instructions.push(IREntry { 
                 // location: , 
                 instruction: Instruction::LoadBoolConst { 
@@ -181,8 +171,8 @@ fn generate(node: &TypedASTNode, instructions: &mut Vec<IREntry>, var_table: &mu
             var_table.get(value)
         },
         Expression::VariableDeclaration { id, init,.. } => {
-            let init = generate(&init, instructions, var_table);
             if let Expression::Identifier { value } = &id.expr {
+                let init = generate(&init, instructions, var_table, value.clone());
                 var_table.vars.insert(value.clone(), init.clone());
                 init
             } else {
@@ -190,8 +180,8 @@ fn generate(node: &TypedASTNode, instructions: &mut Vec<IREntry>, var_table: &mu
             }
         },
         Expression::UnaryExpression { operand, operator } => {
-            let operand = generate(&operand, instructions, var_table);
-            let dest = var_table.create(node.node_type.clone());
+            let operand = generate(&operand, instructions, var_table, dest_name.clone());
+            let dest = var_table.create(dest_name, node.node_type.clone());
             let fun = var_table.get(&operator.to_string());
 
             instructions.push(IREntry { 
@@ -205,9 +195,9 @@ fn generate(node: &TypedASTNode, instructions: &mut Vec<IREntry>, var_table: &mu
             dest
         },
         Expression::BinaryExpression { left, operator, right } => {
-            let left = generate(&left, instructions, var_table);
-            let right = generate(&right, instructions, var_table);
-            let dest = var_table.create(node.node_type.clone());
+            let left = generate(&left, instructions, var_table, dest_name.clone());
+            let right = generate(&right, instructions, var_table, dest_name.clone());
+            let dest = var_table.create(dest_name, node.node_type.clone());
             let fun = var_table.get(&operator.to_string());
 
             instructions.push(IREntry { 
@@ -224,9 +214,9 @@ fn generate(node: &TypedASTNode, instructions: &mut Vec<IREntry>, var_table: &mu
             if let Expression::Identifier { value } = &callee.expr {
                 let mut argument_vars: Vec<Box<IRVar>> = vec![];
                 for arg in arguments {
-                    argument_vars.push(Box::new(generate(&arg, instructions, var_table)));
+                    argument_vars.push(Box::new(generate(&arg, instructions, var_table, dest_name.clone())));
                 }
-                let dest = var_table.create(node.node_type.clone());
+                let dest = var_table.create(dest_name, node.node_type.clone());
                 let fun = var_table.get(value);
 
                 instructions.push(IREntry { 
@@ -243,8 +233,8 @@ fn generate(node: &TypedASTNode, instructions: &mut Vec<IREntry>, var_table: &mu
             }
         },
         Expression::AssignmentExpression { left, right } => {
-            let left = generate(&left, instructions, var_table);
-            let right = generate(&right, instructions, var_table);
+            let left = generate(&left, instructions, var_table, dest_name.clone());
+            let right = generate(&right, instructions, var_table, dest_name.clone());
             instructions.push(IREntry {
                 instruction: Instruction::Copy { source: Box::new(right.clone()), dest: Box::new(left)  }
             });
@@ -252,17 +242,17 @@ fn generate(node: &TypedASTNode, instructions: &mut Vec<IREntry>, var_table: &mu
         },
         Expression::BlockExpression { statements, result } => {
             for stmnt in statements {
-                generate(&stmnt, instructions, var_table);
+                generate(&stmnt, instructions, var_table, dest_name.clone());
             }
-            generate(&result, instructions, var_table)
+            generate(&result, instructions, var_table, dest_name)
         },
         Expression::IfExpression { condition, then_branch, else_branch } => {
             let then_label = var_table.create_local_label();
             let end_label = var_table.create_local_label();
             let else_label = if else_branch.is_some() { var_table.create_local_label() } else { end_label.clone() };
-            let dest = var_table.create(node.node_type.clone());
+            let dest = var_table.create(dest_name.clone(), node.node_type.clone());
 
-            let condition = generate(&condition, instructions, var_table);
+            let condition = generate(&condition, instructions, var_table, dest_name.clone());
             instructions.push(IREntry { instruction: Instruction::CondJump { 
                 cond: Box::new(condition), 
                 then_label: then_label.clone(),
@@ -270,13 +260,13 @@ fn generate(node: &TypedASTNode, instructions: &mut Vec<IREntry>, var_table: &mu
             }});
 
             instructions.push(IREntry { instruction: Instruction::Label(then_label) });
-            let then_branch = generate(&then_branch, instructions, var_table);
+            let then_branch = generate(&then_branch, instructions, var_table, dest_name.clone());
             instructions.push(IREntry { instruction: Instruction::Copy { source: Box::new(then_branch.clone()), dest: Box::new(dest.clone()) } });
 
             if let Some(else_branch) = else_branch {
                 instructions.push(IREntry { instruction: Instruction::Jump(end_label.clone()) });
                 instructions.push(IREntry { instruction: Instruction::Label(else_label) });
-                let else_branch = generate(&else_branch, instructions, var_table);
+                let else_branch = generate(&else_branch, instructions, var_table, dest_name);
                 instructions.push(IREntry { instruction: Instruction::Copy { source: Box::new(else_branch.clone()), dest: Box::new(dest.clone()) } });
             }
 
@@ -288,11 +278,11 @@ fn generate(node: &TypedASTNode, instructions: &mut Vec<IREntry>, var_table: &mu
             let while_label = var_table.create_local_label();
             let do_label = var_table.create_local_label();
             let end_label = var_table.create_local_label();
-            let dest = var_table.create(node.node_type.clone());
+            let dest = var_table.create(dest_name.clone(), node.node_type.clone());
 
             instructions.push(IREntry { instruction: Instruction::Label(while_label.clone()) });
 
-            let condition = generate(&condition, instructions, var_table);
+            let condition = generate(&condition, instructions, var_table, dest_name.clone());
             instructions.push(IREntry { instruction: Instruction::CondJump { 
                 cond: Box::new(condition), 
                 then_label: do_label.clone(),
@@ -300,7 +290,7 @@ fn generate(node: &TypedASTNode, instructions: &mut Vec<IREntry>, var_table: &mu
             }});
 
             instructions.push(IREntry { instruction: Instruction::Label(do_label) });
-            let body = generate(&body, instructions, var_table);
+            let body = generate(&body, instructions, var_table, dest_name);
             instructions.push(IREntry { instruction: Instruction::Copy { source: Box::new(body.clone()), dest: Box::new(dest.clone()) } });
             instructions.push(IREntry { instruction: Instruction::Jump(while_label) });
 

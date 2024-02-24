@@ -74,7 +74,13 @@ pub struct TypedUserDefinedFunction {
     pub func_type: FunctionType,
 }
 
-pub fn typecheck_program(module: Module<UserDefinedFunction, ASTNode>) -> Module<TypedUserDefinedFunction, TypedASTNode> {
+impl Module<TypedUserDefinedFunction> {
+    pub fn main(&self) -> &TypedUserDefinedFunction {
+        self.functions.iter().find(|func| func.id == "main").expect("Main does not exist")
+    }
+}
+
+pub fn typecheck_program(module: Module<UserDefinedFunction>) -> Module<TypedUserDefinedFunction> {
     let mut sym_table = get_toplevel_sym_table();
     let mut functions: Vec<TypedUserDefinedFunction> = vec![];
 
@@ -94,9 +100,7 @@ pub fn typecheck_program(module: Module<UserDefinedFunction, ASTNode>) -> Module
         }
     }
 
-    let typed_node = typecheck(*module.ast, &mut sym_table);
-
-    Module { functions, ast: Box::new(typed_node) }
+    Module { functions }
 }
 
 fn get_toplevel_sym_table() -> Box<SymTable<Type>> {
@@ -377,28 +381,28 @@ mod tests {
     use crate::parser::parse;
     use super::*;
 
-    fn t(src: &str) -> TypedASTNode {
+    fn t(src: &str) -> Module<TypedUserDefinedFunction> {
         let tokens: Vec<Token> = tokenize(src).expect("Tokenizing to succeed");
         let module = parse(tokens).expect("Parsing to succeed");
-        let module = typecheck_program(module);
-        *module.ast
+        typecheck_program(module)
     }
 
     #[test]
     fn typecheck_integers() {
         let res = t("7 + 3 * 2");
-        assert_eq!(Type::Integer, res.node_type);
+        assert_eq!(Type::Integer, res.main().body.node_type);
     }
 
     #[test]
     fn typecheck_block() {
         let res = t("{ var x = 789 }");
+        let res = &res.main().body;
         // ASTNode { expr: BlockExpression { statements: [], result: ASTNode { expr: VariableDeclaration { id: ASTNode { expr: Identifier { value: "x" } }, init: ASTNode { expr: IntegerLiteral { value: 789 } } } } } }
         assert_eq!(Type::Unit, res.node_type);
 
-        if let Expression::BlockExpression { result,.. } = res.expr {
-            if let Expression::BlockExpression { result,.. } = result.expr {
-                if let Expression::VariableDeclaration { id, init,.. } = result.expr {
+        if let Expression::BlockExpression { result,.. } = &res.expr {
+            if let Expression::BlockExpression { result,.. } = &result.expr {
+                if let Expression::VariableDeclaration { id, init,.. } = &result.expr {
                     assert_eq!(id.node_type, Type::Integer);
                     assert_eq!(init.node_type, Type::Integer);
                 } else {
@@ -439,12 +443,13 @@ mod tests {
                 false
             }
         ");
+        let node = &node.main().body;
 
         assert_eq!(node.node_type, Type::Boolean);
-        if let Expression::BlockExpression { result,.. } = node.expr {
-            if let Expression::IfExpression { condition, .. } = result.expr {
+        if let Expression::BlockExpression { result,.. } = &node.expr {
+            if let Expression::IfExpression { condition, .. } = &result.expr {
                 assert_eq!(condition.node_type, Type::Boolean);
-                if let Expression::BinaryExpression { left, right, .. } = condition.expr {
+                if let Expression::BinaryExpression { left, right, .. } = &condition.expr {
                     assert_eq!(left.node_type, Type::Integer);
                     assert_eq!(right.node_type, Type::Integer);
                 } else {
@@ -465,6 +470,7 @@ mod tests {
                 100
             }
         ");
+        let node = &node.main().body;
 
         assert_eq!(node.node_type, Type::Integer);
     }
@@ -474,6 +480,7 @@ mod tests {
         let node = t("
             7 * -7
         ");
+        let node = &node.main().body;
 
         assert_eq!(node.node_type, Type::Integer);
     }
@@ -481,18 +488,21 @@ mod tests {
     #[test]
     fn compare_eq_booleans() {
         let node = t("false == true");
+        let node = &node.main().body;
         assert_eq!(node.node_type, Type::Boolean);
     }
 
     #[test]
     fn compare_eq_integer() {
         let node = t("123 == 123");
+        let node = &node.main().body;
         assert_eq!(node.node_type, Type::Boolean);
     }
 
     #[test]
     fn type_annotation() {
         let node = t("var x: Int = 123");
+        let node = &node.main().body;
         assert_eq!(node.node_type, Type::Unit);
     }
 
@@ -505,7 +515,7 @@ mod tests {
     #[test]
     fn typed_variable_assignment() {
         let node = t("var x: Int = 123; x = 456");
-        assert_eq!(node.node_type, Type::Integer);
+        assert_eq!(node.main().body.node_type, Type::Integer);
     }
 
     #[test]
@@ -522,7 +532,7 @@ mod tests {
             }
             add(1, 2)
         ");
-        assert_eq!(node.node_type, Type::Integer);
+        assert_eq!(node.main().body.node_type, Type::Integer);
     }
 
     #[test]
@@ -537,12 +547,12 @@ mod tests {
         }
         recurse(2, 10)
         ");
-        assert_eq!(node.node_type, Type::Integer);
+        assert_eq!(node.main().body.node_type, Type::Integer);
     }
 
     #[test]
     fn global_function_references() {
-        let node = t("
+        let node = &t("
         f1();
 
         fun f1() {
@@ -553,6 +563,6 @@ mod tests {
             f1();
         }
         ");
-        assert_eq!(node.node_type, Type::Unit);
+        assert_eq!(node.main().body.node_type, Type::Unit);
     }
 }

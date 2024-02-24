@@ -21,7 +21,7 @@ pub fn run_tests() {
     handles.reverse();
 
     for handle in handles {
-        println!("{}", handle.join().unwrap().join(""));
+        println!("{}", handle.join().expect("Test job failed").join(""));
     }
 }
 

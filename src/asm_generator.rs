@@ -90,7 +90,7 @@ pub fn generate_function_asm(_: &str, fun_ir: &Vec<IREntry>) -> String {
                     format!("{name}:")
                 ]
             },
-            Instruction::FunctionLabel(name) => {
+            Instruction::FunctionLabel { name,.. } => {
                 let mut lines = vec![
                     format!(".global {name}"),
                     format!(".type {name}, @function"),

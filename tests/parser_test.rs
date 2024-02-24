@@ -3,18 +3,18 @@ use compiler::interpreter::UserDefinedFunction;
 use compiler::parser::{parse, ASTNode, Expression, Module};
 use compiler::tokenizer::{Token,Op,tokenize};
 
-fn p(source: &str) -> ASTNode {
+fn p(source: &str) -> Box<ASTNode> {
     let node = parse(
         tokenize(source).expect("Should've been able to tokenize the source")
     ).expect("Should've been able to parse the source");
     // Match to block
-    match node.ast.expr {
-        Expression::BlockExpression { result,.. } => *result,
+    match &node.main().body.expr {
+        Expression::BlockExpression { result,.. } => result.clone(),
         _ => panic!("Parse returned a non block expression")
     }
 }
 
-fn parse_module(source: &str) -> Module<UserDefinedFunction, ASTNode> {
+fn parse_module(source: &str) -> Module<UserDefinedFunction> {
     parse(
         tokenize(source).expect("Should've been able to tokenize the source")
     ).expect("Should've been able to parse the source")
@@ -456,7 +456,7 @@ fn function_definition() {
     let module = parse_module("
         var x = 313;
     ");
-    assert_eq!(module.functions.len(), 0);
+    assert_eq!(module.functions.len(), 1);
 
     let module2 = parse_module("
         var x = 313;
@@ -464,7 +464,7 @@ fn function_definition() {
             313
         }
     ");
-    assert_eq!(module2.functions.len(), 1);
+    assert_eq!(module2.functions.len(), 2);
 
     let fun = module2.functions.get(0).unwrap();
     assert_eq!(fun.id, "f");

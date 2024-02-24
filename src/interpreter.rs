@@ -219,7 +219,7 @@ fn get_toplevel_sym_table() -> Box<SymTable<Value>> {
     sym_table
 }
 
-pub fn interpret_program(module: &Module<UserDefinedFunction, ASTNode>) -> Value {
+pub fn interpret_program(module: &Module<UserDefinedFunction>) -> Value {
     let mut top_sym_table = get_toplevel_sym_table();
     
     for func in &module.functions {
@@ -229,7 +229,7 @@ pub fn interpret_program(module: &Module<UserDefinedFunction, ASTNode>) -> Value
         );
     }
 
-    interpret(&module.ast, &mut top_sym_table)
+    interpret(&module.main().body, &mut top_sym_table)
 }
 
 #[cfg(test)]

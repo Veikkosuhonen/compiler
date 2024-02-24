@@ -84,9 +84,14 @@ pub enum Expression<T> {
 }
 
 #[derive(Debug)]
-pub struct Module<F, T> {
+pub struct Module<F> {
     pub functions: Vec<F>,
-    pub ast: Box<T>,
+}
+
+impl Module<UserDefinedFunction> {
+    pub fn main(&self) -> &UserDefinedFunction {
+        self.functions.iter().find(|func| func.id == "main").expect("Main does not exist")
+    }
 }
 
 struct Parser {
@@ -540,9 +545,9 @@ impl Parser {
 }
 
 
-pub fn parse(tokens: Vec<Token>) -> Result<Module<UserDefinedFunction, ASTNode>, SyntaxError> {
+pub fn parse(tokens: Vec<Token>) -> Result<Module<UserDefinedFunction>, SyntaxError> {
     let mut parser = Parser::new(tokens);
-    let (ast, functions) = parser.parse_top_level_block()?;
+    let (ast, mut functions) = parser.parse_top_level_block()?;
 
     if parser.current_index < parser.tokens.len() {
         let token = parser.peek()?;
@@ -554,8 +559,9 @@ pub fn parse(tokens: Vec<Token>) -> Result<Module<UserDefinedFunction, ASTNode>,
         });
     }
 
+    functions.push(UserDefinedFunction { id: String::from("main"), body: Box::new(ast), params: vec![], return_type: None });
+
     Ok(Module {
-        ast: Box::new(ast),
         functions,
     })
 }

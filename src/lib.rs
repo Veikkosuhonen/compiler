@@ -1,9 +1,9 @@
 use std::fs;
 
 use interpreter::UserDefinedFunction;
-use parser::{ASTNode, Module};
+use parser::Module;
 use report_error::{report_syntax_error, report_tokenisation_error};
-use type_checker::{TypedASTNode, TypedUserDefinedFunction};
+use type_checker::TypedUserDefinedFunction;
 pub mod tokenizer;
 pub mod parser;
 pub mod interpreter;
@@ -21,7 +21,7 @@ fn read_file(path: &String) -> String {
     contents
 }
 
-fn parse_source(contents: String) -> Module<UserDefinedFunction, ASTNode> {
+fn parse_source(contents: String) -> Module<UserDefinedFunction> {
     let tokens = tokenizer::tokenize(&contents)
         .or_else(|err| { report_tokenisation_error(&contents, &err); Err(err) })
         .expect("Should've been able to tokenize the source");
@@ -33,7 +33,7 @@ fn parse_source(contents: String) -> Module<UserDefinedFunction, ASTNode> {
     module
 }
 
-pub fn parse_file(path: &String) -> Module<UserDefinedFunction, ASTNode> {
+pub fn parse_file(path: &String) -> Module<UserDefinedFunction> {
     let contents = read_file(path);
     let module = parse_source(contents);
 
@@ -47,7 +47,7 @@ pub fn interpret_file(path: &String) -> interpreter::Value {
     result
 }
 
-pub fn typecheck_file(path: &String) -> Module<TypedUserDefinedFunction, TypedASTNode> {
+pub fn typecheck_file(path: &String) -> Module<TypedUserDefinedFunction> {
     let module = parse_file(path);
     let result = type_checker::typecheck_program(module);
 

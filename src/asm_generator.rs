@@ -12,7 +12,7 @@ pub fn generate_asm(ir: HashMap<String, Vec<IREntry>>) -> String {
     add_stdlib_code(source)
 }
 
-pub fn generate_function_asm(fun_name: &str, fun_ir: &Vec<IREntry>) -> String {
+pub fn generate_function_asm(_: &str, fun_ir: &Vec<IREntry>) -> String {
     let mut locals_addresses: HashMap<String, String> = HashMap::new();
     let mut params_backups: Vec<(String, String)> = vec![];
     let mut next_stack_loc = -8;

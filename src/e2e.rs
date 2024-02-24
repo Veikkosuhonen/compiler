@@ -17,11 +17,11 @@ pub fn run_tests() {
 }
 
 fn run_test_file(path: &str) {
-    println!("Running test suite {}", path);
+    println!("\n*** Running test suite {} ***", path);
     let source = fs::read_to_string(path).expect("Should've been able to read the file");
     let tests = source.split("---").collect::<Vec<&str>>();
     for (i, test_source) in tests.iter().enumerate() {
-        println!("{}/{}", i + 1, tests.len());
+        println!("\n{}/{}", i + 1, tests.len());
         run_test(test_source)
     }
 }
@@ -54,8 +54,8 @@ fn run_test(source: &str) {
     }
 
     // Interpret
-    let mut interpret_process = Command::new("cargo")
-        .args(["run", "--", "i", "./target/temp_source.hycs"])
+    let mut interpret_process = Command::new("./target/debug/compiler")
+        .args(["i", "./target/temp_source.hycs"])
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .spawn()
@@ -70,9 +70,9 @@ fn run_test(source: &str) {
         }
     });
 
-    println!("-> Interpreted");
+    print!("-> Interpreted ");
     check_output(interpret_process, expects.clone());
-    println!("--> Pass");
+    println!("--- Pass");
 
     // Asm
     if fs::write("./target/temp_asm.s", asm).is_err() {
@@ -84,7 +84,7 @@ fn run_test(source: &str) {
         .output()
         .expect("gcc compile should've run");
     
-    println!("{}", String::from_utf8(compile_output.stdout).unwrap());
+    // println!("{}", String::from_utf8(compile_output.stdout).unwrap());
 
     if !compile_output.status.success() {
         println!("{}", String::from_utf8(compile_output.stderr).unwrap());
@@ -111,9 +111,9 @@ fn run_test(source: &str) {
         }
     });
 
-    println!("-> Compiled");
+    print!("-> Compiled    ");
     check_output(process, expects);
-    println!("--> Pass");
+    println!("--- Pass");
 }
 
 fn check_output(process: Child, expects: Vec<i32>) {

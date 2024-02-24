@@ -1,0 +1,72 @@
+fun add(x: Int, y: Int): Int {
+    x + y
+}
+
+var z = add(1, 2);
+print_int(z);
+
+expect 3
+
+---
+
+fun print(x: Int) {
+    print_int(x);
+}
+
+print(5);
+expect 5
+
+---
+
+fun recurse(x: Int, i: Int): Int {
+    print_int(x);
+    if i > 10 then {
+        x
+    } else {
+        recurse(2 * x, i + 1)
+    }
+}
+
+var n = read_int();
+input 2
+
+recurse(n, 0);
+expect 2
+expect 4
+expect 8
+expect 16
+expect 32
+expect 64
+expect 128
+expect 256
+expect 512
+expect 1024
+expect 2048
+expect 4096
+
+---
+
+fun mut_rec1(i: Int): Int {
+    print_int(1);
+    if i > 4 then {
+        i
+    } else {
+        mut_rec2(i)
+    }
+}
+
+fun mut_rec2(i: Int): Int {
+    print_int(2);
+    if i > 4 then {
+        i
+    } else {
+        mut_rec1(i)
+    }
+}
+
+mut_rec1(1);
+
+expect 1
+expect 2
+expect 1
+expect 2

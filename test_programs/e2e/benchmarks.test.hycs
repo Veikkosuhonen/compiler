@@ -1,3 +1,4 @@
+name "fibonacci(19)"
 
 fun fibonacci(n: Int): Int {
     if n <= 0 then {
@@ -12,3 +13,5 @@ fun fibonacci(n: Int): Int {
 }
 
 print_int(fibonacci(19));
+
+expect 4181

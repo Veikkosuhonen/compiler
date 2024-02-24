@@ -14,20 +14,12 @@ pub fn generate_asm(ir: HashMap<String, Vec<IREntry>>) -> String {
 
 pub fn generate_function_asm(_: &str, fun_ir: &Vec<IREntry>) -> String {
     let mut locals_addresses: HashMap<String, String> = HashMap::new();
-    let mut params_backups: Vec<(String, String)> = vec![];
     let mut next_stack_loc = -8;
 
     let mut add_var = |name: &String| {
         if !locals_addresses.contains_key(name) {
             let address = format!("{next_stack_loc}(%rbp)");
             locals_addresses.insert(name.clone(), address.clone());
-
-            if name.starts_with("p") {
-                let param_idx = name.get(1..).map(|n| n.parse::<usize>().unwrap()).unwrap();
-                let source_reg = get_argument_register(param_idx);
-                params_backups.push((source_reg, address));
-            }
-            
             next_stack_loc -= 8;
         }
     };
@@ -46,7 +38,10 @@ pub fn generate_function_asm(_: &str, fun_ir: &Vec<IREntry>) -> String {
                 }
                 add_var(&dest.name);
             },
-            _ => { /* No vars needed */ }
+            Instruction::Return { source } => {
+                add_var(&source.name);
+            },
+            _ => { /* no vars */}
         }
     }
 
@@ -57,6 +52,23 @@ pub fn generate_function_asm(_: &str, fun_ir: &Vec<IREntry>) -> String {
     let function_body = fun_ir.iter().map(|entry| {
 
         let asm = match &entry.instruction {
+            Instruction::FunctionLabel { name, params } => {
+                let mut lines = vec![
+                    format!(".global {name}"),
+                    format!(".type {name}, @function"),
+                    format!("{name}:"),
+                    format!("pushq %rbp"),
+                    format!("movq %rsp, %rbp"),
+                    format!("subq ${locals_size}, %rsp"),
+                    format!("# param backups ({})", params.len()),
+                ];
+                for (idx, param) in params.iter().enumerate() {
+                    let param_reg = get_argument_register(idx);
+                    let local_address = locals_addresses.get(&param.name).expect(format!("Param {} is not defined", param.name).as_str());
+                    lines.push(format!("movq {param_reg}, {local_address}"));
+                }
+                lines
+            },
             Instruction::LoadIntConst { value, dest } => {
                 let dest_loc = get_var_address(&dest.name, &locals_addresses);
                 vec![
@@ -89,21 +101,6 @@ pub fn generate_function_asm(_: &str, fun_ir: &Vec<IREntry>) -> String {
                 vec![
                     format!("{name}:")
                 ]
-            },
-            Instruction::FunctionLabel { name,.. } => {
-                let mut lines = vec![
-                    format!(".global {name}"),
-                    format!(".type {name}, @function"),
-                    format!("{name}:"),
-                    format!("pushq %rbp"),
-                    format!("movq %rsp, %rbp"),
-                    format!("subq ${locals_size}, %rsp"),
-                    format!("# param backups ({})", params_backups.len()),
-                ];
-                for (source_reg, dest_address) in &params_backups {
-                    lines.push(format!("movq {source_reg}, {dest_address}"));
-                }
-                lines
             },
             Instruction::Jump(label) => {
                 vec![
@@ -322,7 +319,7 @@ fn get_argument_register(idx: usize) -> String {
 }
 
 fn bin_op(arg_1: &String, arg_2: &String, dest: &String, op: &str) -> String { // todo fix this formatting
-    format!("movq {}, %rax \n        {} {}, %rax \n        movq %rax, {}", arg_2, op, arg_1, dest)
+    format!("movq {}, %rax \n        {} {}, %rax \n        movq %rax, {}", arg_1, op, arg_2, dest)
 }
 
 fn comparison(arg1: &String, arg2: &String, dest: &String, op: &str) -> String {
@@ -370,4 +367,32 @@ false_str:
     .ascii \"false\\n\"
 
 ", source)
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{ir_generator::generate_ir, parse_source, type_checker::typecheck_program};
+
+    use super::generate_asm;
+
+    #[test]
+    fn regression_1() {
+        let ir = generate_ir(
+            typecheck_program(
+                parse_source(String::from("
+                fun identity(x: Int): Int {
+                    x
+                }
+                
+                fun tuplaa(x: Int): Int {
+                    identity(x) + identity(x)
+                }
+                
+                print_int(tuplaa(69));
+                "))
+            )
+        );
+
+        generate_asm(ir);
+    }
 }

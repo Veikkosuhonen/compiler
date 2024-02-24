@@ -1,5 +1,6 @@
 
 fun fibonacci(n: Int): Int {
+    print_int(n);
     if n <= 0 then {
         0
     } else {
@@ -11,4 +12,4 @@ fun fibonacci(n: Int): Int {
     }
 }
 
-print_int(fibonacci(19));
+print_int(fibonacci(read_int()));

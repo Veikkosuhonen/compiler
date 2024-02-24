@@ -1,5 +1,8 @@
-fun id(x: Int): Int {
-    x
+fun laske_alas(x: Int) {
+    print_int(x);
+    if x > 0 then {
+        laske_alas(x - 1);
+    }
 }
 
-print_int(id(5000))
+laske_alas(read_int());

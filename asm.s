@@ -6,79 +6,61 @@
 .section .text  # Begins code and data
 
 
-        # Function(recurse(x, i))
-        .global recurse
-        .type recurse, @function
-        recurse:
+        # Function(laske_alas(x))
+        .global laske_alas
+        .type laske_alas, @function
+        laske_alas:
         pushq %rbp
         movq %rsp, %rbp
-        subq $24, %rsp
-        # param backups (0)
+        subq $72, %rsp
+        # param backups (1)
+        movq %rdi, -8(%rbp)
 
-        # Call(print_int, [x], recurse_return)
+        # Call(print_int, [x], var_0)
         movq -8(%rbp), %rsi
         movq $print_format, %rdi
         call printf
 
-        # LoadIntConst(10, recurse_return)
-        movq $10, -16(%rbp)
+        # LoadIntConst(0, var_2)
+        movq $0, -24(%rbp)
 
-        # Call(>, [i,recurse_return], recurse_return)
+        # Call(>, [x,var_2], var_1)
         xor %rax, %rax
-        movq -24(%rbp), %rdx
-        cmpq -16(%rbp), %rdx
+        movq -8(%rbp), %rdx
+        cmpq -24(%rbp), %rdx
         setg %al
-        movq %rax, -16(%rbp)
+        movq %rax, -32(%rbp)
 
-        # CondJump(recurse_return, .Lrecurse_0, .Lrecurse_2)
-        cmpq $0, -16(%rbp)
-        jne .Lrecurse_0
-        jmp .Lrecurse_2
+        # CondJump(var_1, .Llaske_alas_0, .Llaske_alas_1)
+        cmpq $0, -32(%rbp)
+        jne .Llaske_alas_0
+        jmp .Llaske_alas_1
 
-        # Label(.Lrecurse_0)
-        .Lrecurse_0:
+        # Label(.Llaske_alas_0)
+        .Llaske_alas_0:
 
-        # Copy(x, recurse_return)
-        movq -8(%rbp), %rax
-        movq %rax, -16(%rbp)
+        # LoadIntConst(1, var_5)
+        movq $1, -40(%rbp)
 
-        # Jump(.Lrecurse_1)
-        jmp .Lrecurse_1
+        # Call(-, [x,var_5], var_4)
+        movq -40(%rbp), %rax 
+        subq -8(%rbp), %rax 
+        movq %rax, -48(%rbp)
 
-        # Label(.Lrecurse_2)
-        .Lrecurse_2:
+        # Call(laske_alas, [var_4], var_3)
+        movq -48(%rbp), %rdi
+        call laske_alas
+        movq %rax, -56(%rbp)
 
-        # LoadIntConst(2, recurse_return)
-        movq $2, -16(%rbp)
+        # Copy(U, laske_alas_return)
+        movq $0, %rax
+        movq %rax, -72(%rbp)
 
-        # Call(*, [recurse_return,x], recurse_return)
-        movq -8(%rbp), %rax 
-        imulq -16(%rbp), %rax 
-        movq %rax, -16(%rbp)
+        # Label(.Llaske_alas_1)
+        .Llaske_alas_1:
 
-        # LoadIntConst(1, recurse_return)
-        movq $1, -16(%rbp)
-
-        # Call(+, [i,recurse_return], recurse_return)
-        movq -16(%rbp), %rax 
-        addq -24(%rbp), %rax 
-        movq %rax, -16(%rbp)
-
-        # Call(recurse, [recurse_return,recurse_return], recurse_return)
-        movq -16(%rbp), %rdi
-        movq -16(%rbp), %rsi
-        call recurse
-        movq %rax, -16(%rbp)
-
-        # Copy(recurse_return, recurse_return)
-        movq -16(%rbp), %rax
-        movq %rax, -16(%rbp)
-
-        # Label(.Lrecurse_1)
-        .Lrecurse_1:
-
-        # Return(recurse_return)
-        movq -16(%rbp), %rax
+        # Return(laske_alas_return)
+        movq -72(%rbp), %rax
 
         # Restore stack pointer
         movq %rbp, %rsp
@@ -93,25 +75,20 @@
         main:
         pushq %rbp
         movq %rsp, %rbp
-        subq $16, %rsp
+        subq $24, %rsp
         # param backups (0)
 
-        # LoadIntConst(5, n)
-        movq $5, -8(%rbp)
+        # Call(read_int, [], var_1)
+        movq $scan_format, %rdi
+        leaq -8(%rbp), %rsi
+        call scanf
+        cmpq $1, %rax
+        jne .Lend
 
-        # LoadIntConst(0, main_return)
-        movq $0, -16(%rbp)
-
-        # Call(recurse, [n,main_return], main_return)
+        # Call(laske_alas, [var_1], var_0)
         movq -8(%rbp), %rdi
-        movq -16(%rbp), %rsi
-        call recurse
+        call laske_alas
         movq %rax, -16(%rbp)
-
-        # Call(print_int, [main_return], main_return)
-        movq -16(%rbp), %rsi
-        movq $print_format, %rdi
-        call printf
 
         # Return(U)
         movq $0, %rax

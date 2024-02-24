@@ -145,6 +145,9 @@ name "Sub"
 print_int(7 - 7);
 expect 0
 
+print_int(999 - 1);
+expect 998
+
 ---
 
 name "Mul & UnarySub"

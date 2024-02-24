@@ -500,3 +500,18 @@ fn type_annotation() {
         panic!("Top level expression is not VariableDeclaration ({:?})", node.expr)
     }
 }
+
+#[test]
+fn regression_1() {
+    p("
+    fun identity(x: Int): Int {
+        x
+    }
+    
+    fun tuplaa(x: Int): Int {
+        identity(x) + identity(x)
+    }
+    
+    print_int(tuplaa(69));    
+    ");
+}

@@ -34,8 +34,19 @@ impl IRVarTable {
         IRVarTable { vars: HashMap::new(), var_idx: 0, label_idx: 0, fun_name }
     }
 
+    fn unconflicting_name(&mut self, mut name: String) -> String {
+        if self.vars.contains_key(&name) {
+            name = format!("{name}0");
+        }
+        name
+    }
+
     fn create(&mut self, name: String, var_type: Type) -> IRVar {
-        let var = IRVar::new(name, var_type);
+        IRVar::new(self.unconflicting_name(name), var_type)
+    }
+
+    fn create_unnamed(&mut self, var_type: Type) -> IRVar {
+        let var = IRVar::new(self.unconflicting_name(format!("var_{}", self.var_idx)), var_type);
         self.var_idx += 1;
         var
     }
@@ -146,7 +157,7 @@ fn generate(node: &TypedASTNode, instructions: &mut Vec<IREntry>, var_table: &mu
     match &node.expr {
         Expression::Unit => IRVar::unit(),
         Expression::IntegerLiteral { value } => {
-            let dest = var_table.create(dest_name, node.node_type.clone());
+            let dest = var_table.create_unnamed(node.node_type.clone());
             instructions.push(IREntry { 
                 // location: , 
                 instruction: Instruction::LoadIntConst { 
@@ -157,7 +168,7 @@ fn generate(node: &TypedASTNode, instructions: &mut Vec<IREntry>, var_table: &mu
             dest
         },
         Expression::BooleanLiteral { value } => {
-            let dest = var_table.create(dest_name, node.node_type.clone());
+            let dest = var_table.create_unnamed( node.node_type.clone());
             instructions.push(IREntry { 
                 // location: , 
                 instruction: Instruction::LoadBoolConst { 
@@ -180,8 +191,8 @@ fn generate(node: &TypedASTNode, instructions: &mut Vec<IREntry>, var_table: &mu
             }
         },
         Expression::UnaryExpression { operand, operator } => {
-            let operand = generate(&operand, instructions, var_table, dest_name.clone());
-            let dest = var_table.create(dest_name, node.node_type.clone());
+            let dest = var_table.create_unnamed(node.node_type.clone());
+            let operand = generate(&operand, instructions, var_table, dest.name.clone());
             let fun = var_table.get(&operator.to_string());
 
             instructions.push(IREntry { 
@@ -195,9 +206,9 @@ fn generate(node: &TypedASTNode, instructions: &mut Vec<IREntry>, var_table: &mu
             dest
         },
         Expression::BinaryExpression { left, operator, right } => {
-            let left = generate(&left, instructions, var_table, dest_name.clone());
-            let right = generate(&right, instructions, var_table, dest_name.clone());
-            let dest = var_table.create(dest_name, node.node_type.clone());
+            let dest = var_table.create_unnamed(node.node_type.clone());
+            let left = generate(&left, instructions, var_table, dest.name.clone());
+            let right = generate(&right, instructions, var_table, dest.name.clone());
             let fun = var_table.get(&operator.to_string());
 
             instructions.push(IREntry { 
@@ -212,11 +223,11 @@ fn generate(node: &TypedASTNode, instructions: &mut Vec<IREntry>, var_table: &mu
         },
         Expression::CallExpression { callee, arguments } => {
             if let Expression::Identifier { value } = &callee.expr {
+                let dest = var_table.create_unnamed(node.node_type.clone());
                 let mut argument_vars: Vec<Box<IRVar>> = vec![];
                 for arg in arguments {
-                    argument_vars.push(Box::new(generate(&arg, instructions, var_table, dest_name.clone())));
+                    argument_vars.push(Box::new(generate(&arg, instructions, var_table, dest.name.clone())));
                 }
-                let dest = var_table.create(dest_name, node.node_type.clone());
                 let fun = var_table.get(value);
 
                 instructions.push(IREntry { 

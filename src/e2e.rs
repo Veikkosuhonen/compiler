@@ -21,7 +21,7 @@ fn run_test_file(path: &str) {
     let source = fs::read_to_string(path).expect("Should've been able to read the file");
     let tests = source.split("---").collect::<Vec<&str>>();
     for (i, test_source) in tests.iter().enumerate() {
-        println!("\n{}/{}", i + 1, tests.len());
+        print!("\n{}/{} ", i + 1, tests.len());
         run_test(test_source)
     }
 }
@@ -32,6 +32,8 @@ fn run_test(source: &str) {
 
     let mut expects: Vec<i32> = vec![];
 
+    let mut name: Option<String> = None;
+
     let program_source = source.split("\n").filter(|line| {
         if line.trim_start().starts_with("input") {
             inputs.push(line.split_whitespace().last().unwrap().parse().expect("Should've been able to parse i32 after 'input'"));
@@ -39,10 +41,23 @@ fn run_test(source: &str) {
         } else if line.trim_start().starts_with("expect") {
             expects.push(line.split_whitespace().last().unwrap().parse().expect("Should've been able to parse i32 after 'expect'"));
             false
+        } else if line.trim_start().starts_with("name") {
+            name = Some(line.split_whitespace()
+                .collect::<Vec<&str>>()
+                .get(1..)
+                .expect("Test name to follow 'name'")
+                .join(" "));
+            false
         } else {
             true
         }
     }).collect::<Vec<&str>>().join("\n");
+
+    if let Some(name) = name {
+        println!("- {name}");
+    } else {
+        println!();
+    }
 
     let node = parse_source(program_source.clone());
     let typed_ast = typecheck_program(node);

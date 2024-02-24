@@ -1,3 +1,4 @@
+name "Simple while loop"
 
 input 5
 
@@ -16,6 +17,8 @@ expect 1
 
 ---
 
+name "Never-while loop"
+
 while false do {
     print_bool(false);
 };
@@ -25,6 +28,8 @@ print_bool(true);
 expect 1
 
 ---
+
+name "Nested once-while loops"
 
 var once1 = true;
 var once2 = true;

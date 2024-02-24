@@ -1,3 +1,5 @@
+name "Basic function call"
+
 fun add(x: Int, y: Int): Int {
     x + y
 }
@@ -9,6 +11,8 @@ expect 3
 
 ---
 
+name "Function calling intrinsic"
+
 fun print(x: Int) {
     print_int(x);
 }
@@ -17,6 +21,23 @@ print(5);
 expect 5
 
 ---
+
+name "Function calling another user function"
+
+fun foo(): Int {
+    1
+}
+
+fun bar(x: Int): Int {
+    x + foo()
+}
+
+print_int(bar(4));
+expect 5
+
+---
+
+name "Recursion"
 
 fun recurse(x: Int, i: Int): Int {
     print_int(x);
@@ -45,6 +66,8 @@ expect 2048
 expect 4096
 
 ---
+
+name "Mutual recursion"
 
 fun mut_rec1(i: Int): Int {
     print_int(1);

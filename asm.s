@@ -6,6 +6,36 @@
 .section .text  # Begins code and data
 
 
+        # Function(main())
+        .global main
+        .type main, @function
+        main:
+        pushq %rbp
+        movq %rsp, %rbp
+        subq $32, %rsp
+        # param backups (0)
+
+        # LoadIntConst(69, var_1)
+        movq $69, -8(%rbp)
+
+        # Call(func, [var_1], var_0)
+        movq -8(%rbp), %rdi
+        call func
+        movq %rax, -16(%rbp)
+
+        # Copy(U, _return)
+        movq $0, %rax
+        # skip movq %rax, %rax
+
+        # Label(.Lmain_end)
+        .Lmain_end:
+        # Restore stack pointer
+        movq %rbp, %rsp
+        popq %rbp
+        ret
+    
+
+        
         # Function(func(x))
         .global func
         .type func, @function
@@ -29,7 +59,7 @@
 
         # Copy(x, _return)
         movq -16(%rbp), %rax
-        movq %rax, %rax
+        # skip movq %rax, %rax
 
         # Jump(.Lfunc_end)
         jmp .Lfunc_end
@@ -46,40 +76,10 @@
 
         # Copy(var_1, _return)
         movq -40(%rbp), %rax
-        movq %rax, %rax
+        # skip movq %rax, %rax
 
         # Label(.Lfunc_end)
         .Lfunc_end:
-        # Restore stack pointer
-        movq %rbp, %rsp
-        popq %rbp
-        ret
-    
-
-        
-        # Function(main())
-        .global main
-        .type main, @function
-        main:
-        pushq %rbp
-        movq %rsp, %rbp
-        subq $32, %rsp
-        # param backups (0)
-
-        # LoadIntConst(69, var_1)
-        movq $69, -8(%rbp)
-
-        # Call(func, [var_1], var_0)
-        movq -8(%rbp), %rdi
-        call func
-        movq %rax, -16(%rbp)
-
-        # Copy(U, _return)
-        movq $0, %rax
-        movq %rax, %rax
-
-        # Label(.Lmain_end)
-        .Lmain_end:
         # Restore stack pointer
         movq %rbp, %rsp
         popq %rbp

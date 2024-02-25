@@ -88,13 +88,9 @@ pub fn generate_function_asm(fun_name: &str, fun_ir: &Vec<IREntry>) -> String {
             },
             Instruction::Copy { source, dest } => {
                 let src_loc = get_var_address(&source.name, &locals_addresses);
-                let src_reg = "%rax";
                 let dest_loc = get_var_address(&dest.name, &locals_addresses);
 
-                vec![
-                    format!("movq {}, {}", src_loc, src_reg), 
-                    format!("movq {}, {}", src_reg, dest_loc)
-                ]
+                copy(&src_loc, &dest_loc)
             },
             Instruction::Label(name) => {
                 vec![
@@ -162,18 +158,18 @@ fn generate_call(fun: &Box<IRVar>, args: &Vec<Box<IRVar>>, dest: &Box<IRVar>, ad
                     },
                     Op::Div => {
                         vec![
-                            format!("movq {}, %rax", arg_1_loc),
+                            mov(&arg_1_loc, "%rax"),
                             format!("cqto"), // wottefok
                             format!("idivq {}", arg_2_loc),
-                            format!("movq %rax, {}", dest_loc),    
+                            mov("%rax", &dest_loc),   
                         ]
                     },
                     Op::Mod => {
                         vec![
-                            format!("movq {}, %rax", arg_1_loc),
+                            mov(&arg_1_loc, "%rax"),
                             format!("cqto"), // wottefok
                             format!("idivq {}", arg_2_loc),
-                            format!("movq %rdx, {}", dest_loc), // %rdx contains remainder    
+                            mov("%rdx", &dest_loc),   // %rdx contains remainder    
                         ]
                     },
                     Op::Equals => {
@@ -208,16 +204,16 @@ fn generate_call(fun: &Box<IRVar>, args: &Vec<Box<IRVar>>, dest: &Box<IRVar>, ad
                     },
                     Op::And => {
                         vec![
-                            format!("movq {}, %rax", arg_1_loc),
+                            mov(&arg_1_loc, "%rax"),
                             format!("andq {}, %rax", arg_2_loc),
-                            format!("movq %rax, {}", dest_loc)
+                            mov("%rax", &dest_loc),
                         ]
                     },
                     Op::Or => {
                         vec![
-                            format!("movq {}, %rax", arg_1_loc),
+                            mov(&arg_1_loc, "%rax"),
                             format!("orq {}, %rax", arg_2_loc),
-                            format!("movq %rax, {}", dest_loc)
+                            mov("%rax", &dest_loc),
                         ]
                     },
                     _ => todo!("{:?}", op)
@@ -226,16 +222,16 @@ fn generate_call(fun: &Box<IRVar>, args: &Vec<Box<IRVar>>, dest: &Box<IRVar>, ad
                 match op {
                     Op::Not => {
                         vec![
-                            format!("movq {}, %rax", arg_1_loc),
+                            mov(&arg_1_loc, "%rax"),
                             format!("xorq $0x1, %rax"),
-                            format!("movq %rax, {}", dest_loc)
+                            mov("%rax", &dest_loc),
                         ]
                     },
                     Op::UnarySub => {
                         vec![
-                            format!("movq {}, %rax", arg_1_loc),
+                            mov(&arg_1_loc, "%rax"),
                             format!("negq %rax"),
-                            format!("movq %rax, {}", dest_loc)
+                            mov("%rax", &dest_loc),
                         ]
                     },
                     _ => todo!("{:?}", op)
@@ -248,7 +244,7 @@ fn generate_call(fun: &Box<IRVar>, args: &Vec<Box<IRVar>>, dest: &Box<IRVar>, ad
                     let arg_loc = get_var_address(&args[0].name, addresses);
 
                     vec![
-                        format!("movq {}, %rsi", arg_loc),
+                        mov(&arg_loc, "%rsi"),
                         format!("movq $print_format, %rdi"),
                         format!("call printf"),
                     ]
@@ -257,7 +253,7 @@ fn generate_call(fun: &Box<IRVar>, args: &Vec<Box<IRVar>>, dest: &Box<IRVar>, ad
                     let arg_loc = get_var_address(&args[0].name, addresses);
 
                     vec![
-                        format!("movq {}, %rsi", arg_loc),
+                        mov(&arg_loc, "%rsi"),
                         format!("andq $0x1, %rsi"),
                         format!("movq $print_format, %rdi"),
                         format!("call printf"),
@@ -284,10 +280,10 @@ fn generate_function_call(fun_name: &String, args: &Vec<Box<IRVar>>, dest: &Box<
     for (idx, arg) in args.iter().enumerate() {
         let register = get_argument_register(idx);
         let arg_loc = get_var_address(&arg.name, addresses);
-        asm.push(format!("movq {}, {}", arg_loc, register));
+        asm.push(mov(&arg_loc,&register));
     }
     asm.push(format!("call {}", fun_name));
-    asm.push(format!("movq %rax, {}", dest));
+    asm.push(mov("%rax", &dest));
     asm
 }
 
@@ -312,6 +308,21 @@ fn get_argument_register(idx: usize) -> String {
 
 fn bin_op(arg_1: &String, arg_2: &String, dest: &String, op: &str) -> String { // todo fix this formatting
     format!("movq {}, %rax \n        {} {}, %rax \n        movq %rax, {}", arg_1, op, arg_2, dest)
+}
+
+fn copy(arg1: &str, arg2: &str) -> Vec<String> {
+    let mut lines = vec![];
+    let tmp = String::from("%rax");
+    lines.push(mov(arg1, &tmp));
+    lines.push(mov(&tmp, arg2));
+    lines
+}
+
+fn mov(arg1: &str, arg2: &str) -> String {
+    if arg1 != arg2 {
+        return format!("movq {arg1}, {arg2}")
+    }
+    format!("# skip movq {arg1}, {arg2}")
 }
 
 fn comparison(arg1: &String, arg2: &String, dest: &String, op: &str) -> String {

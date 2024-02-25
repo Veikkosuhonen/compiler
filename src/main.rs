@@ -33,12 +33,11 @@ fn main() {
     match &args.command {
         Commands::I { path } => {
             let result = interpret_file(&path);
-
             match result {
                 interpreter::Value::Integer(i) => println!("{}", i),
                 interpreter::Value::Boolean(b) => println!("{}", b),
                 interpreter::Value::Function(_) => println!("Function"),
-                interpreter::Value::Unit => println!("Unit"),
+                _ => println!("Unit"),
             }
         },
         Commands::P { path } => {

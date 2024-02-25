@@ -51,6 +51,7 @@ pub enum Type {
     Integer,
     Boolean,
     Function(Box<FunctionType>),
+    Unknown,
     #[default] Unit,
 }
 
@@ -77,6 +78,19 @@ pub struct TypedUserDefinedFunction {
 impl Module<TypedUserDefinedFunction> {
     pub fn main(&self) -> &TypedUserDefinedFunction {
         self.functions.iter().find(|func| func.id == "main").expect("Main does not exist")
+    }
+
+    /// Test helper
+    pub fn last(&self) -> &Box<TypedASTNode> {
+        match &self.main().body.expr {
+            Expr::Block { statements, result } => {
+                if matches!(result.expr, Expr::Unit) {
+                    return statements.last().unwrap();
+                }
+                result
+            },
+            _ => panic!("Main body should always be a block")
+        }
     }
 }
 
@@ -114,6 +128,7 @@ fn get_toplevel_sym_table() -> Box<SymTable<Type>> {
     sym_table.symbols.insert(Symbol::Identifier("Int".to_string()), Type::Integer);
     sym_table.symbols.insert(Symbol::Identifier("Bool".to_string()), Type::Boolean);
     sym_table.symbols.insert(Symbol::Identifier("Unit".to_string()), Type::Unit);
+    sym_table.symbols.insert(Symbol::Identifier("Unknown".to_string()), Type::Unknown);
 
     sym_table
 }
@@ -129,7 +144,7 @@ fn typecheck(node: ASTNode, sym_table: &mut Box<SymTable<Type>>) -> TypedASTNode
         },
         Expr::Unary { operand, operator } => {
             typecheck_unary_op(operand, operator, sym_table)
-        }
+        },
         Expr::If { condition, then_branch, else_branch } => {
             typecheck_if_expression(condition, then_branch, else_branch, sym_table)
         },
@@ -148,6 +163,14 @@ fn typecheck(node: ASTNode, sym_table: &mut Box<SymTable<Type>>) -> TypedASTNode
         Expr::Call { callee, arguments } => {
             typecheck_call_expression(callee, arguments, sym_table)
         },
+        Expr::Return { result } => {
+            let result = typecheck(*result, sym_table);
+            if result.node_type != sym_table.expected_returns && sym_table.expected_returns != Type::Unknown {
+                panic!("Wrong return type in return expression: annotated {:?} but found {:?}", sym_table.expected_returns, result.node_type)
+            }
+            sym_table.returns = Some(result.node_type.clone());
+            TypedASTNode { expr: Expr::Return { result: Box::new(result) }, node_type: Type::Unit }
+        }
     }
 }
 
@@ -161,6 +184,7 @@ fn get_function_type(
     }).collect();
     let return_type_name = func.return_type.clone().unwrap_or(String::from("Unit"));
     let return_type = sym_table.get(&Symbol::Identifier(return_type_name));
+    println!("{:?}", return_type);
     FunctionType { 
         param_types: params.iter().map(|(_, val)| val.clone()).collect(),
         return_type
@@ -177,8 +201,19 @@ fn typecheck_function(
         (sym, func_type.param_types.get(idx).unwrap().clone())
     }).collect::<Vec<(Symbol, Type)>>();
 
-    let body = sym_table.with_inner_given_args(&params, |inner| {
-        typecheck(*func.body, inner)
+    let body = sym_table.function_scope(&params, |inner| {
+        inner.expected_returns = func_type.return_type.clone();
+        println!("{} should return {:?}", func.id, func_type.return_type);
+        let body = typecheck(*func.body, inner);
+        println!("body: {:?}, returns {:?}", body.node_type, inner.returns);
+        let actual_return_type = inner.returns.clone().unwrap_or(body.node_type.clone());
+
+        // If the function (only main allowed) has the special Unknown type, do no return value typechecking
+        if actual_return_type != inner.expected_returns && func_type.return_type != Type::Unknown {
+            panic!("Wrong return type for {}: annotated {:?} but found {:?}", func.id, inner.expected_returns, body.node_type)
+        }
+
+        body
     });
 
     TypedUserDefinedFunction {
@@ -231,7 +266,7 @@ fn typecheck_if_expression(
         panic!("If expression condition must be a {:?}, got {:?}", Type::Boolean, condition.node_type)
     }
     let then_branch = Box::new(typecheck(*then_branch, sym_table));
-    let node_type = then_branch.node_type.clone();
+    let mut node_type = Type::Unit;
 
     let mut else_branch_opt: Option<Box<TypedASTNode>> = None;
     if let Some(else_branch_expr) = else_branch {
@@ -239,7 +274,8 @@ fn typecheck_if_expression(
         if then_branch.node_type != else_result.node_type {
             panic!("Then and else branch return types differ: {:?} != {:?}", then_branch.node_type, else_result.node_type)
         }
-        else_branch_opt = Some(Box::new(else_result))
+        node_type = else_result.node_type.clone();
+        else_branch_opt = Some(Box::new(else_result));
     }
 
     TypedASTNode {
@@ -271,7 +307,7 @@ fn typecheck_block_expression(
     result: Box<ASTNode>,
     sym_table: &mut Box<SymTable<Type>>
 ) -> TypedASTNode {
-    sym_table.with_inner(|inner_sym_table| {
+    sym_table.block_scope(|inner_sym_table| {
         let mut typed_statements: Vec<Box<TypedASTNode>> = vec![];
         for expr in statements {
             typed_statements.push(Box::new(typecheck(*expr, inner_sym_table)));
@@ -389,8 +425,8 @@ mod tests {
 
     #[test]
     fn typecheck_integers() {
-        let res = t("7 + 3 * 2");
-        assert_eq!(Type::Integer, res.main().body.node_type);
+        let res = t("7 + 3 * 2;");
+        assert_eq!(Type::Integer, res.last().node_type);
     }
 
     #[test]
@@ -435,6 +471,28 @@ mod tests {
     }
 
     #[test]
+    fn if_without_else_is_unit() {
+        let module = t("
+            if (1 > 2) then {
+                1
+            };
+        ");
+        assert_eq!(module.last().node_type, Type::Unit)
+    }
+
+    #[test]
+    fn if_else_type() {
+        let module = t("
+            if (1 > 2) then {
+                1
+            } else {
+                2
+            };
+        ");
+        assert_eq!(module.last().node_type, Type::Integer)
+    }
+
+    #[test]
     fn ast_gets_types() {
         let node = t("
             if (1 > 2) then {
@@ -443,20 +501,16 @@ mod tests {
                 false
             }
         ");
-        let node = &node.main().body;
+        let node = &node.last();
 
         assert_eq!(node.node_type, Type::Boolean);
-        if let Expr::Block { result,.. } = &node.expr {
-            if let Expr::If { condition, .. } = &result.expr {
-                assert_eq!(condition.node_type, Type::Boolean);
-                if let Expr::Binary { left, right, .. } = &condition.expr {
-                    assert_eq!(left.node_type, Type::Integer);
-                    assert_eq!(right.node_type, Type::Integer);
-                } else {
-                    panic!("Fakd")
-                }
+        if let Expr::If { condition, .. } = &node.expr {
+            assert_eq!(condition.node_type, Type::Boolean);
+            if let Expr::Binary { left, right, .. } = &condition.expr {
+                assert_eq!(left.node_type, Type::Integer);
+                assert_eq!(right.node_type, Type::Integer);
             } else {
-                panic!("Wrong, got {:?}", result.expr)
+                panic!("Fakd")
             }
         } else {
             panic!("Wrong, got {:?}", node.expr)
@@ -564,5 +618,35 @@ mod tests {
         }
         ");
         assert_eq!(node.main().body.node_type, Type::Unit);
+    }
+
+    #[test]
+    fn expression_with_return_is_unit() {
+        let res = t("
+        var x = {
+            return 1
+        };
+        x
+        ");
+        assert_eq!(res.main().body.node_type, Type::Unit)
+    }
+
+    #[test]
+    fn return_expression_type() {
+        let module = &t("
+            return 1;
+        ");
+        if let Expr::Block { result,.. } = &module.main().body.expr {
+            assert_eq!(result.node_type, Type::Unit);
+        }
+    }
+
+    #[test]
+    fn return_type_ok() {
+        t("
+            fun f(): Int {
+                return 1;
+            }
+        ");
     }
 }

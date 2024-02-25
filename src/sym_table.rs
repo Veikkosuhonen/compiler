@@ -21,6 +21,8 @@ impl Symbol {
 pub struct SymTable<T> {
     pub symbols: HashMap<Symbol, T>,
     pub parent: Option<Box<SymTable<T>>>,
+    pub returns: Option<T>,
+    pub expected_returns: T,
 }
 
 impl<T:Clone + Default> SymTable<T> {
@@ -28,6 +30,8 @@ impl<T:Clone + Default> SymTable<T> {
         Box::new(SymTable {
             symbols: HashMap::new(),
             parent,
+            returns: None,
+            expected_returns: T::default(),
         })
     }
 
@@ -52,15 +56,20 @@ impl<T:Clone + Default> SymTable<T> {
         }
     }
 
-    pub fn with_inner<Y>(self: &mut Box<SymTable<T>>, f: impl FnOnce(&mut Box<SymTable<T>>) -> Y) -> Y {
+    pub fn block_scope<Y>(self: &mut Box<SymTable<T>>, f: impl FnOnce(&mut Box<SymTable<T>>) -> Y) -> Y {
+        let expected_returns = self.expected_returns.clone();
         let symtab = mem::replace(self, Default::default());
         let mut inner_symtab = SymTable::new(Some(symtab));
+        inner_symtab.expected_returns = expected_returns;
         let result = f(&mut inner_symtab);
         *self = inner_symtab.parent.unwrap();
+        if inner_symtab.returns.is_some() {
+            self.returns = inner_symtab.returns;
+        }
         result
     }
 
-    pub fn with_inner_given_args<Y>(self: &mut Box<SymTable<T>>, args: &Vec<(Symbol, T)>, f: impl FnOnce(&mut Box<SymTable<T>>) -> Y) -> Y {
+    pub fn function_scope<Y>(self: &mut Box<SymTable<T>>, args: &Vec<(Symbol, T)>, f: impl FnOnce(&mut Box<SymTable<T>>) -> Y) -> Y {
         let symtab = mem::replace(self, Default::default());
         let mut inner_symtab = SymTable::new(Some(symtab));
         for (arg_symbol, arg_val) in args {

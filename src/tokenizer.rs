@@ -85,6 +85,10 @@ impl SourceLocation {
     pub fn to_string(&self) -> String {
         format!("{}:{}", self.line, self.column)
     }
+
+    pub fn at(line: usize, column: usize) -> Self {
+        SourceLocation { line, column }
+    }
 }
 
 #[derive(Debug)]

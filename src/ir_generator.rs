@@ -130,8 +130,7 @@ pub fn generate_ir(module: Module<TypedUserDefinedFunction>) -> HashMap<String, 
 fn generate_function_ir(func: &TypedUserDefinedFunction, params: Vec<IRVar>, mut var_table: IRVarTable) -> Vec<IREntry> {
     let mut function_instructions: Vec<IREntry> = vec![];
     function_instructions.push(IREntry { instruction: Instruction::FunctionLabel { name: func.id.clone(), params  } });
-    let return_var = generate(&func.body, &mut function_instructions, &mut var_table, String::from(format!("{}_return", func.id)));
-    function_instructions.push(IREntry { instruction: Instruction::Return { source: Box::new(return_var) } });
+    generate(&func.body, &mut function_instructions, &mut var_table, String::from(format!("{}_return", func.id)));
     function_instructions
 }
 
@@ -242,6 +241,11 @@ fn generate(node: &TypedASTNode, instructions: &mut Vec<IREntry>, var_table: &mu
             } else {
                 panic!("Callee must be an identifier");
             }
+        },
+        Expr::Return { result } => {
+            let return_var = generate(&result, instructions, var_table, dest_name.clone());
+            instructions.push(IREntry { instruction: Instruction::Return { source: Box::new(return_var.clone()) } });
+            return_var
         },
         Expr::Assignment { left, right } => {
             let left = generate(&left, instructions, var_table, dest_name.clone());

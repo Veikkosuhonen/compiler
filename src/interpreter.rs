@@ -3,7 +3,7 @@ use std::vec;
 
 use crate::sym_table::{SymTable, Symbol};
 use crate::parser::{ASTNode, Expr, Module};
-use crate::tokenizer::Op;
+use crate::tokenizer::{Op, SourceLocation};
 use crate::builtin_functions::*;
 
 #[derive(Debug, Clone)]
@@ -26,7 +26,13 @@ pub enum Function {
     UserDefined(Rc<UserDefinedFunction>),
 }
 
-#[derive(Debug, Clone, Default)]
+impl PartialEq for Function {
+    fn eq(&self, _: &Self) -> bool {
+        false
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq)]
 pub enum Value {
     Integer(i32),
     Boolean(bool),
@@ -136,8 +142,9 @@ fn eval_user_defined_function(
         ))
     }
 
-    sym_table.with_inner_given_args(&named_arguments, |inner| {
-        interpret(&function.body, inner)
+    sym_table.function_scope(&named_arguments, |inner| {
+        let implicit_return = interpret(&function.body, inner);
+        inner.returns.as_ref().unwrap_or(&implicit_return).clone()
     })
 }
 
@@ -171,19 +178,29 @@ fn interpret(node: &ASTNode, sym_table: &mut Box<SymTable<Value>>) -> Value {
             }
         },
         Expr::While { condition, body } => {
-            let mut value = Value::Unit;
             while interpret(&condition, sym_table).try_into().expect("While expression condition must return a boolean") {
-                value = interpret(&body, sym_table);
+                interpret(&body, sym_table);
+                if sym_table.returns.is_some() {
+                    break;
+                }
             }
-            value
+            Value::Unit
         },
         Expr::Block { statements, result } => {
-            sym_table.with_inner(|inner_sym_table| {
-                for expr in statements {
-                    interpret(&expr, inner_sym_table);
+            sym_table.block_scope(|inner_sym_table| {
+                for node in statements {
+                    interpret(&node, inner_sym_table);
+                    if inner_sym_table.returns.is_some() {
+                        return Value::Unit;
+                    }
                 }
                 interpret(&result, inner_sym_table)
             })
+        },
+        Expr::Return { result } => {
+            let value = interpret(&result, sym_table);
+            sym_table.returns = Some(value);
+            Value::Unit
         },
         Expr::Identifier { value } => sym_table.get(&Symbol::Identifier(value.clone())),
         Expr::Assignment { left, right } => {
@@ -229,7 +246,13 @@ pub fn interpret_program(module: &Module<UserDefinedFunction>) -> Value {
         );
     }
 
-    interpret(&module.main().body, &mut top_sym_table)
+    let main_ref = ASTNode::new(
+        Expr::Identifier { value: String::from("main") },
+        SourceLocation::at(0, 0),
+        SourceLocation::at(0, 0)
+    );
+
+    eval_call_expression(&Box::new(main_ref), &vec![], &mut top_sym_table)
 }
 
 #[cfg(test)]
@@ -241,6 +264,7 @@ mod tests {
     fn i(src: &str) -> Value {
         let tokens: Vec<Token> = tokenize(src).expect("Should've been able to tokenize the source");
         let module = parse(tokens).expect("Should've been able to parse the source");
+        // println!("{:?}", module.main().body);
         interpret_program(&module)
     }
 
@@ -345,6 +369,7 @@ mod tests {
                 }
             }
         ");
+        println!("{:?}", res);
         assert_eq!(50001, res.try_into().expect("Not an integer!"));
     }
 
@@ -384,6 +409,7 @@ mod tests {
                 minttu
             }
         ");
+        println!("{:?}", res);
         assert_eq!(90000, res.try_into().expect("Not an integer!"));
     }
 
@@ -421,6 +447,42 @@ mod tests {
     #[test]
     fn compare_booleans() {
         let res = i("true == false");
-        assert!(matches!(res, Value::Boolean(false)));
+        assert_eq!(res, Value::Boolean(false));
+    }
+
+    #[test]
+    fn early_return() {
+        let res = i("
+        fun foo(): Int {
+            var x = 1;
+            if 1 == 1 then { return 2; };
+            x
+        }
+        foo()
+        ");
+        assert_eq!(res, Value::Integer(2));
+    }
+
+    #[test]
+    fn implicit_return() {
+        let res = i("
+        fun foo(): Int {
+            var x = 1;
+            if 1 == 2 then { return 2; };
+            x
+        }
+        foo()
+        ");
+        assert_eq!(res, Value::Integer(1));
+    }
+
+    #[test]
+    fn main_can_return() {
+        let res = i("
+        var x = 1;
+        return 2;
+        x
+        ");
+        assert_eq!(res, Value::Integer(2));
     }
 }

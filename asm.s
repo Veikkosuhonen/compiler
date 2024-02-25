@@ -6,67 +6,55 @@
 .section .text  # Begins code and data
 
 
-        # Function(laske_alas(x))
-        .global laske_alas
-        .type laske_alas, @function
-        laske_alas:
+        # Function(func(x))
+        .global func
+        .type func, @function
+        func:
         pushq %rbp
         movq %rsp, %rbp
-        subq $72, %rsp
+        subq $48, %rsp
         # param backups (1)
-        movq %rdi, -8(%rbp)
+        movq %rdi, -16(%rbp)
 
-        # Call(print_int, [x], var_0)
-        movq -8(%rbp), %rsi
-        movq $print_format, %rdi
-        call printf
+        # LoadBoolConst(true, var_0)
+        movq $1, -8(%rbp)
 
-        # LoadIntConst(0, var_2)
-        movq $0, -24(%rbp)
+        # CondJump(var_0, .Lfunc_0, .Lfunc_1)
+        cmpq $0, -8(%rbp)
+        jne .Lfunc_0
+        jmp .Lfunc_1
 
-        # Call(>, [x,var_2], var_1)
-        xor %rax, %rax
-        movq -8(%rbp), %rdx
-        cmpq -24(%rbp), %rdx
-        setg %al
+        # Label(.Lfunc_0)
+        .Lfunc_0:
+
+        # Copy(x, _return)
+        movq -16(%rbp), %rax
+        movq %rax, %rax
+
+        # Jump(.Lfunc_end)
+        jmp .Lfunc_end
+
+        # Copy(U, _return0)
+        movq $0, %rax
         movq %rax, -32(%rbp)
 
-        # CondJump(var_1, .Llaske_alas_0, .Llaske_alas_1)
-        cmpq $0, -32(%rbp)
-        jne .Llaske_alas_0
-        jmp .Llaske_alas_1
+        # Label(.Lfunc_1)
+        .Lfunc_1:
 
-        # Label(.Llaske_alas_0)
-        .Llaske_alas_0:
-
-        # LoadIntConst(1, var_5)
+        # LoadIntConst(1, var_1)
         movq $1, -40(%rbp)
 
-        # Call(-, [x,var_5], var_4)
-        movq -40(%rbp), %rax 
-        subq -8(%rbp), %rax 
-        movq %rax, -48(%rbp)
+        # Copy(var_1, _return)
+        movq -40(%rbp), %rax
+        movq %rax, %rax
 
-        # Call(laske_alas, [var_4], var_3)
-        movq -48(%rbp), %rdi
-        call laske_alas
-        movq %rax, -56(%rbp)
-
-        # Copy(U, laske_alas_return)
-        movq $0, %rax
-        movq %rax, -72(%rbp)
-
-        # Label(.Llaske_alas_1)
-        .Llaske_alas_1:
-
-        # Return(laske_alas_return)
-        movq -72(%rbp), %rax
-
+        # Label(.Lfunc_end)
+        .Lfunc_end:
         # Restore stack pointer
         movq %rbp, %rsp
         popq %rbp
         ret
-
+    
 
         
         # Function(main())
@@ -75,29 +63,28 @@
         main:
         pushq %rbp
         movq %rsp, %rbp
-        subq $24, %rsp
+        subq $32, %rsp
         # param backups (0)
 
-        # Call(read_int, [], var_1)
-        movq $scan_format, %rdi
-        leaq -8(%rbp), %rsi
-        call scanf
-        cmpq $1, %rax
-        jne .Lend
+        # LoadIntConst(69, var_1)
+        movq $69, -8(%rbp)
 
-        # Call(laske_alas, [var_1], var_0)
+        # Call(func, [var_1], var_0)
         movq -8(%rbp), %rdi
-        call laske_alas
+        call func
         movq %rax, -16(%rbp)
 
-        # Return(U)
+        # Copy(U, _return)
         movq $0, %rax
+        movq %rax, %rax
 
+        # Label(.Lmain_end)
+        .Lmain_end:
         # Restore stack pointer
         movq %rbp, %rsp
         popq %rbp
         ret
-
+    
 
 # Actual end
 .Lend:

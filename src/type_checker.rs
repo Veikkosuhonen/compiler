@@ -184,7 +184,6 @@ fn get_function_type(
     }).collect();
     let return_type_name = func.return_type.clone().unwrap_or(String::from("Unit"));
     let return_type = sym_table.get(&Symbol::Identifier(return_type_name));
-    println!("{:?}", return_type);
     FunctionType { 
         param_types: params.iter().map(|(_, val)| val.clone()).collect(),
         return_type
@@ -203,9 +202,7 @@ fn typecheck_function(
 
     let body = sym_table.function_scope(&params, |inner| {
         inner.expected_returns = func_type.return_type.clone();
-        println!("{} should return {:?}", func.id, func_type.return_type);
         let body = typecheck(*func.body, inner);
-        println!("body: {:?}, returns {:?}", body.node_type, inner.returns);
         let actual_return_type = inner.returns.clone().unwrap_or(body.node_type.clone());
 
         // If the function (only main allowed) has the special Unknown type, do no return value typechecking

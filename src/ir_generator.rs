@@ -72,7 +72,6 @@ pub enum Instruction {
     CondJump { cond: Box<IRVar>, then_label: String, else_label: String },
     FunctionLabel { name: String, params: Vec<IRVar> },
     Label(String),
-    Return { source: Box<IRVar> },
 }
 
 #[derive(Debug)]
@@ -84,7 +83,6 @@ pub struct IREntry {
 impl IREntry {
     pub fn to_string(&self) -> String {
         match &self.instruction {
-            Instruction::Return { source } => format!("Return({})", source.to_string()),
             Instruction::Label(label) => format!("Label({})", label.clone()),
             Instruction::FunctionLabel { name, params } => format!("Function({}({}))", name.clone(), params.iter().map(|p| { p.name.clone() }).collect::<Vec<String>>().join(", ")),
             Instruction::Jump(label) => format!("Jump({})", label.clone()),
@@ -105,12 +103,6 @@ pub fn generate_ir(module: Module<TypedUserDefinedFunction>) -> HashMap<String, 
 
     let mut module_functions_ir: HashMap<String, Vec<IREntry>> = HashMap::new();
 
-    let main = module.functions.iter().find(|func| func.id == "main").expect("Main does not exist");
-    let var_table = create_top_level_var_table(&module.functions, &main.id);
-    
-    let main_instructions = generate_function_ir(main, vec![], var_table);
-    module_functions_ir.insert(String::from("main"), main_instructions);
-
     for function in &module.functions {
         let mut var_table = create_top_level_var_table(&module.functions, &function.id);
         let mut params: Vec<IRVar> = vec![];
@@ -120,6 +112,8 @@ pub fn generate_ir(module: Module<TypedUserDefinedFunction>) -> HashMap<String, 
             var_table.vars.insert(param_name.clone(), ir_var.clone());
             params.push(ir_var);
         }
+        let return_var = var_table.create(String::from("_return"), function.func_type.return_type.clone());
+        var_table.vars.insert(return_var.name.clone(), return_var);
         let function_ir = generate_function_ir(function, params, var_table);
         module_functions_ir.insert(function.id.to_string(), function_ir);
     }
@@ -130,7 +124,9 @@ pub fn generate_ir(module: Module<TypedUserDefinedFunction>) -> HashMap<String, 
 fn generate_function_ir(func: &TypedUserDefinedFunction, params: Vec<IRVar>, mut var_table: IRVarTable) -> Vec<IREntry> {
     let mut function_instructions: Vec<IREntry> = vec![];
     function_instructions.push(IREntry { instruction: Instruction::FunctionLabel { name: func.id.clone(), params  } });
-    generate(&func.body, &mut function_instructions, &mut var_table, String::from(format!("{}_return", func.id)));
+    let result = generate(&func.body, &mut function_instructions, &mut var_table, String::from("_return"));
+    function_instructions.push(IREntry { instruction: Instruction::Copy { source: Box::new(result), dest: Box::new(var_table.get(&String::from("_return"))) } });
+    function_instructions.push(IREntry { instruction: Instruction::Label(format!(".L{}_end", func.id)) });
     function_instructions
 }
 
@@ -244,7 +240,8 @@ fn generate(node: &TypedASTNode, instructions: &mut Vec<IREntry>, var_table: &mu
         },
         Expr::Return { result } => {
             let return_var = generate(&result, instructions, var_table, dest_name.clone());
-            instructions.push(IREntry { instruction: Instruction::Return { source: Box::new(return_var.clone()) } });
+            instructions.push(IREntry { instruction: Instruction::Copy { source: Box::new(return_var.clone()), dest: Box::new(var_table.get(&String::from("_return"))) } });
+            instructions.push(IREntry { instruction: Instruction::Jump(format!(".L{}_end", var_table.fun_name)) });
             return_var
         },
         Expr::Assignment { left, right } => {
@@ -339,7 +336,6 @@ mod tests {
     #[test]
     fn var_declaration() {
         let ir = i("{ var x = 789 }");
-        println!("{:?}", ir);
         assert!(matches!(&ir.get("main").unwrap()[1].instruction, Instruction::LoadIntConst { value: 789, .. }));
     }
 

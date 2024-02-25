@@ -12,9 +12,11 @@ pub fn generate_asm(ir: HashMap<String, Vec<IREntry>>) -> String {
     add_stdlib_code(source)
 }
 
-pub fn generate_function_asm(_: &str, fun_ir: &Vec<IREntry>) -> String {
+pub fn generate_function_asm(fun_name: &str, fun_ir: &Vec<IREntry>) -> String {
     let mut locals_addresses: HashMap<String, String> = HashMap::new();
     let mut next_stack_loc = -8;
+
+    locals_addresses.insert(String::from("_return"), String::from("%rax"));
 
     let mut add_var = |name: &String| {
         if !locals_addresses.contains_key(name) {
@@ -37,9 +39,6 @@ pub fn generate_function_asm(_: &str, fun_ir: &Vec<IREntry>) -> String {
                     add_var(&ir_var.name);
                 }
                 add_var(&dest.name);
-            },
-            Instruction::Return { source } => {
-                add_var(&source.name);
             },
             _ => { /* no vars */}
         }
@@ -64,7 +63,7 @@ pub fn generate_function_asm(_: &str, fun_ir: &Vec<IREntry>) -> String {
                 ];
                 for (idx, param) in params.iter().enumerate() {
                     let param_reg = get_argument_register(idx);
-                    let local_address = locals_addresses.get(&param.name).expect(format!("Param {} is not defined", param.name).as_str());
+                    let local_address = locals_addresses.get(&param.name).expect(format!("In {fun_name}, param {} is not defined", param.name).as_str());
                     lines.push(format!("movq {param_reg}, {local_address}"));
                 }
                 lines
@@ -115,12 +114,6 @@ pub fn generate_function_asm(_: &str, fun_ir: &Vec<IREntry>) -> String {
                     format!("jmp {}", else_label)
                 ]
             },
-            Instruction::Return { source } => {
-                let source_loc = get_var_address(&source.name, &locals_addresses);
-                vec![
-                    format!("movq {}, %rax", source_loc)
-                ]
-            },
         }.join("\n        ");
 
         format!("# {}\n        {}", entry.to_string(), asm)
@@ -130,12 +123,11 @@ pub fn generate_function_asm(_: &str, fun_ir: &Vec<IREntry>) -> String {
 
     format!("
         {function_body}
-
         # Restore stack pointer
         movq %rbp, %rsp
         popq %rbp
         ret
-")
+    ", )
 }
 
 fn generate_call(fun: &Box<IRVar>, args: &Vec<Box<IRVar>>, dest: &Box<IRVar>, addresses: &HashMap<String, String>) -> String {

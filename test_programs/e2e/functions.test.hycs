@@ -37,6 +37,47 @@ expect 5
 
 ---
 
+name "Function with returns"
+
+fun foo(x: Int): Int {
+    if x == 42 then {
+        return x;
+    }
+
+    return x * 2;
+}
+
+print_int(foo(4));
+expect 8
+
+print_int(foo(42));
+expect 42
+
+---
+
+name "Function with return from while loop"
+
+fun foo(x: Int): Int {
+    while x > 0 do {
+        if x == 42 then {
+            return x;
+        }
+        x = x - 1;
+    }
+    x
+}
+
+print_int(foo(4));
+expect 0
+
+print_int(foo(42));
+expect 42
+
+print_int(foo(100));
+expect 42
+
+---
+
 name "Recursion"
 
 fun recurse(x: Int, i: Int): Int {

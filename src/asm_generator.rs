@@ -201,21 +201,7 @@ fn generate_call(fun: &Box<IRVar>, args: &Vec<Box<IRVar>>, dest: &Box<IRVar>, ad
                             comparison(&arg_1_loc, arg_2_loc, &dest_loc, "setle"),
                         ]
                     },
-                    Op::And => {
-                        vec![
-                            mov(&arg_1_loc, "%rax"),
-                            format!("andq {}, %rax", arg_2_loc),
-                            mov("%rax", &dest_loc),
-                        ]
-                    },
-                    Op::Or => {
-                        vec![
-                            mov(&arg_1_loc, "%rax"),
-                            format!("orq {}, %rax", arg_2_loc),
-                            mov("%rax", &dest_loc),
-                        ]
-                    },
-                    _ => todo!("{:?}", op)
+                    _ => panic!("{:?} does not have an intrinsic definition", op)
                 }
             } else {
                 match op {

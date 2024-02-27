@@ -1136,16 +1136,18 @@ fn empty_block_doesnt_return() {
     if let Expr::Block { result,.. } = n.expr {
         assert!(matches!(result.expr, Expr::Unit))
     }
-    
 }
 
 #[test]
 fn block_doesnt_need_semi() {
-    p("
+    let n = p("
         {
-            { 1 } 1
+            { false } 1
         }
     ");
+    if let Expr::Block { result,.. } = n.expr {
+        assert!(matches!(result.expr, Expr::IntegerLiteral { value: 1 }))
+    }
 }
 
 }

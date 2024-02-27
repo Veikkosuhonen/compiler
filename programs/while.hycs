@@ -6,4 +6,4 @@ while iters < N do {
     x = x + x + 1;
     iters = iters + 1;
     print_int(x);
-};
+}

@@ -16,6 +16,8 @@ var _x = fibonacci(26);
 
 0
 
+time 10
+
 ---
 
 name "find factors"
@@ -37,3 +39,5 @@ while (number > 1) do {
 var _x = numberFactors;
 
 0
+
+time 10

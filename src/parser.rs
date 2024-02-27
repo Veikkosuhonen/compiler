@@ -203,8 +203,10 @@ impl Parser {
         self.consume_with_value(TokenType::Punctuation, "{")
     }
 
-    fn consume_right_curly(&mut self) -> Result<Token, SyntaxError> {
-        self.consume_with_value(TokenType::Punctuation, "}")
+    fn consume_block_end(&mut self) -> Result<Token, SyntaxError> {
+        let t = self.consume_with_value(TokenType::Punctuation, "}")?;
+        self.consume_available_semi();
+        Ok(t)
     }
 
     fn consume_comma(&mut self) -> Result<Token, SyntaxError> {
@@ -318,7 +320,7 @@ impl Parser {
         let start = self.current_start().clone();
         let mut statements: Vec<Box<ASTNode>> = vec![];
         loop {
-            if self.consume_right_curly().is_ok() {
+            if self.consume_block_end().is_ok() {
                 let end: SourceLocation = self.current_end().clone();
                 return Ok(ASTNode::new(Expr::Block {
                     statements,
@@ -326,7 +328,7 @@ impl Parser {
                 }, start, end));
             }
             let statement = self.parse_statement()?;
-            if self.consume_right_curly().is_ok() {
+            if self.consume_block_end().is_ok() {
                 let end = self.current_end().clone();
                 return Ok(ASTNode::new(Expr::Block {
                     statements,
@@ -531,21 +533,42 @@ impl Parser {
     fn parse_top_level_block(&mut self) -> Result<(ASTNode, Vec<UserDefinedFunction>), SyntaxError> {
         let start = self.current_start().clone();
         let mut statements: Vec<Box<ASTNode>> = vec![];
+        #[allow(unused_assignments)]
         let mut result = Box::new(ASTNode::new(Expr::Unit, start.clone(), start.clone()));
         let mut functions: Vec<UserDefinedFunction> = vec![];
 
-        while self.tokens.len() - self.current_index > 0 {
+        // while self.tokens.len() - self.current_index > 0 {
+        //     if self.current_is("fun") {
+        //         let fun = self.parse_function_definition()?;
+        //         functions.push(fun);
+        //     } else {
+        //         let stmt = Box::new(self.parse_statement()?);
+        //         if self.consume_available_semi() {
+        //             statements.push(stmt);
+        //         } else {
+        //             result = stmt;
+        //             break;
+        //         }
+        //     }
+        // }
+        
+        loop {
             if self.current_is("fun") {
                 let fun = self.parse_function_definition()?;
                 functions.push(fun);
             } else {
-                let stmt = Box::new(self.parse_statement()?);
-                if self.consume_available_semi() {
-                    statements.push(stmt);
-                } else {
-                    result = stmt;
+                if self.tokens.len() == self.current_index {
+                    let end = self.current_end().clone();
+                    result = Box::new(ASTNode::new(Expr::Unit, end.clone(), end.clone()));
                     break;
                 }
+                let statement = self.parse_statement()?;
+                if self.tokens.len() == self.current_index {
+                    result = Box::new(statement);
+                    break;
+                }
+                statements.push(Box::new(statement));
+                self.consume_available_semi();
             }
         }
         let end = self.current_end().clone();
@@ -1114,6 +1137,15 @@ fn empty_block_doesnt_return() {
         assert!(matches!(result.expr, Expr::Unit))
     }
     
+}
+
+#[test]
+fn block_doesnt_need_semi() {
+    p("
+        {
+            { 1 } 1
+        }
+    ");
 }
 
 }

@@ -1,8 +1,8 @@
-fun func(x: Int): Int {
-    if true then {
-        return x;
-    }
-    1
+var i = 0;
+
+while i < 10 do {
+    print_int(i);
+    i = i + 1;
 }
 
-func(69);
+print_int(42);

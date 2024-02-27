@@ -202,18 +202,51 @@ fn generate(node: &TypedASTNode, instructions: &mut Vec<IREntry>, var_table: &mu
         },
         Expr::Binary { left, operator, right } => {
             let dest = var_table.create_unnamed(node.node_type.clone());
-            let left = generate(&left, instructions, var_table, dest.name.clone());
-            let right = generate(&right, instructions, var_table, dest.name.clone());
             let fun = var_table.get(&operator.to_string());
 
-            instructions.push(IREntry { 
-                // location: , 
-                instruction: Instruction::Call { 
-                    fun: Box::new(fun), 
-                    args: vec![Box::new(left), Box::new(right)], 
-                    dest: Box::new(dest.clone()),
-                }
-            });
+            match fun.name.as_str() {
+                "and" => {
+                    let left = generate(&left, instructions, var_table, dest_name.clone());
+                    let return_left_label = var_table.create_local_label();
+                    let end_label = var_table.create_local_label();
+                    let return_right_label = var_table.create_local_label();
+                    instructions.push(IREntry { instruction: Instruction::CondJump { cond: Box::new(left.clone()), then_label: return_right_label.clone(), else_label: return_left_label.clone() } });
+                    instructions.push(IREntry { instruction: Instruction::Label(return_left_label) });
+                    instructions.push(IREntry { instruction: Instruction::Copy { source: Box::new(left), dest: Box::new(dest.clone()) } });
+                    instructions.push(IREntry { instruction: Instruction::Jump(end_label.clone()) });
+                    instructions.push(IREntry { instruction: Instruction::Label(return_right_label) });
+                    let right = generate(&right, instructions, var_table, dest_name.clone());
+                    instructions.push(IREntry { instruction: Instruction::Copy { source: Box::new(right), dest: Box::new(dest.clone()) } });
+                    instructions.push(IREntry { instruction: Instruction::Label(end_label) });
+                },
+                "or" => {
+                    let left = generate(&left, instructions, var_table, dest_name.clone());
+                    let return_left_label = var_table.create_local_label();
+                    let end_label = var_table.create_local_label();
+                    let return_right_label = var_table.create_local_label();
+                    instructions.push(IREntry { instruction: Instruction::CondJump { cond: Box::new(left.clone()), then_label: return_left_label.clone(), else_label: return_right_label.clone() } });
+                    instructions.push(IREntry { instruction: Instruction::Label(return_left_label) });
+                    instructions.push(IREntry { instruction: Instruction::Copy { source: Box::new(left), dest: Box::new(dest.clone()) } });
+                    instructions.push(IREntry { instruction: Instruction::Jump(end_label.clone()) });
+                    instructions.push(IREntry { instruction: Instruction::Label(return_right_label) });
+                    let right = generate(&right, instructions, var_table, dest_name.clone());
+                    instructions.push(IREntry { instruction: Instruction::Copy { source: Box::new(right), dest: Box::new(dest.clone()) } });
+                    instructions.push(IREntry { instruction: Instruction::Label(end_label) });
+                },
+                _ => {
+                    let left = generate(&left, instructions, var_table, dest.name.clone());
+                    let right = generate(&right, instructions, var_table, dest.name.clone());
+                    instructions.push(IREntry { 
+                        // location: , 
+                        instruction: Instruction::Call { 
+                            fun: Box::new(fun), 
+                            args: vec![Box::new(left), Box::new(right)], 
+                            dest: Box::new(dest.clone()),
+                        }
+                    });
+                },
+            }
+            
             dest
         },
         Expr::Call { callee, arguments } => {
@@ -310,24 +343,6 @@ fn generate(node: &TypedASTNode, instructions: &mut Vec<IREntry>, var_table: &mu
 
             dest
         }
-    }
-}
-
-fn generate_ir_intrinsic(callee: Op, left: IRVar, right: IRVar, dest: IRVar) -> Option<Vec<IREntry>> {
-    let eval_right_label = var_table.create_local_label();
-    let end_label = var_table.create_local_label();
-
-    match callee {
-        Op::And => {
-            let instructions = vec![];
-            let left = generate(&left, instructions, var_table, dest_name.clone());
-            instructions.push(IREntry { instruction: Instruction::CondJump { cond: Box::new(left), then_label: eval_right_label.clone(), else_label: end_label.clone() } });
-            instructions.push(IREntry { instruction: Instruction::Label(eval_right_label) });
-            let right = generate(&right, instructions, var_table, dest_name.clone());
-            instructions.push(IREntry { instruction: Instruction::Label(end_label) });
-            instructions.push(IREntry { instruction: Instruction::Copy { source: Box::new(body.clone()), dest: Box::new(dest.clone()) } });
-        },
-        _ => None,
     }
 }
 

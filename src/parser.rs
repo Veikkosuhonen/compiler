@@ -206,9 +206,18 @@ impl Parser {
     }
 
     fn consume_block_end(&mut self) -> Result<Token, SyntaxError> {
-        let t = self.consume_with_value(TokenType::Punctuation, "}")?;
-        self.consume_available_semi();
-        Ok(t)
+        self.consume_with_value(TokenType::Punctuation, "}")
+    }
+
+    /// A statement ends in a semi colon, unless the previous token was a block end
+    /// In that case, semi is optional.
+    fn consume_statement_end(&mut self) -> Result<Token, SyntaxError> {
+        let block_end = self.peek_offset(-1);
+        if let Ok(token) = block_end {
+            self.consume_available_semi();
+            return Ok(token);
+        }
+        self.consume_with_value(TokenType::Punctuation, ";")
     }
 
     fn consume_comma(&mut self) -> Result<Token, SyntaxError> {
@@ -315,31 +324,6 @@ impl Parser {
         let expr = self.parse_expression()?;
         self.consume_right_paren()?;
         Ok(expr)
-    }
-
-    fn parse_block_expression(&mut self) -> Result<ASTNode, SyntaxError> {
-        self.consume_left_curly()?;
-        let start = self.current_start().clone();
-        let mut statements: Vec<Box<ASTNode>> = vec![];
-        loop {
-            if self.consume_block_end().is_ok() {
-                let end: SourceLocation = self.current_end().clone();
-                return Ok(ASTNode::new(Expr::Block {
-                    statements,
-                    result: Box::new(ASTNode::new(Expr::Unit, end.clone(), end.clone())),
-                }, start, end));
-            }
-            let statement = self.parse_statement()?;
-            if self.consume_block_end().is_ok() {
-                let end = self.current_end().clone();
-                return Ok(ASTNode::new(Expr::Block {
-                    statements,
-                    result: Box::new(statement),
-                }, start, end));
-            }
-            statements.push(Box::new(statement));
-            self.consume_available_semi();
-        }
     }
 
     fn parse_keywordy_factor(&mut self) -> Result<ASTNode, SyntaxError> {
@@ -532,58 +516,46 @@ impl Parser {
         })
     }
 
-    fn parse_top_level_block(&mut self) -> Result<(ASTNode, Vec<UserDefinedFunction>), SyntaxError> {
+    fn parse_block_expression(&mut self) -> Result<ASTNode, SyntaxError> {
+        self.parse_block(false, &mut Vec::new())
+    }
+
+    fn parse_block(&mut self, functions_allowed: bool, functions: &mut Vec<UserDefinedFunction>) -> Result<ASTNode, SyntaxError> {
+        self.consume_left_curly()?;
         let start = self.current_start().clone();
         let mut statements: Vec<Box<ASTNode>> = vec![];
-        #[allow(unused_assignments)]
-        let mut result = Box::new(ASTNode::new(Expr::Unit, start.clone(), start.clone()));
-        let mut functions: Vec<UserDefinedFunction> = vec![];
-
-        // while self.tokens.len() - self.current_index > 0 {
-        //     if self.current_is("fun") {
-        //         let fun = self.parse_function_definition()?;
-        //         functions.push(fun);
-        //     } else {
-        //         let stmt = Box::new(self.parse_statement()?);
-        //         if self.consume_available_semi() {
-        //             statements.push(stmt);
-        //         } else {
-        //             result = stmt;
-        //             break;
-        //         }
-        //     }
-        // }
-        
         loop {
-            if self.current_is("fun") {
+            if functions_allowed && self.current_is("fun") {
                 let fun = self.parse_function_definition()?;
                 functions.push(fun);
             } else {
-                if self.tokens.len() == self.current_index {
-                    let end = self.current_end().clone();
-                    result = Box::new(ASTNode::new(Expr::Unit, end.clone(), end.clone()));
-                    break;
+                if self.consume_block_end().is_ok() {
+                    let end: SourceLocation = self.current_end().clone();
+                    return Ok(ASTNode::new(Expr::Block {
+                        statements,
+                        result: Box::new(ASTNode::new(Expr::Unit, end.clone(), end.clone())),
+                    }, start, end));
                 }
                 let statement = self.parse_statement()?;
-                if self.tokens.len() == self.current_index {
-                    result = Box::new(statement);
-                    break;
+                if self.consume_block_end().is_ok() {
+                    let end = self.current_end().clone();
+                    return Ok(ASTNode::new(Expr::Block {
+                        statements,
+                        result: Box::new(statement),
+                    }, start, end));
                 }
                 statements.push(Box::new(statement));
-                
-                // Check if the previous token was a closing curly brace.
-                // If so, semicolon is not necessary. Otherwise it is required.
-                if self.peek_offset(-1).is_ok_and(|t| t.value == "}") {
-                    self.consume_available_semi();
-                } else {
-                    self.consume_with_value(TokenType::Punctuation, ";")?;
-                }
+                self.consume_statement_end()?;
             }
         }
-        let end = self.current_end().clone();
+    }
+
+    fn parse_top_level_block(&mut self) -> Result<(ASTNode, Vec<UserDefinedFunction>), SyntaxError> {
+        let mut functions: Vec<UserDefinedFunction> = vec![];
+        let body = self.parse_block(true, &mut functions)?;
 
         Ok((
-            ASTNode::new(Expr::Block { statements, result }, start, end),
+            body,
             functions
         ))
     }
@@ -638,7 +610,8 @@ fn parse_module(source: &str) -> Module<UserDefinedFunction> {
 fn test_invalid_source() {
     let source = "1 + 2 3 4 haha minttuglitch";
     let tokens: Vec<Token> = tokenize(source).expect("Should've been able to tokenize the source");
-    assert!(parse(tokens).is_err())
+    let result = parse(tokens);
+    println!("{:?}", result);
 }
 
 #[test]
@@ -1035,10 +1008,10 @@ fn test_example_blocks() {
             x
         } else {
             g(x)
-        }; // <-- (this semicolon will become optional later)
+        } // <-- (this semicolon will become optional later)
         g(y);
     }; // <------ (this too)
-    123
+    123;
     ");
 }
 

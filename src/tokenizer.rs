@@ -162,7 +162,14 @@ fn count_line_column_changes(v: &str, line: usize, column: usize) -> (usize, usi
 }
 
 pub fn tokenize(source: &str) -> Result<Vec<Token>, TokenisationError> {
-    let mut tokens: Vec<Token> = Vec::new();
+    // Hack: wrap the source in curly braces so it can be parsed as a single block.
+    let mut tokens: Vec<Token> = vec![];
+    tokens.push(Token {
+        value: "{".to_string(),
+        token_type: TokenType::Punctuation,
+        start: SourceLocation::at(0, 0),
+        end: SourceLocation::at(0, 0),
+    });
 
     let mut line = 1;
     let mut column = 1;
@@ -198,12 +205,21 @@ pub fn tokenize(source: &str) -> Result<Vec<Token>, TokenisationError> {
         }
     }
 
-    if tokens.is_empty() {
+    // Is only token the opening brace we added?
+    if tokens.len() == 1 {
         return Err(TokenisationError {
-            location: SourceLocation { line, column },
-            message: "No tokens found".to_string(),
+            location: SourceLocation::at(0, 0),
+            message: "Empty expression".to_string(),
         });
     }
+
+    // Complete the wrap
+    tokens.push(Token {
+        value: "}".to_string(),
+        token_type: TokenType::Punctuation,
+        start: SourceLocation::at(line, column),
+        end: SourceLocation::at(line, column),
+    });
 
     Ok(tokens)
 }
@@ -346,35 +362,35 @@ mod tests {
         let tokens = tokenize("
             return 1
         ").expect("Shoulve tokenized");
-        assert!(matches!(tokens[0].token_type, TokenType::Keyword     {..}));
+        assert!(matches!(tokens[1].token_type, TokenType::Keyword     {..}));
     }
 
     #[test]
     fn test_function_call() {
         let source = "f(1, 2, 3)";
         let tokens = tokenize(source).expect("Should've been able to tokenize");
-        assert_eq!(tokens.len(), 8);
-        assert!(matches!(tokens[0].token_type, TokenType::Identifier     {..}));
-        assert!(matches!(tokens[1].token_type, TokenType::Punctuation    {..}));
-        assert!(matches!(tokens[2].token_type, TokenType::IntegerLiteral {..}));
-        assert!(matches!(tokens[3].token_type, TokenType::Punctuation    {..}));
-        assert!(matches!(tokens[4].token_type, TokenType::IntegerLiteral {..}));
-        assert!(matches!(tokens[5].token_type, TokenType::Punctuation    {..}));
-        assert!(matches!(tokens[6].token_type, TokenType::IntegerLiteral {..}));
-        assert!(matches!(tokens[7].token_type, TokenType::Punctuation    {..}));
+        assert_eq!(tokens.len(), 10);
+        assert!(matches!(tokens[1].token_type, TokenType::Identifier     {..}));
+        assert!(matches!(tokens[2].token_type, TokenType::Punctuation    {..}));
+        assert!(matches!(tokens[3].token_type, TokenType::IntegerLiteral {..}));
+        assert!(matches!(tokens[4].token_type, TokenType::Punctuation    {..}));
+        assert!(matches!(tokens[5].token_type, TokenType::IntegerLiteral {..}));
+        assert!(matches!(tokens[6].token_type, TokenType::Punctuation    {..}));
+        assert!(matches!(tokens[7].token_type, TokenType::IntegerLiteral {..}));
+        assert!(matches!(tokens[8].token_type, TokenType::Punctuation    {..}));
     }
 
     #[test]
     fn test_type_definition() {
         let source = "var x: Int = 1";
         let tokens = tokenize(source).expect("Should've been able to tokenize");
-        assert_eq!(tokens.len(), 6);
-        assert!(matches!(tokens[0].token_type, TokenType::Keyword        {..}));
-        assert!(matches!(tokens[1].token_type, TokenType::Identifier     {..}));
-        assert!(matches!(tokens[2].token_type, TokenType::Punctuation    {..}));
-        assert!(matches!(tokens[3].token_type, TokenType::Identifier     {..}));
-        assert!(matches!(tokens[4].token_type, TokenType::Operator       {..}));
-        assert!(matches!(tokens[5].token_type, TokenType::IntegerLiteral {..}));
+        assert_eq!(tokens.len(), 8);
+        assert!(matches!(tokens[1].token_type, TokenType::Keyword        {..}));
+        assert!(matches!(tokens[2].token_type, TokenType::Identifier     {..}));
+        assert!(matches!(tokens[3].token_type, TokenType::Punctuation    {..}));
+        assert!(matches!(tokens[4].token_type, TokenType::Identifier     {..}));
+        assert!(matches!(tokens[5].token_type, TokenType::Operator       {..}));
+        assert!(matches!(tokens[6].token_type, TokenType::IntegerLiteral {..}));
     }
 
     #[test]
@@ -386,7 +402,7 @@ mod tests {
             funny
             variable
         ").expect("Shoulve tokenized");
-        for t in tokens {
+        for t in tokens[1..5].iter() {
             assert!(matches!(t.token_type, TokenType::Identifier { .. }));
         }
     }

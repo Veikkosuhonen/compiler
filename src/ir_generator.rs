@@ -313,6 +313,24 @@ fn generate(node: &TypedASTNode, instructions: &mut Vec<IREntry>, var_table: &mu
     }
 }
 
+fn generate_ir_intrinsic(callee: Op, left: IRVar, right: IRVar, dest: IRVar) -> Option<Vec<IREntry>> {
+    let eval_right_label = var_table.create_local_label();
+    let end_label = var_table.create_local_label();
+
+    match callee {
+        Op::And => {
+            let instructions = vec![];
+            let left = generate(&left, instructions, var_table, dest_name.clone());
+            instructions.push(IREntry { instruction: Instruction::CondJump { cond: Box::new(left), then_label: eval_right_label.clone(), else_label: end_label.clone() } });
+            instructions.push(IREntry { instruction: Instruction::Label(eval_right_label) });
+            let right = generate(&right, instructions, var_table, dest_name.clone());
+            instructions.push(IREntry { instruction: Instruction::Label(end_label) });
+            instructions.push(IREntry { instruction: Instruction::Copy { source: Box::new(body.clone()), dest: Box::new(dest.clone()) } });
+        },
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{parse_source, type_checker::typecheck_program};

@@ -44,9 +44,8 @@ pub fn generate_function_asm(fun_name: &str, fun_ir: &Vec<IREntry>) -> String {
         }
     }
 
-    // println!("{fun_name}: {:?}", locals_addresses);
-
-    let locals_size = 8 * locals_addresses.len();
+    // align to 16 bytes
+    let locals_size = 8 * (locals_addresses.len() + locals_addresses.len() % 2);
 
     let function_body = fun_ir.iter().map(|entry| {
 

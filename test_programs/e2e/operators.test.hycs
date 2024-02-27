@@ -154,3 +154,33 @@ name "Mul & UnarySub"
 
 print_int(7 * -7);
 expect -49
+
+---
+
+name "And evals right when left is true"
+
+print_bool(true and { print_int(2); false });
+expect 2
+expect 0
+
+---
+
+name "And shortcircuits when left is false"
+
+print_bool(false and { print_int(2); true });
+expect 0
+
+---
+
+name "Or evals right when left is false"
+
+print_bool(false or { print_int(2); true });
+expect 2
+expect 1
+
+---
+
+name "Or shortcircuits when left is true"
+
+print_bool(true or { print_int(2); false });
+expect 1

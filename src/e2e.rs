@@ -7,10 +7,15 @@ use std::process::{Child, Command, Stdio};
 
 use crate::{asm_generator::generate_asm, ir_generator::generate_ir, parse_source, type_checker::typecheck_program};
 
-pub fn run_tests(compile_only: bool) {
+pub fn run_tests(compile_only: bool, benchmark: bool) {
     let start = Instant::now();
     let _ = fs::create_dir("./target");
-    let mut handles = fs::read_dir("./test_programs/e2e").unwrap()
+    let dir = if benchmark {
+        "./test_programs/benchmarks"
+    } else {
+        "./test_programs/e2e"
+    };
+    let mut handles = fs::read_dir(dir).unwrap()
         .filter_map(|res| {
             res.ok()
         })

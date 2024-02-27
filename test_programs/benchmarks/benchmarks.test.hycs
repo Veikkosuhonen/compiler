@@ -1,0 +1,39 @@
+name "fibonacci(26)"
+
+fun fibonacci(n: Int): Int {
+    if n <= 0 then {
+        0
+    } else {
+        if n == 1 then {
+            1
+        } else {
+            fibonacci(n - 1) + fibonacci(n - 2)
+        }
+    }
+}
+
+var _x = fibonacci(26);
+
+0
+
+---
+
+name "find factors"
+// https://stackoverflow.com/questions/2844703/algorithm-to-find-the-factors-of-a-given-number-shortest-method
+var number = 3 * 3 * 5 * 7 * 11 * 11 * 13 * 17 * 19 * 23 * 29 * 31;
+
+var numberFactors = 0;
+var currentFactor = 2;
+
+while (number > 1) do {
+    if (number % currentFactor == 0) then {
+        number = number / currentFactor;
+        numberFactors = numberFactors + 1;
+    } else {
+        currentFactor = currentFactor + 1;
+    }
+};
+
+var _x = numberFactors;
+
+0

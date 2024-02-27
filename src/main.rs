@@ -24,7 +24,10 @@ enum Commands {
 #[derive(Args, Debug)]
 struct E2EArgs {
     #[arg(short, long)]
-    compiled_only: Option<bool>
+    compiled_only: bool,
+
+    #[arg(short, long)]
+    benchmark: bool
 }
 
 fn main() {
@@ -61,7 +64,7 @@ fn main() {
             println!("{}", asm);
         },
         Commands::E2e(args) => {
-            run_tests(args.compiled_only.is_some_and(|v| v))
+            run_tests(args.compiled_only, args.benchmark)
         }
     };
 }

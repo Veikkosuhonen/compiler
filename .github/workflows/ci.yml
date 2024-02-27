@@ -28,5 +28,11 @@ jobs:
         cache-from: type=gha
         cache-to: type=gha,mode=max
     
-    - name: Run tests
+    - name: Run unit tests
       run: docker run --name compiler -i --rm compiler bash -c "cargo test"
+    
+    - name: Run end-to-end tests
+      run: docker run --name compiler -i --rm compiler bash -c "cargo run -- e2e"
+    
+    - name: Run benchmarks in compiled mode
+      run: docker run --name compiler -i --rm compiler bash -c "cargo run -- e2e -b -c"

@@ -128,11 +128,13 @@ impl Parser {
     }
 
     fn peek(&self) -> Result<Token, SyntaxError> {
-        self.peek_forward(0)
+        self.peek_offset(0)
     }
 
-    fn peek_forward(&self, lookahead: usize) -> Result<Token, SyntaxError> {
-        let idx = self.current_index + lookahead;
+    fn peek_offset(&self, lookahead: i32) -> Result<Token, SyntaxError> {
+        let idx: i32 = self.current_index as i32 + lookahead;
+        let idx: usize = idx.try_into().expect("Invalid index");
+
         if idx < self.tokens.len() {
             if let Some(t) = self.tokens.get(idx) {
                 Ok(t.clone())
@@ -154,7 +156,7 @@ impl Parser {
     }
 
     fn next_is(&mut self, value: &str) -> bool {
-        self.peek_forward(1).is_ok_and(|t| t.value == value)
+        self.peek_offset(1).is_ok_and(|t| t.value == value)
     }
 
     fn consume_with_values(
@@ -568,7 +570,14 @@ impl Parser {
                     break;
                 }
                 statements.push(Box::new(statement));
-                self.consume_available_semi();
+                
+                // Check if the previous token was a closing curly brace.
+                // If so, semicolon is not necessary. Otherwise it is required.
+                if self.peek_offset(-1).is_ok_and(|t| t.value == "}") {
+                    self.consume_available_semi();
+                } else {
+                    self.consume_with_value(TokenType::Punctuation, ";")?;
+                }
             }
         }
         let end = self.current_end().clone();

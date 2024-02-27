@@ -325,6 +325,7 @@ fn add_stdlib_code(source: String) -> String {
 # Metadata for debuggers and other tools
 .extern printf
 .extern scanf
+.extern clock
 
 .section .text  # Begins code and data
 

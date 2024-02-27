@@ -65,6 +65,8 @@ fn run_test(source: &str, id: String, compile_only: bool) -> Vec<String> {
 
     let mut name: Option<String> = None;
 
+    let mut expected_time: Option<u128> = None;
+
     let program_source = source.split("\n").enumerate().filter(|(line_number, line)| {
         if line.trim_start().starts_with("input") {
             inputs.push(line.split_whitespace().last().unwrap().parse().expect("Should've been able to parse i32 after 'input'"));
@@ -81,6 +83,9 @@ fn run_test(source: &str, id: String, compile_only: bool) -> Vec<String> {
                 .get(1..)
                 .expect("Test name to follow 'name'")
                 .join(" "));
+            false
+        } else if line.trim_start().starts_with("time") {
+            expected_time = Some(line.split_whitespace().last().unwrap().parse().expect("Should've been able to parse i32 after 'time'"));
             false
         } else {
             true
@@ -177,7 +182,13 @@ fn run_test(source: &str, id: String, compile_only: bool) -> Vec<String> {
         out(format!("---> FAIL - {} ms\n", run_start.elapsed().as_millis()));
         out(format!("{msg}\n"));
     } else {
-        out(format!("---> Pass - {} ms\n", run_start.elapsed().as_millis()));
+        let time = run_start.elapsed().as_millis();
+        if expected_time.is_some_and(|expected_time| time > expected_time) {
+            out(format!("---> FAIL - {} ms\n", time));
+            out(format!("Expected time {} ms, got {} ms\n", expected_time.unwrap(), time));
+        } else {
+            out(format!("---> Pass - {} ms\n", run_start.elapsed().as_millis()));
+        }
     }
 
     outputs

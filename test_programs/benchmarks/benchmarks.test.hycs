@@ -22,6 +22,8 @@ while i < 10 do {
 
 0
 
+time 10
+
 ---
 
 name "100x find factors"
@@ -55,3 +57,5 @@ while i < 100 do {
 }
 
 0
+
+time 10

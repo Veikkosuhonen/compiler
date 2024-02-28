@@ -151,6 +151,7 @@ fn create_top_level_var_table(global_functions: &Vec<TypedUserDefinedFunction>, 
 fn generate(node: &TypedASTNode, instructions: &mut Vec<IREntry>, var_table: &mut IRVarTable, dest_name: String) -> IRVar {
     match &node.expr {
         Expr::Unit => IRVar::unit(),
+        Expr::Type { .. } => panic!("Tried to generate IR from a type expression"),
         Expr::IntegerLiteral { value } => {
             let dest = var_table.create_unnamed(node.node_type.clone());
             instructions.push(IREntry { 

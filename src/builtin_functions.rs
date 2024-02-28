@@ -9,7 +9,6 @@ pub enum BuiltIn {
     Mul,
     Div,
     Mod,
-    Exp,
     Not,
     Equals,
     NotEquals,
@@ -155,7 +154,6 @@ pub fn get_builtin_function_symbol_value_mappings() -> Vec<(Symbol, Value)> {
         (Op::Mul, BuiltIn::Mul),
         (Op::Div, BuiltIn::Div),
         (Op::Mod, BuiltIn::Mod),
-        (Op::Exp, BuiltIn::Exp),
         (Op::Not, BuiltIn::Not),
         (Op::Equals, BuiltIn::Equals),
         (Op::NotEquals, BuiltIn::NotEquals),
@@ -209,10 +207,6 @@ pub fn get_builtin_function_symbol_type_mappings() -> Vec<(Symbol, Type)> {
             return_type: Type::Integer,
         }),
         (Op::Mod, FunctionType {
-            param_types: vec![Type::Integer, Type::Integer],
-            return_type: Type::Integer,
-        }),
-        (Op::Exp, FunctionType {
             param_types: vec![Type::Integer, Type::Integer],
             return_type: Type::Integer,
         }),

@@ -160,7 +160,7 @@ pub fn typecheck_program(module: Module<UserDefinedFunction>) -> Module<TypedUse
 
     for func in &module.functions {
         let id = Symbol::Identifier(func.id.clone());
-        let function_type = get_function_type(&func, &sym_table);
+        let function_type = get_function_type(&func, &mut sym_table);
         sym_table.symbols.insert(id, Type::Function(Box::new(function_type.clone())));
     }
 
@@ -185,17 +185,13 @@ fn get_toplevel_sym_table() -> Box<SymTable<Type>> {
         sym_table.symbols.insert(symbol, val);
     }
 
-    sym_table.symbols.insert(Symbol::Identifier("Int".to_string()), Type::Integer);
-    sym_table.symbols.insert(Symbol::Identifier("Bool".to_string()), Type::Boolean);
-    sym_table.symbols.insert(Symbol::Identifier("Unit".to_string()), Type::Unit);
-    sym_table.symbols.insert(Symbol::Identifier("Unknown".to_string()), Type::Unknown);
-
     sym_table
 }
 
 fn typecheck(node: ASTNode, sym_table: &mut Box<SymTable<Type>>) -> TypedASTNode {
     match node.expr {
         Expr::Unit => TypedASTNode { expr: Expr::Unit, node_type: Type::Unit },
+        Expr::Type { id, modifier } => TypedASTNode { expr: Expr::Type { id, modifier }, node_type: Type::Unit },
         Expr::IntegerLiteral { value } => TypedASTNode { expr: Expr::IntegerLiteral { value }, node_type: Type::Integer },
         Expr::BooleanLiteral { value } => TypedASTNode { expr: Expr::BooleanLiteral { value }, node_type: Type::Boolean },
         Expr::Identifier { value } => typecheck_identifier(value, sym_table),
@@ -236,14 +232,14 @@ fn typecheck(node: ASTNode, sym_table: &mut Box<SymTable<Type>>) -> TypedASTNode
 
 fn get_function_type(
     func: &UserDefinedFunction,
-    sym_table: &Box<SymTable<Type>>,
+    sym_table: &mut Box<SymTable<Type>>,
 ) -> FunctionType {
     let params: Vec<(Symbol, Type)> = func.params.iter().map(|param| {
         let sym = Symbol::Identifier(param.name.clone());
-        (sym, sym_table.get(&Symbol::Identifier(param.param_type.clone())))
+        (sym, resolve_type(&param.param_type, sym_table))
     }).collect();
-    let return_type_name = func.return_type.clone().unwrap_or(String::from("Unit"));
-    let return_type = sym_table.get(&Symbol::Identifier(return_type_name));
+    let return_type_name = &func.return_type;
+    let return_type = resolve_type(&return_type_name, sym_table);
     FunctionType { 
         param_types: params.iter().map(|(_, val)| val.clone()).collect(),
         return_type
@@ -375,6 +371,37 @@ fn typecheck_block_expression(
     })
 }
 
+pub fn parse_type(id: &String, modifier: &Option<String>) -> Type {
+    match modifier {
+        Some(value) => {
+            match value.as_str() {
+                "*" => {
+                    let inner_type = parse_type(id, &None);
+                    Type::Pointer(Box::new(inner_type))
+                },
+                _ => panic!("Unknown modifier {}", value)
+            }
+        },
+        None => {
+            match id.as_str() {
+                "Int" => Type::Integer,
+                "Bool" => Type::Boolean,
+                "Unit" => Type::Unit,
+                "Unknown" => Type::Unknown,
+                _ => panic!("Unknown type {}", id)
+            }
+        }
+    }
+}
+
+fn resolve_type(type_annotation: &Box<ASTNode>, sym_table: &mut Box<SymTable<Type>>) -> Type {
+    match &type_annotation.expr {
+        Expr::Type { id, modifier } => parse_type(id, modifier),
+        Expr::Identifier { value } => sym_table.symbols.get(&Symbol::Identifier(value.clone())).expect(format!("Unknown type {value}").as_str()).clone(),
+        _ => panic!("Type annotation must be a type"),
+    }
+}
+
 fn typecheck_variable_declaration(
     id: Box<ASTNode>, 
     init: Box<ASTNode>,
@@ -384,11 +411,7 @@ fn typecheck_variable_declaration(
     if let Expr::Identifier { value } = id.expr {
         let init = typecheck(*init, sym_table);
         if let Some(type_annotation) = type_annotation {
-            let type_name = match type_annotation.expr {
-                Expr::Identifier { value } => value,
-                _ => panic!("Type annotation must be an identifier")
-            };
-            let annotated_type = sym_table.get(&Symbol::Identifier(type_name));
+            let annotated_type = resolve_type(&type_annotation, sym_table);
             if init.node_type != annotated_type {
                 panic!("Type annotation and init expression types differ: {:?} != {:?}", annotated_type, init.node_type)
             }

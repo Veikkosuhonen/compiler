@@ -6,7 +6,7 @@ This amazing program demonstrates the basic syntax of the Chiken programming lan
 if 1 == 2 then {
     f();
 } else {
-    2 ** 5 + 10
+    2 * 5 + 10
 }
 
 

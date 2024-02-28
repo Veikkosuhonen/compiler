@@ -9,7 +9,6 @@ pub enum Op {
     Mul,
     Div,
     Mod,
-    Exp,
     Not,
     Equals,
     NotEquals,
@@ -32,7 +31,6 @@ impl Op {
             "*" => Op::Mul,
             "/" => Op::Div,
             "%" => Op::Mod,
-            "**" => Op::Exp,
             "==" => Op::Equals,
             "!=" => Op::NotEquals,
             "<" => Op::LT,
@@ -64,7 +62,6 @@ impl Op {
             Op::Mul => "*",
             Op::Div => "/",
             Op::Mod => "%",
-            Op::Exp => "**",
             Op::Not => "not",
             Op::Equals => "==",
             Op::NotEquals => "!=",
@@ -129,7 +126,7 @@ lazy_static! {
     static ref IDENTIFIER_REGEX: Regex = Regex::new(r"^[a-zA-Z_][a-zA-Z0-9_]*").unwrap();
     static ref INTEGER_LITERAL_REGEX: Regex = Regex::new(r"^[0-9]+").unwrap();
     static ref BOOLEAN_LITERAL_REGEX: Regex = Regex::new(r"^(true|false)").unwrap();
-    static ref OPERATOR_REGEX: Regex = Regex::new(r"^(==|!=|<=|>=|\+|-|\*?\*|/|%|=|<|>|and|or|not|&)").unwrap();
+    static ref OPERATOR_REGEX: Regex = Regex::new(r"^(==|!=|<=|>=|\+|-|\*|/|%|=|<|>|and|or|not|&)").unwrap();
     static ref PUNCTUATION_REGEX: Regex = Regex::new(r"^(\(|\)|\{|\}|,|;|:)").unwrap();
     static ref KEYWORD_REGEX: Regex = Regex::new(r"^(while\b|do\b|if\b|then\b|else\b|var\b|fun\b|return\b)").unwrap();
 

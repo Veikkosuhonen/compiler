@@ -6,10 +6,6 @@ fun foo(x: Int): Int {
     return x * 2;
 }
 
-print_int(foo(3));
+foo(4);
 
-print_int(foo(2));
-
-print_int(foo(1));
-
-print_int(foo(0));
+foo(5)

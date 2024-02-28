@@ -1,4 +1,4 @@
-use crate::{interpreter::{Param, UserDefinedFunction}, tokenizer::{Op, SourceLocation, Token, TokenType}};
+use crate::{interpreter::{Param, UserDefinedFunction}, tokenizer::{Op, SourceLocation, Token, TokenType}, type_checker::{parse_type, Type}};
 use lazy_static::lazy_static;
 
 lazy_static! {
@@ -9,7 +9,6 @@ lazy_static! {
         vec![Op::LT, Op::GT, Op::LTE, Op::GTE],
         vec![Op::Add, Op::Sub],
         vec![Op::Mul, Op::Div, Op::Mod],
-        vec![Op::Exp],
     ];
     static ref UNARY_OP_PRECEDENCE: Vec<Vec<Op>> = vec![
         vec![Op::Not], 
@@ -36,6 +35,10 @@ impl ASTNode {
     pub fn new(expr: Expr<ASTNode>, start: SourceLocation, end: SourceLocation) -> ASTNode {
         ASTNode { expr, start, end }
     }
+
+    pub fn implicit_type_annotation(id: &str) -> ASTNode {
+        ASTNode { expr: Expr::Type { id: String::from(id), modifier: None }, start: SourceLocation::at(0, 0), end: SourceLocation::at(0, 0) }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -49,6 +52,10 @@ pub enum Expr<T> {
     },
     Identifier {
         value: String,
+    },
+    Type {
+        id: String,
+        modifier: Option<String>,
     },
     Block {
         statements: Vec<Box<T>>,
@@ -259,6 +266,20 @@ impl Parser {
         Ok(ASTNode::new(Expr::Identifier { value: token.value }, token.start, token.end))
     }
 
+    fn parse_type(&mut self) -> Result<ASTNode, SyntaxError> {
+        let id = self.consume(TokenType::Identifier)?;
+        let mut end = id.end;
+        let modifier = self.consume_with_value(TokenType::Operator, "*");
+        if let Ok(modifier) = &modifier {
+            end = modifier.end.clone();
+        }
+
+        Ok(ASTNode::new(Expr::Type { 
+            id: id.value, 
+            modifier: modifier.ok().map(|t| t.value),
+        }, id.start, end))
+    }
+
     fn parse_call_expression(&mut self) -> Result<ASTNode, SyntaxError> {
         let callee = self.parse_identifier()?;
         let start = callee.start.clone();
@@ -455,7 +476,7 @@ impl Parser {
         let id = self.parse_identifier()?;
         let mut type_annotation = None;
         if self.consume_with_value(TokenType::Punctuation, ":").is_ok() {
-            type_annotation = Some(self.parse_identifier()?);
+            type_annotation = Some(self.parse_type()?);
         }
         self.consume_with_value(TokenType::Operator, "=")?;
         let init = self.parse_expression()?;
@@ -495,8 +516,8 @@ impl Parser {
             loop {
                 let arg = self.consume(TokenType::Identifier)?.value;
                 self.consume_with_value(TokenType::Punctuation, ":")?;
-                let type_annotation = self.consume(TokenType::Identifier)?.value;
-                params.push(Param { name: arg, param_type: type_annotation });
+                let type_annotation = self.parse_type()?;
+                params.push(Param { name: arg, param_type: Box::new(type_annotation) });
                 if self.current_is(")") {
                     break;
                 }
@@ -507,7 +528,7 @@ impl Parser {
 
         let mut return_type = None;
         if self.consume_with_value(TokenType::Punctuation, ":").is_ok() {
-            return_type = Some(self.consume(TokenType::Identifier)?.value);
+            return_type = Some(self.parse_type()?);
         }
 
         let body = self.parse_block_expression()?;
@@ -516,7 +537,11 @@ impl Parser {
             id,
             body: Box::new(body),
             params,
-            return_type
+            return_type: Box::new( // If not annotated, its unit
+                return_type.unwrap_or_else(|| {
+                    ASTNode::implicit_type_annotation("Unit")
+                })
+            )
         })
     }
 
@@ -579,7 +604,12 @@ pub fn parse(tokens: Vec<Token>) -> Result<Module<UserDefinedFunction>, SyntaxEr
         });
     }
 
-    functions.push(UserDefinedFunction { id: String::from("main"), body: Box::new(ast), params: vec![], return_type: Some(String::from("Unknown")) });
+    functions.push(UserDefinedFunction { 
+        id: String::from("main"), 
+        body: Box::new(ast), 
+        params: vec![], 
+        return_type: Box::new(ASTNode::implicit_type_annotation("Unknown"))
+    });
 
     Ok(Module {
         functions,
@@ -1089,8 +1119,8 @@ fn type_annotation() {
             panic!("Id is not Identifier")
         }
         let type_annotation = type_annotation.as_ref().unwrap();
-        if let Expr::Identifier { value } = &type_annotation.expr {
-            assert_eq!(value, "Int");
+        if let Expr::Type { id,.. } = &type_annotation.expr {
+            assert_eq!(id, "Int");
         } else {
             panic!("Type annotation is not Identifier")
         }
@@ -1121,8 +1151,11 @@ fn empty_block_doesnt_return() {
     ");
     if let Expr::Block { result,.. } = n.expr {
         assert!(matches!(result.expr, Expr::Unit))
+    } else {
+        panic!("Wrong")
     }
 }
+
 
 #[test]
 fn block_doesnt_need_semi() {
@@ -1133,8 +1166,11 @@ fn block_doesnt_need_semi() {
     ");
     if let Expr::Block { result,.. } = n.expr {
         assert!(matches!(result.expr, Expr::IntegerLiteral { value: 1 }))
+    } else {
+        panic!("Wrong")
     }
 }
+
 
 #[test]
 fn address_of_op() {
@@ -1144,8 +1180,11 @@ fn address_of_op() {
     if let Expr::Unary { operand, operator } = n.expr {
         assert!(matches!(operand.expr, Expr::IntegerLiteral { value: 1 }));
         assert_eq!(operator, Op::AddressOf);
+    } else {
+        panic!("Wrong")
     }
 }
+
 
 #[test]
 fn deref_op() {
@@ -1155,6 +1194,29 @@ fn deref_op() {
     if let Expr::Unary { operand, operator } = n.expr {
         assert!(matches!(operand.expr, Expr::IntegerLiteral { value: 1 }));
         assert_eq!(operator, Op::Deref);
+    } else {
+        panic!("Wrong")
+    }
+}
+
+#[test]
+fn pointer_type_annotation() {
+    let n = p("
+        var n: Int* = &1
+    ");
+    if let Expr::VariableDeclaration { type_annotation,.. } = n.expr {
+        if let Some(t) = type_annotation {
+            if let Expr::Type { id, modifier } = t.expr {
+                assert_eq!(id, "Int");
+                assert_eq!(modifier, Some(String::from("*")));
+            } else {
+                panic!("Wrong")
+            }
+        } else {
+            panic!("Wrong")
+        }
+    } else {
+        panic!("Wrong")
     }
 }
 

@@ -2,7 +2,7 @@
 var x = 100;
 var y = 200;
 var z = x * y * 2;
-var w = z / (10 ** 3);
+var w = z / (10 * 3);
 w + 2
 
-// Result is 42.
+// Result is 1335.

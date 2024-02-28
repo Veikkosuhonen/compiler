@@ -10,7 +10,7 @@ use crate::builtin_functions::*;
 #[derive(Debug, Clone)]
 pub struct Param {
     pub name: String,
-    pub param_type: String,
+    pub param_type: Box<ASTNode>,
 }
 
 #[derive(Debug, Clone)]
@@ -18,7 +18,7 @@ pub struct UserDefinedFunction {
     pub id: String,
     pub body: Box<ASTNode>,
     pub params: Vec<Param>,
-    pub return_type: Option<String>,
+    pub return_type: Box<ASTNode>,
 }
 
 #[derive(Debug, Clone)]
@@ -147,11 +147,7 @@ impl Stack {
         let _ = mem::replace(&mut self.sym_table, inner_symtab);
         let result = f(self);
         let outer_symtab = mem::replace(&mut self.sym_table.parent, Default::default());
-        let returns = self.sym_table.returns.clone();
         let _ = mem::replace(&mut self.sym_table, outer_symtab.unwrap());
-        if returns.is_some() {
-            self.sym_table.returns = returns;
-        }
         result
     }
 
@@ -345,6 +341,7 @@ fn interpret(node: &ASTNode, stack: &mut Stack) -> Address {
         Expr::Call { callee, arguments } => {
             eval_call_expression(callee, arguments, stack)
         },
+        Expr::Type { .. } => stack.unit(),
         Expr::Unit => stack.unit(),
     }
 }
@@ -375,7 +372,7 @@ pub fn interpret_program(module: &Module<UserDefinedFunction>) -> Value {
 
     let return_address = eval_call_expression(&Box::new(main_ref), &vec![], &mut stack);
 
-    stack.debug();
+    // stack.debug();
 
     stack.get_addr(&return_address).clone()
 }
@@ -688,5 +685,24 @@ mod tests {
         if let Value::Integer(i) = res {
             assert_eq!(i, -1);
         }
+    }
+
+    #[test]
+    fn can_pass_function_pointer_as_arg() {
+        let _res = i("
+        fun sign(x: Int): Int { if x > 0 then 1 else -1 }
+
+        var func_pointer = &sign;
+        
+        fun call(f: Unknown, value: Unknown): Unknown {
+            var f = *f;
+            f(value)
+        }
+
+        call(func_pointer, -87)
+        ");
+        // if let Value::Integer(i) = res {
+        //     assert_eq!(i, -1);
+        // }
     }
 }

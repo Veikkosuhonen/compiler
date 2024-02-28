@@ -1,3 +1,4 @@
+use std::mem;
 use std::rc::Rc;
 use std::vec;
 
@@ -37,8 +38,18 @@ pub enum Value {
     Integer(i32),
     Boolean(bool),
     Function(Function),
-    Pointer(Rc<Value>),
+    Pointer(Address),
     #[default] Unit,
+}
+
+impl From<&Value> for bool {
+    fn from(val: &Value) -> Self {
+        if let Value::Boolean(bval) = val {
+            *bval
+        } else {
+            panic!("Tried to convert non-boolean value to bool")
+        }
+    }
 }
 
 impl From<Value> for bool {
@@ -47,6 +58,16 @@ impl From<Value> for bool {
             bval
         } else {
             panic!("Tried to convert non-boolean value to bool")
+        }
+    }
+}
+
+impl From<&Value> for i32 {
+    fn from(val: &Value) -> Self {
+        if let Value::Integer(ival) = val {
+            *ival
+        } else {
+            panic!("Tried to convert non-integer value to i32")
         }
     }
 }
@@ -61,19 +82,97 @@ impl From<Value> for i32 {
     }
 }
 
+#[derive(Clone, Default, PartialEq, Debug)]
+pub struct Address {
+    pub addr: usize,
+}
+
+pub struct Stack {
+    pub sym_table: Box<SymTable<Address>>,
+    pub memory: Vec<Value>,
+}
+
+impl Stack {
+    pub fn new(sym_table: Box<SymTable<Address>>) -> Stack {
+        let mut stack = Stack { sym_table, memory: vec![] };
+        stack.push(Value::Unit);
+        stack
+    }
+
+    pub fn create(&mut self, sym: Symbol, val: Value) {
+        let addr = self.push(val);
+        self.sym_table.symbols.insert(sym, addr);
+    }
+
+    pub fn push(&mut self, val: Value) -> Address {
+        let addr = self.memory.len();
+        self.memory.push(val);
+        Address { addr }
+    }
+
+    pub fn get_addr(&self, addr: &Address) -> &Value {
+        &self.memory[addr.addr]
+    }
+
+    pub fn get(&self, sym: Symbol) -> &Value {
+        let addr = self.sym_table.get_ref(&sym);
+        self.get_addr(addr)
+    }
+
+    pub fn unit(&self) -> Address {
+        Address { addr: 0 }
+    }
+
+    /// A mess!
+    pub fn block_scope(&mut self, f: impl FnOnce(&mut Self) -> Address) -> Address {
+        let outer_symtab = mem::replace(&mut self.sym_table, Default::default());
+        let inner_symtab = SymTable::new(Some(outer_symtab));
+        let _ = mem::replace(&mut self.sym_table, inner_symtab);
+        let result = f(self);
+        let outer_symtab = mem::replace(&mut self.sym_table.parent, Default::default());
+        let returns = self.sym_table.returns.clone();
+        let _ = mem::replace(&mut self.sym_table, outer_symtab.unwrap());
+        if returns.is_some() {
+            self.sym_table.returns = returns;
+        }
+        result
+    }
+
+    pub fn function_scope(&mut self, args: &Vec<(Symbol, Address)>, f: impl FnOnce(&mut Self) -> Address) -> Address {
+        let outer_symtab = mem::replace(&mut self.sym_table, Default::default());
+        let mut inner_symtab = SymTable::new(Some(outer_symtab));
+        for (arg_symbol, arg_val) in args {
+            inner_symtab.symbols.insert(arg_symbol.clone(), arg_val.clone());
+        }
+        let _ = mem::replace(&mut self.sym_table, inner_symtab);
+        let result = f(self);
+        let outer_symtab = mem::replace(&mut self.sym_table.parent, Default::default());
+        let returns = self.sym_table.returns.clone();
+        let _ = mem::replace(&mut self.sym_table, outer_symtab.unwrap());
+        if returns.is_some() {
+            self.sym_table.returns = returns;
+        }
+        result
+    }
+
+    pub fn debug(&self) {
+        println!("{}", self.memory.iter().enumerate().map(|(addr, v)| format!("{}| {:?}", addr, v)).collect::<Vec<String>>().join("\n"));
+    }
+}
+
 fn eval_binary_op(
     left_node: &Box<ASTNode>, 
     right_node: &Box<ASTNode>, 
     operator: &Op, 
-    sym_table: &mut Box<SymTable<Value>>
-) -> Value {
-    let left_val = interpret(&left_node, sym_table);
+    stack: &mut Stack
+) -> Address {
+    let left_val = interpret(&left_node, stack);
 
-    if let Value::Function(op_function) = sym_table.get(&mut Symbol::Operator(*operator)) {
+    if let Value::Function(op_function) = stack.get(Symbol::Operator(*operator)) {
         // Lazy eval to enable short circuiting
-        let eval_right = || { interpret(&right_node, sym_table) };
+        let eval_right = |stack: &mut Stack| { interpret(&right_node, stack) };
         match op_function {
-            Function::BuiltIn(builtin) => eval_builtin_binary(builtin, left_val, eval_right),
+            Function::BuiltIn(builtin) => eval_builtin_binary(*builtin, left_val, eval_right, stack),
             Function::UserDefined(_) => panic!("Not yet implemented")
         }
     } else {
@@ -84,12 +183,12 @@ fn eval_binary_op(
 fn eval_unary_op(
     operand: &Box<ASTNode>,
     operator: &Op,
-    sym_table: &mut Box<SymTable<Value>>
-) -> Value {
-    let operand = interpret(&operand, sym_table);
-    if let Value::Function(op_function) = sym_table.get(&mut Symbol::Operator(*operator)) {
+    stack: &mut Stack
+) -> Address {
+    let operand = interpret(&operand, stack);
+    if let Value::Function(op_function) = stack.get(Symbol::Operator(*operator)) {
         match op_function {
-            Function::BuiltIn(builtin) => eval_builtin_unary(builtin, operand),
+            Function::BuiltIn(builtin) => eval_builtin_unary(*builtin, operand, stack),
             Function::UserDefined(_) => panic!("Not yet implemented")
         }
     } else {
@@ -100,26 +199,23 @@ fn eval_unary_op(
 fn eval_call_expression(
     callee: &Box<ASTNode>,
     argument_expr: &Vec<Box<ASTNode>>,
-    sym_table: &mut Box<SymTable<Value>>
-) -> Value {
+    stack: &mut Stack
+) -> Address {
     if let Expr::Identifier { value: function_id } = &callee.expr {
-        let called_function = sym_table.get(&Symbol::Identifier(function_id.to_string()));
+        // This is horribly inefficient, we might be cloning a massive function.
+        let called_function = stack.get(Symbol::Identifier(function_id.to_string())).clone();
         if let Value::Function(called_function) = called_function {
             match called_function {
                 Function::BuiltIn(builtin) => {
-                    let mut args: Vec<Value> = vec![];
+                    let builtin = builtin.clone(); // Clone here so no more immutable ref
+                    let mut args: Vec<Address> = vec![];
                     for expr in argument_expr {
-                        args.push(interpret(&expr, sym_table));
+                        let addr = interpret(&expr, stack);
+                        args.push(addr);
                     }
-                    eval_builtin_function(builtin, args)
+                    eval_builtin_function(builtin, args, stack)
                 },
-                Function::UserDefined(function) => {
-                    let mut args: Vec<Value> = vec![];
-                    for expr in argument_expr {
-                        args.push(interpret(&expr, sym_table));
-                    }
-                    eval_user_defined_function(&function, args, sym_table)
-                }
+                Function::UserDefined(function) => eval_user_defined_function(function, argument_expr, stack),
             }
         } else {
             panic!("Calling undefined function {:?}", function_id);
@@ -130,121 +226,145 @@ fn eval_call_expression(
 }
 
 fn eval_user_defined_function(
-    function: &Rc<UserDefinedFunction>,
-    arguments: Vec<Value>,
-    sym_table: &mut Box<SymTable<Value>>,
-) -> Value {
-    let mut named_arguments: Vec<(Symbol, Value)> = vec![];
+    function: Rc<UserDefinedFunction>,
+    argument_expr: &Vec<Box<ASTNode>>,
+    stack: &mut Stack
+) -> Address {
+    let mut args: Vec<Address> = vec![];
+    for expr in argument_expr {
+        args.push(interpret(&expr, stack));
+    }
+
+    let mut named_arguments: Vec<(Symbol, Address)> = vec![];
 
     for (idx, param) in function.params.iter().enumerate() {
         named_arguments.push((
             Symbol::Identifier(param.name.to_string()),
-            arguments.get(idx).expect("Argument length to match param list length").clone()
+            args.get(idx).expect("Argument length to match param list length").clone()
         ))
     }
 
-    sym_table.function_scope(&named_arguments, |inner| {
+    stack.function_scope(&named_arguments, |inner| {
         let implicit_return = interpret(&function.body, inner);
-        inner.returns.as_ref().unwrap_or(&implicit_return).clone()
+        inner.sym_table.returns.as_ref().unwrap_or(&implicit_return).clone()
     })
 }
 
-fn interpret(node: &ASTNode, sym_table: &mut Box<SymTable<Value>>) -> Value {
+fn interpret(node: &ASTNode, stack: &mut Stack) -> Address {
     match &node.expr {
         Expr::IntegerLiteral { value } => {
-            Value::Integer(*value)
+            stack.push(Value::Integer(*value))
         },
         Expr::BooleanLiteral { value } => {
-            Value::Boolean(*value)
+            stack.push(Value::Boolean(*value))
         }
         Expr::Binary { left, operator, right } => {
-            eval_binary_op(left, right, operator, sym_table)
+            eval_binary_op(left, right, operator, stack)
         },
         Expr::Unary { operand, operator } => {
-            eval_unary_op(operand, operator, sym_table)
+            eval_unary_op(operand, operator, stack)
         }
         Expr::If { condition, then_branch, else_branch } => {
-            let condition_result = interpret(&condition, sym_table);
-            match condition_result {
+            let condition_result = interpret(&condition, stack);
+            match stack.get_addr(&condition_result) {
                 Value::Boolean(condition_val) => {
-                    if condition_val {
-                        interpret(&then_branch, sym_table)
+                    if *condition_val {
+                        interpret(&then_branch, stack)
                     } else if let Some(else_branch) = else_branch {
-                        interpret(&else_branch, sym_table)
+                        interpret(&else_branch, stack)
                     } else {
-                        Value::Unit
+                        stack.unit()
                     }
                 },
                 _ => panic!("If expression condition must be a boolean"),
             }
         },
         Expr::While { condition, body } => {
-            while interpret(&condition, sym_table).try_into().expect("While expression condition must return a boolean") {
-                interpret(&body, sym_table);
-                if sym_table.returns.is_some() {
+            fn eval_cond(stack: &mut Stack, cond: &Box<ASTNode>) -> Value {
+                let addr = interpret(&cond, stack);
+                stack.get_addr(&addr).clone()
+            }
+            while eval_cond(stack, condition).try_into().expect("While expression condition must return a boolean") {
+                interpret(&body, stack);
+                if stack.sym_table.returns.is_some() {
                     break;
                 }
             }
-            Value::Unit
+            stack.unit()
         },
         Expr::Block { statements, result } => {
-            sym_table.block_scope(|inner_sym_table| {
+            stack.block_scope(|inner| {
                 for node in statements {
-                    interpret(&node, inner_sym_table);
-                    if inner_sym_table.returns.is_some() {
-                        return Value::Unit;
+                    interpret(&node, inner);
+                    if inner.sym_table.returns.is_some() {
+                        return inner.unit();
                     }
                 }
-                interpret(&result, inner_sym_table)
+                interpret(&result, inner)
             })
         },
         Expr::Return { result } => {
-            let value = interpret(&result, sym_table);
-            sym_table.returns = Some(value);
-            Value::Unit
+            let value = interpret(&result, stack);
+            stack.sym_table.returns = Some(value);
+            stack.unit()
         },
-        Expr::Identifier { value } => sym_table.get(&Symbol::Identifier(value.clone())),
+        Expr::Identifier { value } => stack.sym_table.get(&Symbol::Identifier(value.clone())),
         Expr::Assignment { left, right } => {
-            if let Expr::Identifier { value: id } = &left.expr {
-                let value = interpret(&right, sym_table);
-                sym_table.assign(Symbol::Identifier(id.clone()), value)
-            } else {
-                panic!("Left side of an assignment must be an identifier");
+            match &left.expr {
+                Expr::Identifier { value } => {
+                    // Get where the new value is stored, and overwrite old value with that.
+                    let new_value_addr = interpret(&right, stack);
+                    let value_addr = stack.sym_table.get(&Symbol::Identifier(value.clone()));
+                    stack.memory[value_addr.addr] = stack.memory[new_value_addr.addr].clone();
+                    value_addr
+                },
+                Expr::Unary { operator,.. } => {
+                    match operator {
+                        Op::Deref => {
+                            let value_addr = interpret(left, stack);
+                            let new_value_addr = interpret(&right, stack);
+                            println!("Deref assign to {:?} with value from {:?}", value_addr, new_value_addr);
+                            stack.memory[value_addr.addr] = stack.memory[new_value_addr.addr].clone();
+                            value_addr
+                        },
+                        _ => panic!("Left side of an assignment must be an identifier or a deref unary op"),
+                    }
+                },
+                _ => panic!("Left side of an assignment must be an identifier or a deref unary op"),
             }
         },
         Expr::VariableDeclaration { id, init,.. } => {
             if let Expr::Identifier { value } = &id.expr {
-                let init_value = interpret(&init, sym_table);
-                sym_table.symbols.insert(Symbol::Identifier(value.clone()), init_value);
-                Value::Unit
+                let init_value = interpret(&init, stack);
+                stack.sym_table.symbols.insert(Symbol::Identifier(value.clone()), init_value);
+                stack.unit()
             } else {
                 panic!("Id of a variable declaration must be an identifier");
             }
         },
         Expr::Call { callee, arguments } => {
-            eval_call_expression(callee, arguments, sym_table)
+            eval_call_expression(callee, arguments, stack)
         },
-        Expr::Unit => Value::Unit,
+        Expr::Unit => stack.unit(),
     }
 }
 
-fn get_toplevel_sym_table() -> Box<SymTable<Value>> {
-    let mut sym_table = SymTable::new(None);
+/// Returns the "stack"
+fn get_toplevel_sym_table() -> Stack {
+    let sym_table = SymTable::new(None);
+    let mut stack = Stack::new(sym_table);
     let builtins = get_builtin_function_symbol_value_mappings();
     for (symbol, val) in builtins {
-        sym_table.symbols.insert(symbol, val);
+        stack.create(symbol, val);
     }
-    sym_table
+    stack
 }
 
 pub fn interpret_program(module: &Module<UserDefinedFunction>) -> Value {
-    let mut top_sym_table = get_toplevel_sym_table();
+    let mut stack = get_toplevel_sym_table();
     
     for func in &module.functions {
-        top_sym_table.symbols.insert(
-            Symbol::Identifier(func.id.clone()),
-            Value::Function(Function::UserDefined(Rc::new(func.clone()))),
-        );
+        stack.create(Symbol::Identifier(func.id.clone()), Value::Function(Function::UserDefined(Rc::new(func.clone()))));
     }
 
     let main_ref = ASTNode::new(
@@ -253,7 +373,11 @@ pub fn interpret_program(module: &Module<UserDefinedFunction>) -> Value {
         SourceLocation::at(0, 0)
     );
 
-    eval_call_expression(&Box::new(main_ref), &vec![], &mut top_sym_table)
+    let return_address = eval_call_expression(&Box::new(main_ref), &vec![], &mut stack);
+
+    stack.debug();
+
+    stack.get_addr(&return_address).clone()
 }
 
 #[cfg(test)]
@@ -494,10 +618,47 @@ mod tests {
         var y = &x;
         y
         ");
-        if let Value::Pointer(rc) = res {
-            if let Value::Integer(i) = rc.as_ref() {
-                assert_eq!(*i, 69);
-            }
+        assert!(matches!(res, Value::Pointer(_)));
+    }
+
+    #[test]
+    fn can_deref_int_pointer() {
+        let res = i("
+        var x = 69;
+        var y = &x;
+        *y
+        ");
+        if let Value::Integer(i) = res {
+            assert_eq!(i, 69);
+        }
+    }
+
+    #[test]
+    fn can_deref_assign_int_pointer() {
+        let res = i("
+        var x = 69;
+        var y = &x;
+        *y = 420;
+        x
+        ");
+        if let Value::Integer(i) = res {
+            assert_eq!(i, 420);
+        }
+    }
+
+    #[test]
+    fn pointers_example() {
+        let res = i("
+        fun square(p: Int*): Unit {
+            *p = *p * *p;
+        }
+        
+        var x: int = 3;
+        square(&x);
+        x  //  9
+        ");
+        if let Value::Integer(i) = res {
+            assert_eq!(i, 9);
         }
     }
 
@@ -510,12 +671,22 @@ mod tests {
 
         some_func
         ");
-        if let Value::Pointer(rc) = res {
-            if let Value::Function(f) = rc.as_ref() {
-                if let Function::UserDefined(f) = f {
-                    assert_eq!(f.return_type, Some("Int".to_string()));
-                }
-            }
+        
+        assert!(matches!(res, Value::Pointer(_)));
+    }
+
+    #[test]
+    fn can_deref_function_pointer() {
+        let res = i("
+        fun sign(x: Int): Int { if x > 0 then 1 else -1 }
+
+        var some_func_pointer = &sign;
+        var some_func = *some_func_pointer;
+
+        some_func(-87)
+        ");
+        if let Value::Integer(i) = res {
+            assert_eq!(i, -1);
         }
     }
 }

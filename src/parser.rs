@@ -14,7 +14,7 @@ lazy_static! {
     static ref UNARY_OP_PRECEDENCE: Vec<Vec<Op>> = vec![
         vec![Op::Not], 
         vec![Op::UnarySub],
-        vec![Op::AddressOf],
+        vec![Op::AddressOf, Op::Deref],
     ];
 }
 
@@ -1144,6 +1144,17 @@ fn address_of_op() {
     if let Expr::Unary { operand, operator } = n.expr {
         assert!(matches!(operand.expr, Expr::IntegerLiteral { value: 1 }));
         assert_eq!(operator, Op::AddressOf);
+    }
+}
+
+#[test]
+fn deref_op() {
+    let n = p("
+        *1
+    ");
+    if let Expr::Unary { operand, operator } = n.expr {
+        assert!(matches!(operand.expr, Expr::IntegerLiteral { value: 1 }));
+        assert_eq!(operator, Op::Deref);
     }
 }
 

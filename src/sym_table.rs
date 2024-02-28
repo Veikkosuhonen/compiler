@@ -45,6 +45,16 @@ impl<T:Clone + Default> SymTable<T> {
         }
     }
 
+    pub fn get_ref(&self, k: &Symbol) -> &T {
+        if let Some(val) = self.symbols.get(k) {
+            val
+        } else if let Some(parent) = &self.parent {
+            parent.get_ref(k)
+        } else {
+            panic!("Accessing undefined symbol {:?}", k)
+        }
+    }
+
     pub fn assign(&mut self, k: Symbol, val: T) -> T {
         if self.symbols.contains_key(&k) {
             self.symbols.insert(k, val.clone());

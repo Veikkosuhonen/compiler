@@ -21,6 +21,7 @@ pub enum Op {
     Or,
     Assign,
     AddressOf,
+    Deref,
 }
 
 impl Op {
@@ -50,6 +51,7 @@ impl Op {
             "-" => Op::UnarySub,
             "not" => Op::Not,
             "&" => Op::AddressOf,
+            "*" => Op::Deref,
             _ => return Err("Unknown unary operator"),
         })
     }
@@ -74,6 +76,7 @@ impl Op {
             Op::Or => "or",
             Op::Assign => "=",
             Op::AddressOf => "&",
+            Op::Deref => "*",
         })
     }
 }
@@ -249,6 +252,14 @@ mod tests {
     fn address_of_is_operator() {
         let tokens = tokenize("
             &1
+        ").expect("Shoulve tokenized");
+        assert!(matches!(tokens[1].token_type, TokenType::Operator));
+    }
+
+    #[test]
+    fn deref_is_operator() {
+        let tokens = tokenize("
+            *i
         ").expect("Shoulve tokenized");
         assert!(matches!(tokens[1].token_type, TokenType::Operator));
     }

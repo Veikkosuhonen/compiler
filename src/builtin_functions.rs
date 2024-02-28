@@ -1,6 +1,6 @@
-use std::{io, rc::Rc};
+use std::io;
 
-use crate::{interpreter::{Function, Value}, ir_generator::IRVar, sym_table::Symbol, tokenizer::Op, type_checker::{FunctionType, Type}};
+use crate::{interpreter::{Address, Function, Stack, Value}, ir_generator::IRVar, sym_table::Symbol, tokenizer::Op, type_checker::{FunctionType, Type}};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum BuiltIn {
@@ -20,32 +20,33 @@ pub enum BuiltIn {
     And,
     Or,
     AddressOf,
+    Deref,
     PrintInt,
     PrintBool,
     ReadInt,
 }
 
-fn print_int(args: Vec<Value>) -> Value {
+fn print_int(args: Vec<Address>, stack: &mut Stack) -> Address {
     let arg = args.get(0).expect("Number of arguments to print_int should be 1");
-    if let Value::Integer(ival) = arg {
+    if let Value::Integer(ival) = stack.get_addr(arg) {
         println!("{}", ival);
     } else {
         panic!("Tried to print '{:?}' which is not an integer", arg)
     }
-    Value::Unit
+    stack.unit()
 }
 
-fn print_bool(args: Vec<Value>) -> Value {
+fn print_bool(args: Vec<Address>, stack: &mut Stack) -> Address {
     let arg = args.get(0).expect("Number of arguments to print_int should be 1");
-    if let Value::Boolean(bval) = arg {
+    if let Value::Boolean(bval) = stack.get_addr(arg) {
         println!("{}", if *bval { 1 } else { 0 });
     } else {
         panic!("Tried to print '{:?}' which is not a boolean", arg)
     }
-    Value::Unit
+    stack.unit()
 }
 
-fn read_int(args: Vec<Value>) -> Value {
+fn read_int(args: Vec<Address>, stack: &mut Stack) -> Address {
     if args.len() > 0 {
         panic!("Number of arguments to read_int should be 0");
     }
@@ -57,30 +58,34 @@ fn read_int(args: Vec<Value>) -> Value {
 
     let ival: i32 = input.trim().parse().expect("Input is not an integer");
 
-    Value::Integer(ival)
+    stack.push(Value::Integer(ival))
 }
 
-pub fn eval_builtin_binary(builtin: BuiltIn, left: Value, eval_right: impl FnOnce() -> Value) -> Value {
-    match left {
-        Value::Boolean(bval1) => {
+pub fn eval_builtin_binary(builtin: BuiltIn, left: Address, eval_right: impl FnOnce(&mut Stack) -> Address, stack: &mut Stack) -> Address {
+    let addr = match stack.get_addr(&left).clone() {
+        Value::Boolean(bval1) => Value::Boolean({
             // Short circuiting mayhem
-            Value::Boolean(match builtin {
-                BuiltIn::Equals    => bval1 == eval_right().try_into().expect("A boolean"),
-                BuiltIn::NotEquals => bval1 != eval_right().try_into().expect("A boolean"),
-                BuiltIn::And       => bval1 && eval_right().try_into().expect("A boolean"),
-                BuiltIn::Or        => bval1 || eval_right().try_into().expect("A boolean"),
+            let short_circuit_eval_right = |stack: &mut Stack| -> Value {
+                let addr = eval_right(stack);
+                stack.get_addr(&addr).clone()
+            };
+            match builtin {
+                BuiltIn::Equals    => bval1 == short_circuit_eval_right(stack).try_into().expect("A boolean"),
+                BuiltIn::NotEquals => bval1 != short_circuit_eval_right(stack).try_into().expect("A boolean"),
+                BuiltIn::And       => bval1 && short_circuit_eval_right(stack).try_into().expect("A boolean"),
+                BuiltIn::Or        => bval1 || short_circuit_eval_right(stack).try_into().expect("A boolean"),
                 _ => panic!("Invalid operator for boolean binary operation {:?}", builtin)
-            })
-        },
+            }
+        }),
         Value::Integer(ival1) => {
-            let ival2: i32 = eval_right().try_into().expect("Integer"); // No short circuiting
+            let right_addr = eval_right(stack);
+            let ival2: i32 = stack.get_addr(&right_addr).try_into().expect("Integer"); // No short circuiting
             match builtin {
                 BuiltIn::Add =>       Value::Integer(ival1 + ival2),
                 BuiltIn::Sub =>       Value::Integer(ival1 - ival2),
                 BuiltIn::Mul =>       Value::Integer(ival1 * ival2),
                 BuiltIn::Div =>       Value::Integer(ival1 / ival2),
                 BuiltIn::Mod =>       Value::Integer(ival1 % ival2),
-                BuiltIn::Exp =>       Value::Integer(i32::pow(ival1, ival2.try_into().expect("A positive exponent"))),
                 BuiltIn::Equals =>    Value::Boolean(ival1 == ival2),
                 BuiltIn::NotEquals => Value::Boolean(ival1 != ival2),
                 BuiltIn::LT =>        Value::Boolean(ival1 < ival2),
@@ -90,58 +95,54 @@ pub fn eval_builtin_binary(builtin: BuiltIn, left: Value, eval_right: impl FnOnc
                 _ => panic!("Invalid operator for integer binary operation {:?}", builtin)
             }
         },
-        _ => panic!("Invalid value for binary operation {:?}", left)
-    }
+        _ => panic!("Invalid value for binary operation {:?}", stack.get_addr(&left))
+    };
+
+    stack.push(addr)
 }
 
-pub fn eval_builtin_unary(builtin: BuiltIn, operand: Value) -> Value {
-    match operand {
-        Value::Boolean(bval) => {
+pub fn eval_builtin_unary(builtin: BuiltIn, operand: Address, stack: &mut Stack) -> Address {
+    match stack.get_addr(&operand) {
+        Value::Boolean(bval) => stack.push({
             match builtin {
                 BuiltIn::Not => Value::Boolean(!bval),
-                BuiltIn::AddressOf => Value::Pointer(Rc::new(operand)),
+                BuiltIn::AddressOf => Value::Pointer(operand),
                 _ => panic!("Invalid operator for boolean unary operation {:?}", builtin)
             }
-        },
-        Value::Integer(ival) => {
+        }),
+        Value::Integer(ival) => stack.push({
             match builtin {
                 BuiltIn::Sub => Value::Integer(-ival),
-                BuiltIn::AddressOf => Value::Pointer(Rc::new(operand)),
+                BuiltIn::AddressOf => Value::Pointer(operand),
                 _ => panic!("Invalid operator for integer unary operation {:?}", builtin)
             }
-        },
-        Value::Function(..)=> {
+        }),
+        Value::Function(..) => stack.push({
             match builtin {
-                BuiltIn::AddressOf => Value::Pointer(Rc::new(operand)),
+                BuiltIn::AddressOf => Value::Pointer(operand),
                 _ => panic!("Invalid operator for function unary operation {:?}", builtin)
             }
-        },
-        Value::Unit=> {
+        }),
+        Value::Unit=> stack.push({
             match builtin {
-                BuiltIn::AddressOf => Value::Pointer(Rc::new(operand)),
+                BuiltIn::AddressOf => Value::Pointer(operand),
                 _ => panic!("Invalid operator for unit unary operation {:?}", builtin)
             }
+        }),
+        Value::Pointer(addr) => {
+            match builtin {
+                BuiltIn::Deref => addr.clone(),
+                _ => panic!("Invalid operator for pointer unary operation {:?}", builtin)
+            }
         },
-        // Value::Pointer(rc) => {
-        //     match operand {
-        //         Op::Deref => match rc.as_ref() {
-        //             Value::Integer(_) => todo!(),
-        //             Value::Boolean(_) => todo!(),
-        //             Value::Function(_) => todo!(),
-        //             Value::Pointer(_) => todo!(),
-        //             Value::Unit => todo!(),
-        //         },
-        //     },
-        // },
-        _ => panic!("Invalid value for unary operation {:?}", builtin)
     }
 }
 
-pub fn eval_builtin_function(builtin: BuiltIn, arguments: Vec<Value>) -> Value {
+pub fn eval_builtin_function(builtin: BuiltIn, arguments: Vec<Address>, stack: &mut Stack) -> Address {
     match builtin {
-        BuiltIn::PrintInt => print_int(arguments),
-        BuiltIn::PrintBool => print_bool(arguments),
-        BuiltIn::ReadInt => read_int(arguments),
+        BuiltIn::PrintInt => print_int(arguments, stack),
+        BuiltIn::PrintBool => print_bool(arguments, stack),
+        BuiltIn::ReadInt => read_int(arguments, stack),
         _ => panic!("{:?} is not a builtin function", builtin)
     }
 }
@@ -165,6 +166,7 @@ pub fn get_builtin_function_symbol_value_mappings() -> Vec<(Symbol, Value)> {
         (Op::And, BuiltIn::And),
         (Op::Or, BuiltIn::Or),
         (Op::AddressOf, BuiltIn::AddressOf),
+        (Op::Deref, BuiltIn::Deref),
     ];
 
     let functions = vec![
@@ -253,6 +255,10 @@ pub fn get_builtin_function_symbol_type_mappings() -> Vec<(Symbol, Type)> {
         (Op::AddressOf, FunctionType {
             param_types: vec![Type::generic("T")],
             return_type: Type::Pointer(Box::new(Type::generic("T"))),
+        }),
+        (Op::Deref, FunctionType {
+            param_types: vec![Type::Pointer(Box::new(Type::generic("T")))],
+            return_type: Type::generic("T"),
         })
     ];
 

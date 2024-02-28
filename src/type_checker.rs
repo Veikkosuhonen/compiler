@@ -761,11 +761,19 @@ mod tests {
     #[test]
     fn nested_pointer_deref() {
         let module = &t("
-            var pointer: Int** = &&1;
-            **pointer
+            var pointer: Int*** = &&&1;
+            ***pointer
         ");
         if let Expr::Block { result,.. } = &module.main().body.expr {
             assert!(matches!(result.node_type, Type::Integer))
         }
+    }
+
+    #[test]
+    #[should_panic(expected = "Type annotation and init expression types differ: Pointer(Pointer(Pointer(Integer))) != Pointer(Pointer(Pointer(Pointer(Integer))))")]
+    fn nested_pointer_typecheck_fail() {
+        t("
+            var pointer: Int*** = &&&&1;
+        ");
     }
 }

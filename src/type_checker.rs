@@ -59,6 +59,7 @@ pub enum Type {
     #[default] Unit,
 }
 
+#[derive(Debug)]
 pub struct TypeResolution {
     satisfied: bool,
     constraint: Option<(String, Type)>,
@@ -81,23 +82,24 @@ impl TypeResolution {
 
 impl Type {
     pub fn satisfy(&self, other: &Self) -> TypeResolution {
-        match other {
+        // println!("{:?}\n satisfy\n {:?}", self, other);
+        let res = match other {
             // Any non-generic type satisfies a generic type, but it produces a constraint
-            Type::Generic(type_id) => {
-                match self {
-                    Type::Generic(_) => TypeResolution::failed(),
-                    _ => TypeResolution::constrained(Some((type_id.clone(), self.clone()))),
-                }
-            },
+            Type::Generic(type_id) => match self {
+                Type::Generic(_) => TypeResolution::failed(),
+                _ => TypeResolution::constrained(Some((type_id.clone(), self.clone()))),
+            }
             // Pointer value type must be satisfied
-            Type::Pointer(pointer_type) => match other {
-                Type::Pointer(other_pointer_type) => pointer_type.satisfy(&other_pointer_type),
+            Type::Pointer(other_pointer_type) => match self {
+                Type::Pointer(self_pointer_type) => self_pointer_type.satisfy(&other_pointer_type),
                 _ => TypeResolution::failed(),
             },
             // Everything satisfies the Unknown type
             Type::Unknown => TypeResolution::satisfied(),
             _ => if *self == *other { TypeResolution::satisfied() } else { TypeResolution::failed() },
-        }
+        };
+        // println!("{:?}", res);
+        res
     }
 
     pub fn resolve(&self, constraints: &mut HashMap<String, Type>) -> Type {
@@ -191,7 +193,7 @@ fn get_toplevel_sym_table() -> Box<SymTable<Type>> {
 fn typecheck(node: ASTNode, sym_table: &mut Box<SymTable<Type>>) -> TypedASTNode {
     match node.expr {
         Expr::Unit => TypedASTNode { expr: Expr::Unit, node_type: Type::Unit },
-        Expr::Type { id, modifier } => TypedASTNode { expr: Expr::Type { id, modifier }, node_type: Type::Unit },
+        Expr::Type { id, modifiers: modifier } => TypedASTNode { expr: Expr::Type { id, modifiers: modifier }, node_type: Type::Unit },
         Expr::IntegerLiteral { value } => TypedASTNode { expr: Expr::IntegerLiteral { value }, node_type: Type::Integer },
         Expr::BooleanLiteral { value } => TypedASTNode { expr: Expr::BooleanLiteral { value }, node_type: Type::Boolean },
         Expr::Identifier { value } => typecheck_identifier(value, sym_table),
@@ -261,7 +263,7 @@ fn typecheck_function(
         let body = typecheck(*func.body, inner);
         let actual_return_type = inner.returns.clone().unwrap_or(body.node_type.clone());
 
-        // If the function (only main allowed) has the special Unknown type, do no return value typechecking
+        // If the function has the special Unknown type, do no return value typechecking
         if !actual_return_type.satisfy(&inner.expected_returns).is_resolved() {
             panic!("Wrong return type for {}: annotated {:?} but found {:?}", func.id, inner.expected_returns, body.node_type)
         }
@@ -371,32 +373,29 @@ fn typecheck_block_expression(
     })
 }
 
-pub fn parse_type(id: &String, modifier: &Option<String>) -> Type {
-    match modifier {
-        Some(value) => {
-            match value.as_str() {
-                "*" => {
-                    let inner_type = parse_type(id, &None);
-                    Type::Pointer(Box::new(inner_type))
-                },
-                _ => panic!("Unknown modifier {}", value)
-            }
-        },
-        None => {
-            match id.as_str() {
-                "Int" => Type::Integer,
-                "Bool" => Type::Boolean,
-                "Unit" => Type::Unit,
-                "Unknown" => Type::Unknown,
-                _ => panic!("Unknown type {}", id)
-            }
+pub fn parse_type(id: &String, modifiers: &[String]) -> Type {
+    if let Some(modifier) = modifiers.first() {
+        match modifier.as_str() {
+            "*" => {
+                let inner_type = parse_type(id, &modifiers[1..]);
+                Type::Pointer(Box::new(inner_type))
+            },
+            _ => panic!("Unknown modifier {}", modifier)
+        }
+    } else {
+        match id.as_str() {
+            "Int" => Type::Integer,
+            "Bool" => Type::Boolean,
+            "Unit" => Type::Unit,
+            "Unknown" => Type::Unknown,
+            _ => panic!("Unknown type {}", id)
         }
     }
 }
 
 fn resolve_type(type_annotation: &Box<ASTNode>, sym_table: &mut Box<SymTable<Type>>) -> Type {
     match &type_annotation.expr {
-        Expr::Type { id, modifier } => parse_type(id, modifier),
+        Expr::Type { id, modifiers: modifier } => parse_type(id, modifier),
         Expr::Identifier { value } => sym_table.symbols.get(&Symbol::Identifier(value.clone())).expect(format!("Unknown type {value}").as_str()).clone(),
         _ => panic!("Type annotation must be a type"),
     }
@@ -756,6 +755,17 @@ mod tests {
             if let Type::Pointer(ptype) = &result.node_type {
                 assert_eq!(**ptype, Type::Boolean);
             }
+        }
+    }
+
+    #[test]
+    fn nested_pointer_deref() {
+        let module = &t("
+            var pointer: Int** = &&1;
+            **pointer
+        ");
+        if let Expr::Block { result,.. } = &module.main().body.expr {
+            assert!(matches!(result.node_type, Type::Integer))
         }
     }
 }

@@ -1,4 +1,4 @@
-use crate::{interpreter::{Param, UserDefinedFunction}, tokenizer::{Op, SourceLocation, Token, TokenType}, type_checker::{parse_type, Type}};
+use crate::{interpreter::{Param, UserDefinedFunction}, tokenizer::{Op, SourceLocation, Token, TokenType}};
 use lazy_static::lazy_static;
 
 lazy_static! {
@@ -37,7 +37,7 @@ impl ASTNode {
     }
 
     pub fn implicit_type_annotation(id: &str) -> ASTNode {
-        ASTNode { expr: Expr::Type { id: String::from(id), modifier: None }, start: SourceLocation::at(0, 0), end: SourceLocation::at(0, 0) }
+        ASTNode { expr: Expr::Type { id: String::from(id), modifiers: vec![] }, start: SourceLocation::at(0, 0), end: SourceLocation::at(0, 0) }
     }
 }
 
@@ -55,7 +55,7 @@ pub enum Expr<T> {
     },
     Type {
         id: String,
-        modifier: Option<String>,
+        modifiers: Vec<String>,
     },
     Block {
         statements: Vec<Box<T>>,
@@ -269,14 +269,15 @@ impl Parser {
     fn parse_type(&mut self) -> Result<ASTNode, SyntaxError> {
         let id = self.consume(TokenType::Identifier)?;
         let mut end = id.end;
-        let modifier = self.consume_with_value(TokenType::Operator, "*");
-        if let Ok(modifier) = &modifier {
+        let mut modifiers: Vec<String> = vec![];
+        while let Ok(modifier) = self.consume_with_value(TokenType::Operator, "*") {
             end = modifier.end.clone();
+            modifiers.push(modifier.value);
         }
 
         Ok(ASTNode::new(Expr::Type { 
             id: id.value, 
-            modifier: modifier.ok().map(|t| t.value),
+            modifiers,
         }, id.start, end))
     }
 
@@ -1202,13 +1203,15 @@ fn deref_op() {
 #[test]
 fn pointer_type_annotation() {
     let n = p("
-        var n: Int* = &1
+        var n: Int** = &1
     ");
     if let Expr::VariableDeclaration { type_annotation,.. } = n.expr {
         if let Some(t) = type_annotation {
-            if let Expr::Type { id, modifier } = t.expr {
+            if let Expr::Type { id, modifiers } = t.expr {
                 assert_eq!(id, "Int");
-                assert_eq!(modifier, Some(String::from("*")));
+                assert_eq!(*modifiers.get(0).unwrap(), String::from("*"));
+                assert_eq!(*modifiers.get(1).unwrap(), String::from("*"));
+                assert_eq!(modifiers.get(2), None);
             } else {
                 panic!("Wrong")
             }

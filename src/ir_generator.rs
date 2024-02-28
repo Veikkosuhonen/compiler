@@ -383,4 +383,14 @@ mod tests {
             print_int(f(41));
         ");
     }
+
+    #[test]
+    fn address_of_op() {
+        let ir = i("
+            var x = 1;
+            &x
+        ");
+
+        println!("{}", ir.get("main").unwrap().iter().map(|i| i.to_string()).collect::<Vec<String>>().join("\n"))
+    }
 }

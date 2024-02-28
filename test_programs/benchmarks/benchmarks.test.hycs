@@ -22,7 +22,7 @@ while i < 10 do {
 
 0
 
-time 10
+time 200
 
 ---
 
@@ -58,4 +58,4 @@ while i < 100 do {
 
 0
 
-time 10
+time 20

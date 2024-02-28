@@ -37,6 +37,7 @@ pub enum Value {
     Integer(i32),
     Boolean(bool),
     Function(Function),
+    Pointer(Rc<Value>),
     #[default] Unit,
 }
 
@@ -484,5 +485,37 @@ mod tests {
         x
         ");
         assert_eq!(res, Value::Integer(2));
+    }
+
+    #[test]
+    fn can_use_int_pointer() {
+        let res = i("
+        var x = 69;
+        var y = &x;
+        y
+        ");
+        if let Value::Pointer(rc) = res {
+            if let Value::Integer(i) = rc.as_ref() {
+                assert_eq!(*i, 69);
+            }
+        }
+    }
+
+    #[test]
+    fn can_use_function_pointer() {
+        let res = i("
+        fun sign(x: Int): Int { if x > 0 then 1 else -1 }
+
+        var some_func = &sign;
+
+        some_func
+        ");
+        if let Value::Pointer(rc) = res {
+            if let Value::Function(f) = rc.as_ref() {
+                if let Function::UserDefined(f) = f {
+                    assert_eq!(f.return_type, Some("Int".to_string()));
+                }
+            }
+        }
     }
 }

@@ -11,7 +11,11 @@ lazy_static! {
         vec![Op::Mul, Op::Div, Op::Mod],
         vec![Op::Exp],
     ];
-    static ref UNARY_OP_PRECEDENCE: Vec<Vec<Op>> = vec![vec![Op::Not], vec![Op::UnarySub],];
+    static ref UNARY_OP_PRECEDENCE: Vec<Vec<Op>> = vec![
+        vec![Op::Not], 
+        vec![Op::UnarySub],
+        vec![Op::AddressOf],
+    ];
 }
 
 #[derive(Debug)]
@@ -1129,6 +1133,17 @@ fn block_doesnt_need_semi() {
     ");
     if let Expr::Block { result,.. } = n.expr {
         assert!(matches!(result.expr, Expr::IntegerLiteral { value: 1 }))
+    }
+}
+
+#[test]
+fn address_of_op() {
+    let n = p("
+        &1
+    ");
+    if let Expr::Unary { operand, operator } = n.expr {
+        assert!(matches!(operand.expr, Expr::IntegerLiteral { value: 1 }));
+        assert_eq!(operator, Op::AddressOf);
     }
 }
 

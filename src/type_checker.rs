@@ -1,10 +1,12 @@
+use std::collections::HashMap;
+
 use crate::builtin_functions::get_builtin_function_symbol_type_mappings;
 use crate::interpreter::UserDefinedFunction;
 use crate::sym_table::{SymTable, Symbol};
 use crate::parser::{ASTNode, Expr, Module};
 use crate::tokenizer::Op;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct FunctionType {
     pub param_types: Vec<Type>,
     pub return_type: Type,
@@ -19,30 +21,30 @@ impl FunctionType {
 
     fn typecheck_call(&self, argument_expr: &Vec<&Box<TypedASTNode>>) -> Type {
         self.check_arg_count(&argument_expr);
+        let mut constraints: HashMap<String, Type> = HashMap::new();
     
         for (idx, param_type) in self.param_types.iter().enumerate() {
             let arg = &argument_expr[idx];
-            if arg.node_type != *param_type {
+
+            let mut resolution = arg.node_type.satisfy(param_type);
+            if let Some((type_id, type_arg)) = resolution.constraint {
+                if let Some(required_type) = constraints.get(&type_id) {
+                    // The following resolution will either be resolved or a fail, it wont have constraints because we dont allow generic arg to satisfy generic type param.
+                    if !type_arg.satisfy(required_type).is_resolved() {
+                        panic!("Invalid argument type at index {}, expected {:?} but got {:?}", idx, required_type, type_arg)
+                    }
+                } else {
+                    constraints.insert(type_id, type_arg);
+                }
+            }
+
+            resolution.constraint = None;
+            if !resolution.is_resolved() {
                 panic!("Invalid argument type at index {}, expected {:?} but got {:?}", idx, param_type, arg.node_type)
             }
         }
-    
-        self.return_type.clone()
-    }
 
-    fn typecheck_operator_call(&self, op: Op, argument_expr: &Vec<&Box<TypedASTNode>>) -> Type {
-        match op {
-            Op::Equals | Op::NotEquals => {
-                self.check_arg_count(argument_expr);
-                let arg_type = argument_expr.get(0).unwrap();
-                let arg_2_type = argument_expr.get(1).unwrap();
-                if arg_type.node_type != arg_2_type.node_type {
-                    panic!("Argument types for '{}' do not match: {:?} != {:?}", op.to_string(), arg_type, arg_2_type);
-                }
-                self.return_type.clone()
-            },
-            _ => self.typecheck_call(argument_expr)
-        }
+        self.return_type.resolve(&mut constraints)
     }
 }
 
@@ -51,8 +53,66 @@ pub enum Type {
     Integer,
     Boolean,
     Function(Box<FunctionType>),
+    Pointer(Box<Type>),
+    Generic(String),
     Unknown,
     #[default] Unit,
+}
+
+pub struct TypeResolution {
+    satisfied: bool,
+    constraint: Option<(String, Type)>,
+}
+
+impl TypeResolution {
+    pub fn failed() -> TypeResolution {
+        TypeResolution { satisfied: false, constraint: None }
+    }
+    pub fn satisfied() -> TypeResolution {
+        TypeResolution { satisfied: true, constraint: None }
+    }
+    pub fn constrained(constraint: Option<(String, Type)>) -> TypeResolution {
+        TypeResolution { satisfied: true, constraint, }
+    }
+    pub fn is_resolved(&self) -> bool {
+        self.satisfied && self.constraint.is_none()
+    }
+}
+
+impl Type {
+    pub fn satisfy(&self, other: &Self) -> TypeResolution {
+        match other {
+            // Any non-generic type satisfies a generic type, but it produces a constraint
+            Type::Generic(type_id) => {
+                match self {
+                    Type::Generic(_) => TypeResolution::failed(),
+                    _ => TypeResolution::constrained(Some((type_id.clone(), self.clone()))),
+                }
+            },
+            // Pointer value type must be satisfied
+            Type::Pointer(pointer_type) => match other {
+                Type::Pointer(other_pointer_type) => pointer_type.satisfy(&other_pointer_type),
+                _ => TypeResolution::failed(),
+            },
+            // Everything satisfies the Unknown type
+            Type::Unknown => TypeResolution::satisfied(),
+            _ => if *self == *other { TypeResolution::satisfied() } else { TypeResolution::failed() },
+        }
+    }
+
+    pub fn resolve(&self, constraints: &mut HashMap<String, Type>) -> Type {
+        match self {
+            // Generic type must resolve from constraints
+            Type::Generic(type_id) => constraints.remove(type_id).expect(format!("Type resolution failed for {:?}", self).as_str()),
+            // Pointer value must be resolved
+            Type::Pointer(pointer_type) => Type::Pointer(Box::new(pointer_type.resolve(constraints))),
+            _ => self.clone(),
+        }
+    }
+
+    pub fn generic(type_id: &str) -> Type {
+        Type::Generic(type_id.to_string())
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -165,7 +225,7 @@ fn typecheck(node: ASTNode, sym_table: &mut Box<SymTable<Type>>) -> TypedASTNode
         },
         Expr::Return { result } => {
             let result = typecheck(*result, sym_table);
-            if result.node_type != sym_table.expected_returns && sym_table.expected_returns != Type::Unknown {
+            if !result.node_type.satisfy(&sym_table.expected_returns).is_resolved() {
                 panic!("Wrong return type in return expression: annotated {:?} but found {:?}", sym_table.expected_returns, result.node_type)
             }
             sym_table.returns = Some(result.node_type.clone());
@@ -206,7 +266,7 @@ fn typecheck_function(
         let actual_return_type = inner.returns.clone().unwrap_or(body.node_type.clone());
 
         // If the function (only main allowed) has the special Unknown type, do no return value typechecking
-        if actual_return_type != inner.expected_returns && func_type.return_type != Type::Unknown {
+        if !actual_return_type.satisfy(&inner.expected_returns).is_resolved() {
             panic!("Wrong return type for {}: annotated {:?} but found {:?}", func.id, inner.expected_returns, body.node_type)
         }
 
@@ -356,7 +416,7 @@ fn typecheck_binary_op(
     if let Type::Function(op_function) = sym_table.get(&mut Symbol::Operator(operator)) {
         let left  = Box::new(typecheck(*left_expr, sym_table));
         let right = Box::new(typecheck(*right_expr, sym_table));
-        let node_type = op_function.typecheck_operator_call(operator, &vec![&left, &right]);
+        let node_type = op_function.typecheck_call(&vec![&left, &right]);
         TypedASTNode { expr: Expr::Binary { left, operator, right }, node_type }
     } else {
         panic!("Undefined operator {:?}", operator)
@@ -370,7 +430,7 @@ fn typecheck_unary_op(
 ) -> TypedASTNode {
     if let Type::Function(op_function) = sym_table.get(&mut Symbol::Operator(operator)) {
         let operand = Box::new(typecheck(*operand, sym_table));
-        let node_type = op_function.typecheck_operator_call(operator, &vec![&operand]);
+        let node_type = op_function.typecheck_call(&vec![&operand]);
         TypedASTNode { expr: Expr::Unary { operand, operator }, node_type }
     } else {
         panic!("Undefined operator {:?}", operator)
@@ -544,6 +604,12 @@ mod tests {
     }
 
     #[test]
+    #[should_panic(expected="Invalid argument type at index 1, expected Integer but got Boolean")]
+    fn compare_eq_invalid_types() {
+        t("1 == true");
+    }
+
+    #[test]
     fn compare_eq_integer() {
         let node = t("123 == 123");
         let node = &node.main().body;
@@ -645,5 +711,28 @@ mod tests {
                 return 1;
             }
         ");
+    }
+
+    #[test]
+    fn address_of_operator_is_generic() {
+        let module = &t("
+            var pointer = &1;
+            pointer
+        ");
+        if let Expr::Block { result,.. } = &module.main().body.expr {
+            if let Type::Pointer(ptype) = &result.node_type {
+                assert_eq!(**ptype, Type::Integer);
+            }
+        }
+
+        let module = &t("
+            var pointer = &false;
+            pointer
+        ");
+        if let Expr::Block { result,.. } = &module.main().body.expr {
+            if let Type::Pointer(ptype) = &result.node_type {
+                assert_eq!(**ptype, Type::Boolean);
+            }
+        }
     }
 }

@@ -1,4 +1,4 @@
-use std::io;
+use std::{io, rc::Rc};
 
 use crate::{interpreter::{Function, Value}, ir_generator::IRVar, sym_table::Symbol, tokenizer::Op, type_checker::{FunctionType, Type}};
 
@@ -19,6 +19,7 @@ pub enum BuiltIn {
     GTE,
     And,
     Or,
+    AddressOf,
     PrintInt,
     PrintBool,
     ReadInt,
@@ -96,17 +97,42 @@ pub fn eval_builtin_binary(builtin: BuiltIn, left: Value, eval_right: impl FnOnc
 pub fn eval_builtin_unary(builtin: BuiltIn, operand: Value) -> Value {
     match operand {
         Value::Boolean(bval) => {
-            Value::Boolean(match builtin {
-                BuiltIn::Not => !bval,
+            match builtin {
+                BuiltIn::Not => Value::Boolean(!bval),
+                BuiltIn::AddressOf => Value::Pointer(Rc::new(operand)),
                 _ => panic!("Invalid operator for boolean unary operation {:?}", builtin)
-            })
+            }
         },
         Value::Integer(ival) => {
-            Value::Integer(match builtin {
-                BuiltIn::Sub => -ival,
+            match builtin {
+                BuiltIn::Sub => Value::Integer(-ival),
+                BuiltIn::AddressOf => Value::Pointer(Rc::new(operand)),
                 _ => panic!("Invalid operator for integer unary operation {:?}", builtin)
-            })
+            }
         },
+        Value::Function(..)=> {
+            match builtin {
+                BuiltIn::AddressOf => Value::Pointer(Rc::new(operand)),
+                _ => panic!("Invalid operator for function unary operation {:?}", builtin)
+            }
+        },
+        Value::Unit=> {
+            match builtin {
+                BuiltIn::AddressOf => Value::Pointer(Rc::new(operand)),
+                _ => panic!("Invalid operator for unit unary operation {:?}", builtin)
+            }
+        },
+        // Value::Pointer(rc) => {
+        //     match operand {
+        //         Op::Deref => match rc.as_ref() {
+        //             Value::Integer(_) => todo!(),
+        //             Value::Boolean(_) => todo!(),
+        //             Value::Function(_) => todo!(),
+        //             Value::Pointer(_) => todo!(),
+        //             Value::Unit => todo!(),
+        //         },
+        //     },
+        // },
         _ => panic!("Invalid value for unary operation {:?}", builtin)
     }
 }
@@ -138,7 +164,7 @@ pub fn get_builtin_function_symbol_value_mappings() -> Vec<(Symbol, Value)> {
         (Op::GTE, BuiltIn::GTE),
         (Op::And, BuiltIn::And),
         (Op::Or, BuiltIn::Or),
-
+        (Op::AddressOf, BuiltIn::AddressOf),
     ];
 
     let functions = vec![
@@ -192,14 +218,6 @@ pub fn get_builtin_function_symbol_type_mappings() -> Vec<(Symbol, Type)> {
             param_types: vec![Type::Boolean],
             return_type: Type::Boolean,
         }),
-        (Op::Equals, FunctionType {
-            param_types: vec![Type::Integer, Type::Integer],
-            return_type: Type::Boolean,
-        }),
-        (Op::NotEquals, FunctionType {
-            param_types: vec![Type::Integer, Type::Integer],
-            return_type: Type::Boolean,
-        }),
         (Op::LT, FunctionType {
             param_types: vec![Type::Integer, Type::Integer],
             return_type: Type::Boolean,
@@ -224,6 +242,18 @@ pub fn get_builtin_function_symbol_type_mappings() -> Vec<(Symbol, Type)> {
             param_types: vec![Type::Boolean, Type::Boolean],
             return_type: Type::Boolean,
         }),
+        (Op::Equals, FunctionType {
+            param_types: vec![Type::generic("T"), Type::generic("T")],
+            return_type: Type::Boolean,
+        }),
+        (Op::NotEquals, FunctionType {
+            param_types: vec![Type::generic("T"), Type::generic("T")],
+            return_type: Type::Boolean,
+        }),
+        (Op::AddressOf, FunctionType {
+            param_types: vec![Type::generic("T")],
+            return_type: Type::Pointer(Box::new(Type::generic("T"))),
+        })
     ];
 
     let functions = vec![

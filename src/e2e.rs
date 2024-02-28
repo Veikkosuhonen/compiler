@@ -20,14 +20,14 @@ pub fn run_tests(compile_only: bool, benchmark: bool) {
             res.ok()
         })
         .map(|file| {
-            run_test_file(file.path().to_str().unwrap().to_string(), compile_only)
+            (file.file_name().into_string().unwrap(), run_test_file(file.path().to_str().unwrap().to_string(), compile_only))
         })
-        .collect::<Vec<JoinHandle<_>>>();
+        .collect::<Vec<(String, JoinHandle<_>)>>();
 
     handles.reverse();
 
-    for handle in handles {
-        println!("{}", handle.join().expect("Test job failed").join(""));
+    for (filename, handle) in handles {
+        println!("{}", handle.join().expect(format!("{}: Test job failed", filename).as_str()).join(""));
     }
 
     println!("Done in {} s", start.elapsed().as_secs());

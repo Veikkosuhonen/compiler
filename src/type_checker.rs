@@ -286,27 +286,46 @@ fn typecheck_identifier(
     TypedASTNode { expr: Expr::Identifier { value: value.clone() }, node_type: sym_table.get(&Symbol::Identifier(value)) }
 }
 
+fn typecheck_assignable(
+    dest: Box<ASTNode>, 
+    sym_table: &mut Box<SymTable<Type>>,
+) -> TypedASTNode {
+    match dest.expr {
+        Expr::Identifier { value } => typecheck_identifier(value, sym_table),
+        Expr::Unary { operand, operator: Op::Deref } => {
+            if let Type::Function(deref_func) = sym_table.get(&mut Symbol::Operator(Op::Deref)) {
+                let operand = Box::new(typecheck_assignable(operand, sym_table));
+                let node_type = deref_func.typecheck_call(&vec![&operand]);
+                TypedASTNode {
+                    expr: Expr::Unary { operand, operator: Op::Deref },
+                    node_type,
+                }
+            } else {
+                panic!("Deref is not defined. Fix code pls.")
+            }
+        },
+        _ => panic!("Left side of an assignment can only be an Identifier or a Deref unary expression")
+    }
+}
+
 fn typecheck_assignment_expression(
     left: Box<ASTNode>, 
     right: Box<ASTNode>, 
     sym_table: &mut Box<SymTable<Type>>
 )   -> TypedASTNode {
-    if let Expr::Identifier { value: id } = left.expr {
-        let variable_type = sym_table.get(&Symbol::Identifier(id.clone()));
-        let right = Box::new( typecheck(*right, sym_table) );
-        if variable_type != right.node_type {
-            panic!("Variable type and assignment value types differ: {:?} != {:?}", variable_type, right.node_type)
-        }
-        let left = Box::new(TypedASTNode { expr: Expr::Identifier { value: id }, node_type: variable_type.clone() });
-        TypedASTNode { 
-            expr: Expr::Assignment { 
-                left,
-                right 
-            }, 
-            node_type: variable_type.clone()
-        }
-    } else {
-        panic!("Left side of an assignment must be an identifier");
+    let left = typecheck_assignable(left, sym_table);
+    let expected_type = left.node_type.clone();
+    let right = Box::new( typecheck(*right, sym_table) );
+    if expected_type != right.node_type {
+        panic!("Variable type and assignment value types differ: {:?} != {:?}", expected_type, right.node_type)
+    }
+
+    TypedASTNode { 
+        expr: Expr::Assignment { 
+            left: Box::new(left),
+            right 
+        }, 
+        node_type: expected_type
     }
 }
 
@@ -767,6 +786,15 @@ mod tests {
         if let Expr::Block { result,.. } = &module.main().body.expr {
             assert!(matches!(result.node_type, Type::Integer))
         }
+    }
+
+    #[test]
+    fn assign_to_pointer_deref() {
+        t("
+            var x = 1;
+            var y = &x;
+            *y = 2;
+        ");
     }
 
     #[test]

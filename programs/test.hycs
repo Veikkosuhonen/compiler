@@ -1,15 +1,4 @@
-fun foo(x: Int): Int {
-    if x == 42 then {
-        return x;
-    }
-
-    return x * 2;
-}
-
-print_int(foo(3));
-
-print_int(foo(2));
-
-print_int(foo(1));
-
-print_int(foo(0));
+var x = 2;
+var y = &x;
+*y = 3;
+print_int(x);

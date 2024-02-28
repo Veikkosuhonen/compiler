@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::{ir_generator::{IREntry, IRVar, Instruction}, sym_table::Symbol, tokenizer::Op};
+use crate::{ir_generator::{IREntry, IRVar, Instr}, sym_table::Symbol, tokenizer::Op};
 
 pub fn generate_asm(ir: HashMap<String, Vec<IREntry>>) -> String {
     let functions_code = ir.iter().map(|(fun_name, ir)| {
@@ -28,13 +28,13 @@ pub fn generate_function_asm(fun_name: &str, fun_ir: &Vec<IREntry>) -> String {
 
     for entry in fun_ir {
         match &entry.instruction {
-            Instruction::LoadIntConst { dest, .. } => add_var(&dest.name),
-            Instruction::LoadBoolConst { dest,.. } => add_var(&dest.name),
-            Instruction::Copy { source, dest } => {
+            Instr::LoadIntConst { dest, .. } => add_var(&dest.name),
+            Instr::LoadBoolConst { dest,.. } => add_var(&dest.name),
+            Instr::Copy { source, dest, .. } => {
                 add_var(&source.name);
                 add_var(&dest.name);
             },
-            Instruction::Call { args, dest,.. } => {
+            Instr::Call { args, dest,.. } => {
                 for ir_var in args {
                     add_var(&ir_var.name);
                 }
@@ -50,7 +50,7 @@ pub fn generate_function_asm(fun_name: &str, fun_ir: &Vec<IREntry>) -> String {
     let function_body = fun_ir.iter().map(|entry| {
 
         let asm = match &entry.instruction {
-            Instruction::FunctionLabel { name, params } => {
+            Instr::FunctionLabel { name, params } => {
                 let mut lines = vec![
                     format!(".global {name}"),
                     format!(".type {name}, @function"),
@@ -67,41 +67,41 @@ pub fn generate_function_asm(fun_name: &str, fun_ir: &Vec<IREntry>) -> String {
                 }
                 lines
             },
-            Instruction::LoadIntConst { value, dest } => {
+            Instr::LoadIntConst { value, dest } => {
                 let dest_loc = get_var_address(&dest.name, &locals_addresses);
                 vec![
                     format!("movq ${}, {}", value, dest_loc)
                 ]
             },
-            Instruction::LoadBoolConst { value, dest } => {
+            Instr::LoadBoolConst { value, dest } => {
                 let dest_loc = get_var_address(&dest.name, &locals_addresses);
                 let byte_val = if *value { 1 } else { 0 };
                 vec![
                     format!("movq ${}, {}", byte_val, dest_loc)
                 ]
             },
-            Instruction::Call { fun, args, dest } => {
+            Instr::Call { fun, args, dest } => {
                 vec![
                     generate_call(fun, args, dest, &locals_addresses)
                 ]
             },
-            Instruction::Copy { source, dest } => {
+            Instr::Copy { source, dest, pointer_nesting } => {
                 let src_loc = get_var_address(&source.name, &locals_addresses);
                 let dest_loc = get_var_address(&dest.name, &locals_addresses);
 
-                copy(&src_loc, &dest_loc)
+                copy_to_addr(&src_loc, &dest_loc, pointer_nesting)
             },
-            Instruction::Label(name) => {
+            Instr::Label(name) => {
                 vec![
                     format!("{name}:")
                 ]
             },
-            Instruction::Jump(label) => {
+            Instr::Jump(label) => {
                 vec![
                     format!("jmp {}", label)
                 ]
             },
-            Instruction::CondJump { cond, then_label, else_label } => {
+            Instr::CondJump { cond, then_label, else_label } => {
                 let cond_loc = get_var_address(&cond.name, &locals_addresses);
                 vec![
                     format!("cmpq $0, {}", cond_loc),
@@ -219,6 +219,19 @@ fn generate_call(fun: &Box<IRVar>, args: &Vec<Box<IRVar>>, dest: &Box<IRVar>, ad
                             mov("%rax", &dest_loc),
                         ]
                     },
+                    Op::AddressOf => {
+                        vec![
+                            format!("leaq {arg_1_loc}, %rax"),
+                            mov("%rax", &dest_loc),
+                        ]
+                    },
+                    Op::Deref => {
+                        vec![
+                            mov(&arg_1_loc, "%rax"),
+                            mov("(%rax)", "%rax"),
+                            mov("%rax", &dest_loc),
+                        ]
+                    },
                     _ => todo!("{:?}", op)
                 }
             }
@@ -300,6 +313,23 @@ fn copy(arg1: &str, arg2: &str) -> Vec<String> {
     let tmp = String::from("%rax");
     lines.push(mov(arg1, &tmp));
     lines.push(mov(&tmp, arg2));
+    lines
+}
+
+fn copy_to_addr(source: &str, addr: &str, pointer_nesting: &usize) -> Vec<String> {
+    if *pointer_nesting == 0 {
+        return copy(source, addr);
+    }
+    let mut lines = vec![];
+    let address_reg = String::from("%rax");
+    let source_reg = String::from("%rdx");
+    lines.push(mov(addr, &address_reg));
+    // If pointer is nested more than once, dereference it until its depth is one.
+    for _i in 1..*pointer_nesting {
+        lines.push(mov(&address_reg, format!("({address_reg})").as_str()));
+    }
+    lines.push(mov(source, &source_reg));
+    lines.push(mov(&source_reg, format!("({address_reg})").as_str()));
     lines
 }
 

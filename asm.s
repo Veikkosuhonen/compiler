@@ -2,6 +2,7 @@
 # Metadata for debuggers and other tools
 .extern printf
 .extern scanf
+.extern clock
 
 .section .text  # Begins code and data
 
@@ -12,16 +13,28 @@
         main:
         pushq %rbp
         movq %rsp, %rbp
-        subq $32, %rsp
+        subq $48, %rsp
         # param backups (0)
 
-        # LoadIntConst(69, var_1)
-        movq $69, -8(%rbp)
+        # LoadIntConst(2, var_0)
+        movq $2, -8(%rbp)
 
-        # Call(func, [var_1], var_0)
-        movq -8(%rbp), %rdi
-        call func
+        # Call(&, [var_0], var_1)
+        leaq -8(%rbp), %rax
         movq %rax, -16(%rbp)
+
+        # LoadIntConst(3, var_2)
+        movq $3, -24(%rbp)
+
+        # Copy(var_2, (var_1))
+        movq -16(%rbp), %rax
+        movq -24(%rbp), %rdx
+        movq %rdx, (%rax)
+
+        # Call(print_int, [var_0], var_3)
+        movq -8(%rbp), %rsi
+        movq $print_format, %rdi
+        call printf
 
         # Copy(U, _return)
         movq $0, %rax
@@ -29,57 +42,6 @@
 
         # Label(.Lmain_end)
         .Lmain_end:
-        # Restore stack pointer
-        movq %rbp, %rsp
-        popq %rbp
-        ret
-    
-
-        
-        # Function(func(x))
-        .global func
-        .type func, @function
-        func:
-        pushq %rbp
-        movq %rsp, %rbp
-        subq $48, %rsp
-        # param backups (1)
-        movq %rdi, -16(%rbp)
-
-        # LoadBoolConst(true, var_0)
-        movq $1, -8(%rbp)
-
-        # CondJump(var_0, .Lfunc_0, .Lfunc_1)
-        cmpq $0, -8(%rbp)
-        jne .Lfunc_0
-        jmp .Lfunc_1
-
-        # Label(.Lfunc_0)
-        .Lfunc_0:
-
-        # Copy(x, _return)
-        movq -16(%rbp), %rax
-        # skip movq %rax, %rax
-
-        # Jump(.Lfunc_end)
-        jmp .Lfunc_end
-
-        # Copy(U, _return0)
-        movq $0, %rax
-        movq %rax, -32(%rbp)
-
-        # Label(.Lfunc_1)
-        .Lfunc_1:
-
-        # LoadIntConst(1, var_1)
-        movq $1, -40(%rbp)
-
-        # Copy(var_1, _return)
-        movq -40(%rbp), %rax
-        # skip movq %rax, %rax
-
-        # Label(.Lfunc_end)
-        .Lfunc_end:
         # Restore stack pointer
         movq %rbp, %rsp
         popq %rbp

@@ -1223,4 +1223,21 @@ fn pointer_type_annotation() {
     }
 }
 
+#[test]
+fn assign_to_deref() {
+    let n = p("
+        *x = 1
+    ");
+    if let Expr::Assignment { left, .. } = n.expr {
+        if let Expr::Unary { operand, operator } = left.expr {
+            assert!(matches!(operand.expr, Expr::Identifier { .. }));
+            assert_eq!(operator, Op::Deref);
+        } else {
+            panic!("Wrong")
+        }
+    } else {
+        panic!("Wrong")
+    }
+}
+
 }

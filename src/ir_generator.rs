@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::{builtin_functions::get_builtin_function_ir_vars, parser::{Expr, Module}, type_checker::{Type, TypedASTNode, TypedUserDefinedFunction}};
+use crate::{builtin_functions::get_builtin_function_ir_vars, parser::{Expr, Module}, tokenizer::Op, type_checker::{Type, TypedASTNode, TypedUserDefinedFunction}};
 
 #[derive(Clone, Debug)]
 pub struct IRVar {
@@ -63,10 +63,10 @@ impl IRVarTable {
 }
 
 #[derive(Debug)]
-pub enum Instruction {
+pub enum Instr {
     LoadIntConst { value: i32, dest: Box<IRVar> },
     LoadBoolConst { value: bool, dest: Box<IRVar> },
-    Copy { source: Box<IRVar>, dest: Box<IRVar> },
+    Copy { source: Box<IRVar>, dest: Box<IRVar>, pointer_nesting: usize },
     Call { fun: Box<IRVar>, args: Vec<Box<IRVar>>, dest: Box<IRVar> },
     Jump(String),
     CondJump { cond: Box<IRVar>, then_label: String, else_label: String },
@@ -77,20 +77,26 @@ pub enum Instruction {
 #[derive(Debug)]
 pub struct IREntry {
     // location: SourceLocation,
-    pub instruction: Instruction
+    pub instruction: Instr
+}
+
+impl IREntry {
+    fn copy(src: IRVar, dest: IRVar, pointer_nesting: usize) -> IREntry {
+        IREntry { instruction: Instr::Copy { source: Box::new(src), dest: Box::new(dest), pointer_nesting } }
+    }
 }
 
 impl IREntry {
     pub fn to_string(&self) -> String {
         match &self.instruction {
-            Instruction::Label(label) => format!("Label({})", label.clone()),
-            Instruction::FunctionLabel { name, params } => format!("Function({}({}))", name.clone(), params.iter().map(|p| { p.name.clone() }).collect::<Vec<String>>().join(", ")),
-            Instruction::Jump(label) => format!("Jump({})", label.clone()),
-            Instruction::CondJump { cond, else_label, then_label } => format!("CondJump({}, {}, {})", cond.to_string(), then_label.clone(), else_label.clone()),
-            Instruction::LoadIntConst { value, dest } => format!("LoadIntConst({}, {})", value, dest.to_string()),
-            Instruction::LoadBoolConst { value, dest } => format!("LoadBoolConst({}, {})", value, dest.to_string()),
-            Instruction::Copy { source, dest } => format!("Copy({}, {})", source.to_string(), dest.to_string()),
-            Instruction::Call { fun, args, dest } => format!("Call({}, [{}], {})", fun.to_string(), args.iter().map(|arg| arg.to_string()).collect::<Vec<String>>().join(","), dest.to_string()),
+            Instr::Label(label) => format!("Label({})", label.clone()),
+            Instr::FunctionLabel { name, params } => format!("Function({}({}))", name.clone(), params.iter().map(|p| { p.name.clone() }).collect::<Vec<String>>().join(", ")),
+            Instr::Jump(label) => format!("Jump({})", label.clone()),
+            Instr::CondJump { cond, else_label, then_label } => format!("CondJump({}, {}, {})", cond.to_string(), then_label.clone(), else_label.clone()),
+            Instr::LoadIntConst { value, dest } => format!("LoadIntConst({}, {})", value, dest.to_string()),
+            Instr::LoadBoolConst { value, dest } => format!("LoadBoolConst({}, {})", value, dest.to_string()),
+            Instr::Copy { source, dest, pointer_nesting } => format!("Copy({}, {}{}{})", source.to_string(), "(".repeat(*pointer_nesting), dest.to_string(), ")".repeat(*pointer_nesting)),
+            Instr::Call { fun, args, dest } => format!("Call({}, [{}], {})", fun.to_string(), args.iter().map(|arg| arg.to_string()).collect::<Vec<String>>().join(","), dest.to_string()),
         }
     }
 }
@@ -123,10 +129,10 @@ pub fn generate_ir(module: Module<TypedUserDefinedFunction>) -> HashMap<String, 
 
 fn generate_function_ir(func: &TypedUserDefinedFunction, params: Vec<IRVar>, mut var_table: IRVarTable) -> Vec<IREntry> {
     let mut function_instructions: Vec<IREntry> = vec![];
-    function_instructions.push(IREntry { instruction: Instruction::FunctionLabel { name: func.id.clone(), params  } });
+    function_instructions.push(IREntry { instruction: Instr::FunctionLabel { name: func.id.clone(), params  } });
     let result = generate(&func.body, &mut function_instructions, &mut var_table, String::from("_return"));
-    function_instructions.push(IREntry { instruction: Instruction::Copy { source: Box::new(result), dest: Box::new(var_table.get(&String::from("_return"))) } });
-    function_instructions.push(IREntry { instruction: Instruction::Label(format!(".L{}_end", func.id)) });
+    function_instructions.push(IREntry::copy(result, var_table.get(&String::from("_return")), 0));
+    function_instructions.push(IREntry { instruction: Instr::Label(format!(".L{}_end", func.id)) });
     function_instructions
 }
 
@@ -156,7 +162,7 @@ fn generate(node: &TypedASTNode, instructions: &mut Vec<IREntry>, var_table: &mu
             let dest = var_table.create_unnamed(node.node_type.clone());
             instructions.push(IREntry { 
                 // location: , 
-                instruction: Instruction::LoadIntConst { 
+                instruction: Instr::LoadIntConst { 
                     value: *value,
                     dest: Box::new(dest.clone()),
                 }
@@ -167,7 +173,7 @@ fn generate(node: &TypedASTNode, instructions: &mut Vec<IREntry>, var_table: &mu
             let dest = var_table.create_unnamed( node.node_type.clone());
             instructions.push(IREntry { 
                 // location: , 
-                instruction: Instruction::LoadBoolConst { 
+                instruction: Instr::LoadBoolConst { 
                     value: *value,
                     dest: Box::new(dest.clone()),
                 }
@@ -193,7 +199,7 @@ fn generate(node: &TypedASTNode, instructions: &mut Vec<IREntry>, var_table: &mu
 
             instructions.push(IREntry { 
                 // location: , 
-                instruction: Instruction::Call { 
+                instruction: Instr::Call { 
                     fun: Box::new(fun), 
                     args: vec![Box::new(operand)], 
                     dest: Box::new(dest.clone()),
@@ -211,35 +217,35 @@ fn generate(node: &TypedASTNode, instructions: &mut Vec<IREntry>, var_table: &mu
                     let return_left_label = var_table.create_local_label();
                     let end_label = var_table.create_local_label();
                     let return_right_label = var_table.create_local_label();
-                    instructions.push(IREntry { instruction: Instruction::CondJump { cond: Box::new(left.clone()), then_label: return_right_label.clone(), else_label: return_left_label.clone() } });
-                    instructions.push(IREntry { instruction: Instruction::Label(return_left_label) });
-                    instructions.push(IREntry { instruction: Instruction::Copy { source: Box::new(left), dest: Box::new(dest.clone()) } });
-                    instructions.push(IREntry { instruction: Instruction::Jump(end_label.clone()) });
-                    instructions.push(IREntry { instruction: Instruction::Label(return_right_label) });
+                    instructions.push(IREntry { instruction: Instr::CondJump { cond: Box::new(left.clone()), then_label: return_right_label.clone(), else_label: return_left_label.clone() } });
+                    instructions.push(IREntry { instruction: Instr::Label(return_left_label) });
+                    instructions.push(IREntry::copy(left, dest.clone(), 0));
+                    instructions.push(IREntry { instruction: Instr::Jump(end_label.clone()) });
+                    instructions.push(IREntry { instruction: Instr::Label(return_right_label) });
                     let right = generate(&right, instructions, var_table, dest_name.clone());
-                    instructions.push(IREntry { instruction: Instruction::Copy { source: Box::new(right), dest: Box::new(dest.clone()) } });
-                    instructions.push(IREntry { instruction: Instruction::Label(end_label) });
+                    instructions.push(IREntry::copy(right, dest.clone(), 0));
+                    instructions.push(IREntry { instruction: Instr::Label(end_label) });
                 },
                 "or" => {
                     let left = generate(&left, instructions, var_table, dest_name.clone());
                     let return_left_label = var_table.create_local_label();
                     let end_label = var_table.create_local_label();
                     let return_right_label = var_table.create_local_label();
-                    instructions.push(IREntry { instruction: Instruction::CondJump { cond: Box::new(left.clone()), then_label: return_left_label.clone(), else_label: return_right_label.clone() } });
-                    instructions.push(IREntry { instruction: Instruction::Label(return_left_label) });
-                    instructions.push(IREntry { instruction: Instruction::Copy { source: Box::new(left), dest: Box::new(dest.clone()) } });
-                    instructions.push(IREntry { instruction: Instruction::Jump(end_label.clone()) });
-                    instructions.push(IREntry { instruction: Instruction::Label(return_right_label) });
+                    instructions.push(IREntry { instruction: Instr::CondJump { cond: Box::new(left.clone()), then_label: return_left_label.clone(), else_label: return_right_label.clone() } });
+                    instructions.push(IREntry { instruction: Instr::Label(return_left_label) });
+                    instructions.push(IREntry::copy(left, dest.clone(), 0));
+                    instructions.push(IREntry { instruction: Instr::Jump(end_label.clone()) });
+                    instructions.push(IREntry { instruction: Instr::Label(return_right_label) });
                     let right = generate(&right, instructions, var_table, dest_name.clone());
-                    instructions.push(IREntry { instruction: Instruction::Copy { source: Box::new(right), dest: Box::new(dest.clone()) } });
-                    instructions.push(IREntry { instruction: Instruction::Label(end_label) });
+                    instructions.push(IREntry::copy(right, dest.clone(), 0));
+                    instructions.push(IREntry { instruction: Instr::Label(end_label) });
                 },
                 _ => {
                     let left = generate(&left, instructions, var_table, dest.name.clone());
                     let right = generate(&right, instructions, var_table, dest.name.clone());
                     instructions.push(IREntry { 
                         // location: , 
-                        instruction: Instruction::Call { 
+                        instruction: Instr::Call { 
                             fun: Box::new(fun), 
                             args: vec![Box::new(left), Box::new(right)], 
                             dest: Box::new(dest.clone()),
@@ -261,7 +267,7 @@ fn generate(node: &TypedASTNode, instructions: &mut Vec<IREntry>, var_table: &mu
 
                 instructions.push(IREntry { 
                     // location: , 
-                    instruction: Instruction::Call { 
+                    instruction: Instr::Call { 
                         fun: Box::new(fun), 
                         args: argument_vars, 
                         dest: Box::new(dest.clone()),
@@ -274,16 +280,14 @@ fn generate(node: &TypedASTNode, instructions: &mut Vec<IREntry>, var_table: &mu
         },
         Expr::Return { result } => {
             let return_var = generate(&result, instructions, var_table, dest_name.clone());
-            instructions.push(IREntry { instruction: Instruction::Copy { source: Box::new(return_var.clone()), dest: Box::new(var_table.get(&String::from("_return"))) } });
-            instructions.push(IREntry { instruction: Instruction::Jump(format!(".L{}_end", var_table.fun_name)) });
+            instructions.push(IREntry::copy(return_var.clone(), var_table.get(&String::from("_return")), 0));
+            instructions.push(IREntry { instruction: Instr::Jump(format!(".L{}_end", var_table.fun_name)) });
             return_var
         },
         Expr::Assignment { left, right } => {
-            let left = generate(&left, instructions, var_table, dest_name.clone());
+            let (left, pointer_nesting) = generate_assignment_left_side(left, instructions, var_table);
             let right = generate(&right, instructions, var_table, dest_name.clone());
-            instructions.push(IREntry {
-                instruction: Instruction::Copy { source: Box::new(right.clone()), dest: Box::new(left)  }
-            });
+            instructions.push(IREntry::copy(right.clone(), left, pointer_nesting));
             right
         },
         Expr::Block { statements, result } => {
@@ -299,24 +303,24 @@ fn generate(node: &TypedASTNode, instructions: &mut Vec<IREntry>, var_table: &mu
             let dest = var_table.create(dest_name.clone(), node.node_type.clone());
 
             let condition = generate(&condition, instructions, var_table, dest_name.clone());
-            instructions.push(IREntry { instruction: Instruction::CondJump { 
+            instructions.push(IREntry { instruction: Instr::CondJump { 
                 cond: Box::new(condition), 
                 then_label: then_label.clone(),
                 else_label: else_label.clone(),
             }});
 
-            instructions.push(IREntry { instruction: Instruction::Label(then_label) });
+            instructions.push(IREntry { instruction: Instr::Label(then_label) });
             let then_branch = generate(&then_branch, instructions, var_table, dest_name.clone());
-            instructions.push(IREntry { instruction: Instruction::Copy { source: Box::new(then_branch.clone()), dest: Box::new(dest.clone()) } });
+            instructions.push(IREntry::copy(then_branch, dest.clone(), 0));
 
             if let Some(else_branch) = else_branch {
-                instructions.push(IREntry { instruction: Instruction::Jump(end_label.clone()) });
-                instructions.push(IREntry { instruction: Instruction::Label(else_label) });
+                instructions.push(IREntry { instruction: Instr::Jump(end_label.clone()) });
+                instructions.push(IREntry { instruction: Instr::Label(else_label) });
                 let else_branch = generate(&else_branch, instructions, var_table, dest_name);
-                instructions.push(IREntry { instruction: Instruction::Copy { source: Box::new(else_branch.clone()), dest: Box::new(dest.clone()) } });
+                instructions.push(IREntry::copy(else_branch, dest.clone(), 0));
             }
 
-            instructions.push(IREntry { instruction: Instruction::Label(end_label) });
+            instructions.push(IREntry { instruction: Instr::Label(end_label) });
 
             dest
         },
@@ -326,24 +330,35 @@ fn generate(node: &TypedASTNode, instructions: &mut Vec<IREntry>, var_table: &mu
             let end_label = var_table.create_local_label();
             let dest = var_table.create(dest_name.clone(), node.node_type.clone());
 
-            instructions.push(IREntry { instruction: Instruction::Label(while_label.clone()) });
+            instructions.push(IREntry { instruction: Instr::Label(while_label.clone()) });
 
             let condition = generate(&condition, instructions, var_table, dest_name.clone());
-            instructions.push(IREntry { instruction: Instruction::CondJump { 
+            instructions.push(IREntry { instruction: Instr::CondJump { 
                 cond: Box::new(condition), 
                 then_label: do_label.clone(),
                 else_label: end_label.clone(),
             }});
 
-            instructions.push(IREntry { instruction: Instruction::Label(do_label) });
+            instructions.push(IREntry { instruction: Instr::Label(do_label) });
             let body = generate(&body, instructions, var_table, dest_name);
-            instructions.push(IREntry { instruction: Instruction::Copy { source: Box::new(body.clone()), dest: Box::new(dest.clone()) } });
-            instructions.push(IREntry { instruction: Instruction::Jump(while_label) });
+            instructions.push(IREntry::copy(body, dest.clone(), 0));
+            instructions.push(IREntry { instruction: Instr::Jump(while_label) });
 
-            instructions.push(IREntry { instruction: Instruction::Label(end_label) });
+            instructions.push(IREntry { instruction: Instr::Label(end_label) });
 
             dest
         }
+    }
+}
+
+fn generate_assignment_left_side(node: &Box<TypedASTNode>, instructions: &mut Vec<IREntry>, var_table: &mut IRVarTable) -> (IRVar, usize) {
+    match &node.expr {
+        Expr::Identifier { value } => (var_table.get(&value), 0),
+        Expr::Unary { operand, operator: Op::Deref } => {
+            let (irvar, nesting) = generate_assignment_left_side(&operand, instructions, var_table);
+            (irvar, nesting + 1)
+        },
+        _ => panic!("Encountered invalid assignment left side when generating IR: {:?}", node)
     }
 }
 
@@ -362,15 +377,15 @@ mod tests {
     #[test]
     fn literals() {
         let ir = i("789");
-        assert!(matches!(&ir.get("main").unwrap()[1].instruction, Instruction::LoadIntConst { value: 789, .. }));
+        assert!(matches!(&ir.get("main").unwrap()[1].instruction, Instr::LoadIntConst { value: 789, .. }));
         let ir2 = i("true");
-        assert!(matches!(&ir2.get("main").unwrap()[1].instruction, Instruction::LoadBoolConst { value: true, .. }))
+        assert!(matches!(&ir2.get("main").unwrap()[1].instruction, Instr::LoadBoolConst { value: true, .. }))
     }
 
     #[test]
     fn var_declaration() {
         let ir = i("{ var x = 789 }");
-        assert!(matches!(&ir.get("main").unwrap()[1].instruction, Instruction::LoadIntConst { value: 789, .. }));
+        assert!(matches!(&ir.get("main").unwrap()[1].instruction, Instr::LoadIntConst { value: 789, .. }));
     }
 
     #[test]
@@ -386,11 +401,23 @@ mod tests {
 
     #[test]
     fn address_of_op() {
-        let ir = i("
+        let _ir = i("
             var x = 1;
             &x
         ");
 
-        println!("{}", ir.get("main").unwrap().iter().map(|i| i.to_string()).collect::<Vec<String>>().join("\n"))
+        // println!("{}", _ir.get("main").unwrap().iter().map(|i| i.to_string()).collect::<Vec<String>>().join("\n"))
+    }
+
+    #[test]
+    fn pointer_nested_assignment() {
+        let _ir = i("
+            var x = 1;
+            var y = &&x;
+            **y = 2;
+            x
+        ");
+
+        // println!("{}", _ir.get("main").unwrap().iter().map(|i| i.to_string()).collect::<Vec<String>>().join("\n"))
     }
 }

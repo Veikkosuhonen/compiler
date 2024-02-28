@@ -15,3 +15,16 @@ var y = &x;
 *y = 1234;
 print_int(x);
 expect 1234
+
+---
+
+name "Pointers example"
+
+fun square(p: Int*): Unit {
+    *p = *p * *p;
+}
+
+var x: Int = 3;
+square(&x);
+print_int(x); // Prints 9
+expect 9

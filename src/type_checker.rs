@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::builtin_functions::get_builtin_function_symbol_type_mappings;
+use crate::builtin_functions::{get_builtin_function_types, get_builtin_referrable_types};
 use crate::interpreter::UserDefinedFunction;
 use crate::sym_table::{SymTable, Symbol};
 use crate::parser::{ASTNode, Expr, Module};
@@ -55,8 +55,18 @@ pub enum Type {
     Function(Box<FunctionType>),
     Pointer(Box<Type>),
     Generic(String),
+    Typeref(Box<Type>),
+    Constructor(Box<Type>),
     Unknown,
     #[default] Unit,
+}
+
+impl Type {
+    pub fn get_constructor_type(&self) -> Type {
+        let return_type = Type::Typeref(Box::new(self.clone()));
+        let param_types = vec![self.clone()];
+        Type::Function(Box::new(FunctionType { param_types, return_type }))
+    }
 }
 
 #[derive(Debug)]
@@ -94,6 +104,11 @@ impl Type {
                 Type::Pointer(self_pointer_type) => self_pointer_type.satisfy(&other_pointer_type),
                 _ => TypeResolution::failed(),
             },
+            // Constructor value type must be satisfied
+            Type::Constructor(other_constructor_type) => match self {
+                Type::Constructor(self_constructor_type) => self_constructor_type.satisfy(&other_constructor_type),
+                _ => TypeResolution::failed(),
+            },
             // Everything satisfies the Unknown type
             Type::Unknown => TypeResolution::satisfied(),
             _ => if *self == *other { TypeResolution::satisfied() } else { TypeResolution::failed() },
@@ -108,12 +123,24 @@ impl Type {
             Type::Generic(type_id) => constraints.remove(type_id).expect(format!("Type resolution failed for {:?}", self).as_str()),
             // Pointer value must be resolved
             Type::Pointer(pointer_type) => Type::Pointer(Box::new(pointer_type.resolve(constraints))),
+            Type::Constructor(constructor_type) => Type::Constructor(Box::new(constructor_type.resolve(constraints))),
             _ => self.clone(),
         }
     }
 
     pub fn generic(type_id: &str) -> Type {
         Type::Generic(type_id.to_string())
+    }
+
+    pub fn get_callable_type(&self) -> FunctionType {
+        match self {
+            Type::Function(ftype) => *ftype.clone(),
+            Type::Typeref(referred_type) => FunctionType {
+                param_types: vec![*referred_type.clone()],
+                return_type: Type::Constructor(Box::new(*referred_type.clone()))
+            },
+            _ => panic!("{:?} is not callable", self)
+        }
     }
 }
 
@@ -182,9 +209,13 @@ pub fn typecheck_program(module: Module<UserDefinedFunction>) -> Module<TypedUse
 fn get_toplevel_sym_table() -> Box<SymTable<Type>> {
     let mut sym_table = SymTable::new(None);
 
-    let builtins = get_builtin_function_symbol_type_mappings();
+    let builtins = get_builtin_function_types();
     for (symbol, val) in builtins {
         sym_table.symbols.insert(symbol, val);
+    }
+
+    for (symbol, ref_type) in get_builtin_referrable_types() {
+        sym_table.symbols.insert(symbol.clone(), Type::Typeref(Box::new(ref_type.clone())));
     }
 
     sym_table
@@ -193,7 +224,6 @@ fn get_toplevel_sym_table() -> Box<SymTable<Type>> {
 fn typecheck(node: ASTNode, sym_table: &mut Box<SymTable<Type>>) -> TypedASTNode {
     match node.expr {
         Expr::Unit => TypedASTNode { expr: Expr::Unit, node_type: Type::Unit },
-        Expr::Type { id, modifiers: modifier } => TypedASTNode { expr: Expr::Type { id, modifiers: modifier }, node_type: Type::Unit },
         Expr::IntegerLiteral { value } => TypedASTNode { expr: Expr::IntegerLiteral { value }, node_type: Type::Integer },
         Expr::BooleanLiteral { value } => TypedASTNode { expr: Expr::BooleanLiteral { value }, node_type: Type::Boolean },
         Expr::Identifier { value } => typecheck_identifier(value, sym_table),
@@ -238,10 +268,11 @@ fn get_function_type(
 ) -> FunctionType {
     let params: Vec<(Symbol, Type)> = func.params.iter().map(|param| {
         let sym = Symbol::Identifier(param.name.clone());
-        (sym, resolve_type(&param.param_type, sym_table))
+        (sym, typecheck_type_annotation_referred_type(&param.param_type, sym_table))
     }).collect();
     let return_type_name = &func.return_type;
-    let return_type = resolve_type(&return_type_name, sym_table);
+    let return_type = typecheck_type_annotation_referred_type(&return_type_name, sym_table);
+
     FunctionType { 
         param_types: params.iter().map(|(_, val)| val.clone()).collect(),
         return_type
@@ -392,31 +423,30 @@ fn typecheck_block_expression(
     })
 }
 
-pub fn parse_type(id: &String, modifiers: &[String]) -> Type {
-    if let Some(modifier) = modifiers.first() {
-        match modifier.as_str() {
-            "*" => {
-                let inner_type = parse_type(id, &modifiers[1..]);
-                Type::Pointer(Box::new(inner_type))
-            },
-            _ => panic!("Unknown modifier {}", modifier)
-        }
-    } else {
-        match id.as_str() {
-            "Int" => Type::Integer,
-            "Bool" => Type::Boolean,
-            "Unit" => Type::Unit,
-            "Unknown" => Type::Unknown,
-            _ => panic!("Unknown type {}", id)
-        }
-    }
-}
+/// Typecheck and get the type that a type annotation refers to.
+/// The type annotation expression must have the type Type::Typeref(T),
+/// then T is returned.
+/// Unlike the typecheck functions for other AST nodes,
+/// here we only return the type instead of a TypedASTNode,
+/// since a type annotation does not produce any IR.
+fn typecheck_type_annotation_referred_type(type_annotation: &Box<ASTNode>, sym_table: &mut Box<SymTable<Type>>) -> Type {
+    let typeref = match &type_annotation.expr {
+        Expr::Identifier { value } => {
+            let sym = Symbol::Identifier(value.clone());
+            sym_table.get(&sym).clone()
+        },
+        Expr::Unary { operand, operator: Op::Deref } => {
+            let inner_type = typecheck_type_annotation_referred_type(operand, sym_table);
+            // Slightly ugly activity here: inner_type T is the type that the inner type annotation expr
+            // refers to, so the type of this annotation is a Typeref to the type Pointer<T>
+            Type::Typeref(Box::new(Type::Pointer(Box::new(inner_type))))
+        },
+        _ => panic!("Type annotation must be an identifier or a deref expression, found {:?}", type_annotation.expr),
+    };
 
-fn resolve_type(type_annotation: &Box<ASTNode>, sym_table: &mut Box<SymTable<Type>>) -> Type {
-    match &type_annotation.expr {
-        Expr::Type { id, modifiers: modifier } => parse_type(id, modifier),
-        Expr::Identifier { value } => sym_table.symbols.get(&Symbol::Identifier(value.clone())).expect(format!("Unknown type {value}").as_str()).clone(),
-        _ => panic!("Type annotation must be a type"),
+    match typeref {
+        Type::Typeref(referred_type) => *referred_type,
+        _ => panic!("Type annotation type should be Type::Typeref(T), found {:?}", typeref)
     }
 }
 
@@ -429,7 +459,7 @@ fn typecheck_variable_declaration(
     if let Expr::Identifier { value } = id.expr {
         let init = typecheck(*init, sym_table);
         if let Some(type_annotation) = type_annotation {
-            let annotated_type = resolve_type(&type_annotation, sym_table);
+            let annotated_type = typecheck_type_annotation_referred_type(&type_annotation, sym_table);
             if init.node_type != annotated_type {
                 panic!("Type annotation and init expression types differ: {:?} != {:?}", annotated_type, init.node_type)
             }
@@ -483,30 +513,23 @@ fn typecheck_call_expression(
     argument_expr: Vec<Box<ASTNode>>,
     sym_table: &mut Box<SymTable<Type>>
 ) -> TypedASTNode {
-    if let Expr::Identifier { value: function_id } = callee.expr {
-        let called_function = sym_table.get(&Symbol::Identifier(function_id.to_string()));
-        if let Type::Function(called_function) = called_function {
-            let mut typed_argument_expr: Vec<Box<TypedASTNode>> = vec![];
-            for expr in argument_expr {
-                let arg = Box::new(typecheck(*expr, sym_table));
-                typed_argument_expr.push(arg);
-            }
-            let node_type = called_function.typecheck_call(
-                &typed_argument_expr.iter().collect()
-            );
-            TypedASTNode {
-                expr: Expr::Call { 
-                    callee: Box::new(typecheck_identifier(function_id, sym_table)),
-                    arguments: typed_argument_expr, 
-                },
-                node_type,
-            }
-        } else {
-            panic!("Calling undefined function {:?}", function_id);
-        }
-    } else {
-        panic!("Callee of a call expression must be an identifier");
+    let callee = typecheck(*callee, sym_table);
+    let call_type = callee.node_type.get_callable_type();
+
+    let mut typed_argument_expr: Vec<Box<TypedASTNode>> = vec![];
+    for expr in argument_expr {
+        let arg = Box::new(typecheck(*expr, sym_table));
+        typed_argument_expr.push(arg);
     }
+    let node_type = call_type.typecheck_call(&typed_argument_expr.iter().collect());
+    TypedASTNode {
+        expr: Expr::Call { 
+            callee: Box::new(callee),
+            arguments: typed_argument_expr, 
+        },
+        node_type,
+    }
+
 }
 
 #[cfg(test)]
@@ -803,5 +826,37 @@ mod tests {
         t("
             var pointer: Int*** = &&&&1;
         ");
+    }
+
+    #[test]
+    fn constructor_type() {
+        let m = t("Int(123)");
+        if let Expr::Block { result,.. } = &m.main().body.expr {
+            assert!(matches!(result.node_type, Type::Constructor(_)))
+        } else {
+            panic!("Wrong!")
+        }
+    }
+
+    #[test]
+    fn new_operator() {
+        let m = t("new Int(123)");
+        if let Expr::Block { result,.. } = &m.main().body.expr {
+            assert!(matches!(result.node_type, Type::Pointer(_)))
+        } else {
+            panic!("Wrong!")
+        }
+    }
+
+    #[test]
+    fn delete_operator() {
+        let m = t("
+            delete { new Int(123) }
+        ");
+        if let Expr::Block { result,.. } = &m.main().body.expr {
+            assert!(matches!(result.node_type, Type::Unit))
+        } else {
+            panic!("Wrong!")
+        }
     }
 }

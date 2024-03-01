@@ -21,6 +21,8 @@ pub enum Op {
     Assign,
     AddressOf,
     Deref,
+    New,
+    Delete,
 }
 
 impl Op {
@@ -50,6 +52,8 @@ impl Op {
             "not" => Op::Not,
             "&" => Op::AddressOf,
             "*" => Op::Deref,
+            "new" => Op::New,
+            "delete" => Op::Delete,
             _ => return Err("Unknown unary operator"),
         })
     }
@@ -74,6 +78,8 @@ impl Op {
             Op::Assign => "=",
             Op::AddressOf => "&",
             Op::Deref => "*",
+            Op::New => "new",
+            Op::Delete => "delete",
         })
     }
 }
@@ -126,7 +132,7 @@ lazy_static! {
     static ref IDENTIFIER_REGEX: Regex = Regex::new(r"^[a-zA-Z_][a-zA-Z0-9_]*").unwrap();
     static ref INTEGER_LITERAL_REGEX: Regex = Regex::new(r"^[0-9]+").unwrap();
     static ref BOOLEAN_LITERAL_REGEX: Regex = Regex::new(r"^(true|false)").unwrap();
-    static ref OPERATOR_REGEX: Regex = Regex::new(r"^(==|!=|<=|>=|\+|-|\*|/|%|=|<|>|and|or|not|&)").unwrap();
+    static ref OPERATOR_REGEX: Regex = Regex::new(r"^(==|!=|<=|>=|\+|-|\*|/|%|=|<|>|and\b|or\b|not\b|&|new\b|delete\b)").unwrap();
     static ref PUNCTUATION_REGEX: Regex = Regex::new(r"^(\(|\)|\{|\}|,|;|:)").unwrap();
     static ref KEYWORD_REGEX: Regex = Regex::new(r"^(while\b|do\b|if\b|then\b|else\b|var\b|fun\b|return\b)").unwrap();
 
@@ -297,9 +303,25 @@ mod tests {
             whiley
             funny
             variable
+            andy
+            oreo
+            nothing
+            newcastle
+            deleted
         ").expect("Shoulve tokenized");
-        for t in tokens[1..5].iter() {
+        for t in tokens[1..6].iter() {
             assert!(matches!(t.token_type, TokenType::Identifier));
         }
+    }
+
+    #[test]
+    fn new_and_delete() {
+        let tokens = tokenize("
+            var x: Int* = new Int(123);
+            delete x;
+        ").expect("Shoulve tokenized");
+
+        assert_eq!(tokens[7].token_type, TokenType::Operator);
+        assert_eq!(tokens[13].token_type, TokenType::Operator);   
     }
 }

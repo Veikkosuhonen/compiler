@@ -16,23 +16,19 @@
         subq $48, %rsp
         # param backups (0)
 
-        # LoadIntConst(2, var_0)
-        movq $2, -8(%rbp)
+        # LoadIntConst(1, var_0)
+        movq $1, -8(%rbp)
 
-        # Call(&, [var_0], var_1)
-        leaq -8(%rbp), %rax
-        movq %rax, -16(%rbp)
+        # LoadIntConst(2, var_1)
+        movq $2, -16(%rbp)
 
-        # LoadIntConst(3, var_2)
-        movq $3, -24(%rbp)
+        # Call(print_int, [var_1], var_2)
+        movq -16(%rbp), %rsi
+        movq $print_format, %rdi
+        call printf
 
-        # Copy(var_2, (var_1))
-        movq -16(%rbp), %rax
-        movq -24(%rbp), %rdx
-        movq %rdx, (%rax)
-
-        # Call(print_int, [var_0], var_3)
-        movq -8(%rbp), %rsi
+        # Call(print_int, [var_1], var_3)
+        movq -16(%rbp), %rsi
         movq $print_format, %rdi
         call printf
 

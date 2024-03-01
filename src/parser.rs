@@ -14,6 +14,7 @@ lazy_static! {
         vec![Op::Not], 
         vec![Op::UnarySub],
         vec![Op::AddressOf, Op::Deref],
+        vec![Op::New, Op::Delete],
     ];
 }
 
@@ -37,7 +38,7 @@ impl ASTNode {
     }
 
     pub fn implicit_type_annotation(id: &str) -> ASTNode {
-        ASTNode { expr: Expr::Type { id: String::from(id), modifiers: vec![] }, start: SourceLocation::at(0, 0), end: SourceLocation::at(0, 0) }
+        ASTNode { expr: Expr::Identifier { value: String::from(id) }, start: SourceLocation::at(0, 0), end: SourceLocation::at(0, 0) }
     }
 }
 
@@ -52,10 +53,6 @@ pub enum Expr<T> {
     },
     Identifier {
         value: String,
-    },
-    Type {
-        id: String,
-        modifiers: Vec<String>,
     },
     Block {
         statements: Vec<Box<T>>,
@@ -94,7 +91,7 @@ pub enum Expr<T> {
     },
     Return {
         result: Box<T>,
-    }
+    },
 }
 
 #[derive(Debug)]
@@ -266,19 +263,29 @@ impl Parser {
         Ok(ASTNode::new(Expr::Identifier { value: token.value }, token.start, token.end))
     }
 
-    fn parse_type(&mut self) -> Result<ASTNode, SyntaxError> {
-        let id = self.consume(TokenType::Identifier)?;
-        let mut end = id.end;
-        let mut modifiers: Vec<String> = vec![];
-        while let Ok(modifier) = self.consume_with_value(TokenType::Operator, "*") {
-            end = modifier.end.clone();
-            modifiers.push(modifier.value);
+    fn parse_postfix_unary(&mut self) -> Result<ASTNode, SyntaxError> {
+        // let id = self.consume(TokenType::Identifier)?;
+        // let mut end = id.end;
+        // let mut modifiers: Vec<String> = vec![];
+        // while let Ok(modifier) = self.consume_with_value(TokenType::Operator, "*") {
+        //     end = modifier.end.clone();
+        //     modifiers.push(modifier.value);
+        // }
+// 
+        // Ok(ASTNode::new(Expr::Type { 
+        //     id: id.value, 
+        //     modifiers,
+        // }, id.start, end))
+
+        let mut top_unary_node = self.parse_factor()?;
+        let start = top_unary_node.start.clone();
+        while let Ok(operator) = Op::unary_from_str(&self.peek()?.value) {
+            self.consume(TokenType::Operator)?;
+            let end = self.current_start().clone();
+            top_unary_node = ASTNode::new(Expr::Unary { operand: Box::new(top_unary_node), operator }, start.clone(), end);
         }
 
-        Ok(ASTNode::new(Expr::Type { 
-            id: id.value, 
-            modifiers,
-        }, id.start, end))
+        Ok(top_unary_node)
     }
 
     fn parse_call_expression(&mut self) -> Result<ASTNode, SyntaxError> {
@@ -477,7 +484,7 @@ impl Parser {
         let id = self.parse_identifier()?;
         let mut type_annotation = None;
         if self.consume_with_value(TokenType::Punctuation, ":").is_ok() {
-            type_annotation = Some(self.parse_type()?);
+            type_annotation = Some(self.parse_postfix_unary()?);
         }
         self.consume_with_value(TokenType::Operator, "=")?;
         let init = self.parse_expression()?;
@@ -517,7 +524,7 @@ impl Parser {
             loop {
                 let arg = self.consume(TokenType::Identifier)?.value;
                 self.consume_with_value(TokenType::Punctuation, ":")?;
-                let type_annotation = self.parse_type()?;
+                let type_annotation = self.parse_postfix_unary()?;
                 params.push(Param { name: arg, param_type: Box::new(type_annotation) });
                 if self.current_is(")") {
                     break;
@@ -529,7 +536,7 @@ impl Parser {
 
         let mut return_type = None;
         if self.consume_with_value(TokenType::Punctuation, ":").is_ok() {
-            return_type = Some(self.parse_type()?);
+            return_type = Some(self.parse_postfix_unary()?);
         }
 
         let body = self.parse_block_expression()?;
@@ -1120,8 +1127,8 @@ fn type_annotation() {
             panic!("Id is not Identifier")
         }
         let type_annotation = type_annotation.as_ref().unwrap();
-        if let Expr::Type { id,.. } = &type_annotation.expr {
-            assert_eq!(id, "Int");
+        if let Expr::Identifier { value,.. } = &type_annotation.expr {
+            assert_eq!(value, "Int");
         } else {
             panic!("Type annotation is not Identifier")
         }
@@ -1207,11 +1214,16 @@ fn pointer_type_annotation() {
     ");
     if let Expr::VariableDeclaration { type_annotation,.. } = n.expr {
         if let Some(t) = type_annotation {
-            if let Expr::Type { id, modifiers } = t.expr {
-                assert_eq!(id, "Int");
-                assert_eq!(*modifiers.get(0).unwrap(), String::from("*"));
-                assert_eq!(*modifiers.get(1).unwrap(), String::from("*"));
-                assert_eq!(modifiers.get(2), None);
+            if let Expr::Unary { operand, .. } = t.expr {
+                if let Expr::Unary { operand, .. } = operand.expr {
+                    if let Expr::Identifier { value } = operand.expr {
+                        assert_eq!(value, "Int")
+                    } else {
+                        panic!("Wrong")
+                    }
+                } else {
+                    panic!("Wrong")
+                }
             } else {
                 panic!("Wrong")
             }
@@ -1235,6 +1247,29 @@ fn assign_to_deref() {
         } else {
             panic!("Wrong")
         }
+    } else {
+        panic!("Wrong")
+    }
+}
+
+#[test]
+fn new_and_delete() {
+    let n = p("
+        new Int(123)
+    ");
+    if let Expr::Unary { operand, operator } = n.expr {
+        assert!(matches!(operand.expr, Expr::Call { .. }));
+        assert_eq!(operator, Op::New);
+    } else {
+        panic!("Wrong")
+    }
+
+    let n = p("
+        delete x
+    ");
+    if let Expr::Unary { operand, operator } = n.expr {
+        assert!(matches!(operand.expr, Expr::Identifier { .. }));
+        assert_eq!(operator, Op::Delete);
     } else {
         panic!("Wrong")
     }

@@ -1,4 +1,6 @@
-var x = 2;
-var y = &x;
-*y = 3;
-print_int(x);
+fun f(x: Int): Int {
+    return 10;
+    x * x
+}
+
+f(2);

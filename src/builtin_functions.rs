@@ -1,4 +1,6 @@
-use std::io;
+use std::{io, slice::Iter};
+
+use lazy_static::lazy_static;
 
 use crate::{interpreter::{Address, Function, Stack, Value}, ir_generator::IRVar, sym_table::Symbol, tokenizer::Op, type_checker::{FunctionType, Type}};
 
@@ -184,7 +186,21 @@ pub fn get_builtin_function_symbol_value_mappings() -> Vec<(Symbol, Value)> {
     mapped_ops.chain(mapped_funcs).collect()
 }
 
-pub fn get_builtin_function_symbol_type_mappings() -> Vec<(Symbol, Type)> {
+lazy_static! {
+    static ref BUILTIN_REFERRABLE_TYPES: [(Symbol, Type); 4] = [
+        (Symbol::Identifier(String::from("Int")), Type::Integer), 
+        (Symbol::Identifier(String::from("Bool")), Type::Boolean),
+        (Symbol::Identifier(String::from("Unit")), Type::Unit),
+        (Symbol::Identifier(String::from("Unknown")), Type::Unknown),
+        // (Symbol::Identifier(String::from("Pointer")), Type::Pointer(Box::new(Type::generic("T"))))
+    ];
+}
+
+pub fn get_builtin_referrable_types() -> Iter<'static, (Symbol, Type)> {
+    BUILTIN_REFERRABLE_TYPES.iter()
+}
+
+pub fn get_builtin_function_types() -> Vec<(Symbol, Type)> {
     let ops = vec![
         (Op::Add, FunctionType {
             param_types: vec![Type::Integer, Type::Integer],
@@ -253,7 +269,15 @@ pub fn get_builtin_function_symbol_type_mappings() -> Vec<(Symbol, Type)> {
         (Op::Deref, FunctionType {
             param_types: vec![Type::Pointer(Box::new(Type::generic("T")))],
             return_type: Type::generic("T"),
-        })
+        }),
+        (Op::New, FunctionType {
+            param_types: vec![Type::Constructor(Box::new(Type::generic("T")))],
+            return_type: Type::Pointer(Box::new(Type::generic("T"))),
+        }),
+        (Op::Delete, FunctionType {
+            param_types: vec![Type::Pointer(Box::new(Type::generic("T")))],
+            return_type: Type::Unit,
+        }),
     ];
 
     let functions = vec![
@@ -283,7 +307,7 @@ pub fn get_builtin_function_symbol_type_mappings() -> Vec<(Symbol, Type)> {
 }
 
 pub fn get_builtin_function_ir_vars() -> Vec<(String, IRVar)> {
-    let ops = get_builtin_function_symbol_type_mappings();
+    let ops = get_builtin_function_types();
     ops.iter().map(|(symbol, var_type)| 
         (symbol.to_string(), IRVar { name: symbol.to_string(), var_type: var_type.clone() })
     ).collect()

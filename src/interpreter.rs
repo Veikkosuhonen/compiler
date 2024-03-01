@@ -341,7 +341,6 @@ fn interpret(node: &ASTNode, stack: &mut Stack) -> Address {
         Expr::Call { callee, arguments } => {
             eval_call_expression(callee, arguments, stack)
         },
-        Expr::Type { .. } => stack.unit(),
         Expr::Unit => stack.unit(),
     }
 }
@@ -700,6 +699,18 @@ mod tests {
         }
 
         call(func_pointer, -87)
+        ");
+        // if let Value::Integer(i) = res {
+        //     assert_eq!(i, -1);
+        // }
+    }
+
+    #[test]
+    fn can_heap_alloc() {
+        let _res = i("
+        var x: Int* = new Int(123);
+        print_int(*x);
+        delete x;
         ");
         // if let Value::Integer(i) = res {
         //     assert_eq!(i, -1);

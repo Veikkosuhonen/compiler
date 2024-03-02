@@ -21,11 +21,23 @@ pub enum Op {
     Assign,
     AddressOf,
     Deref,
-    New,
-    Delete,
 }
 
 impl Op {
+    pub fn from_str(value: &str) -> Result<Op, &str> {
+        Op::logical_from_str(value)
+            .or_else(|_| Op::binary_from_str(value))
+            .or_else(|_| Op::unary_from_str(value))
+    }
+
+    pub fn logical_from_str(value: &str) -> Result<Op, &str> {
+        Ok(match value {
+            "and" => Op::And,
+            "or" => Op::Or,
+            _ => return Err("Unknown logical operator"),
+        })
+    }
+
     pub fn binary_from_str(value: &str) -> Result<Op, &str> {
         Ok(match value {
             "+" => Op::Add,
@@ -39,8 +51,6 @@ impl Op {
             ">" => Op::GT,
             "<=" => Op::LTE,
             ">=" => Op::GTE,
-            "and" => Op::And,
-            "or" => Op::Or,
             "=" => Op::Assign,
             _ => return Err("Unknown binary operator"),
         })
@@ -52,8 +62,6 @@ impl Op {
             "not" => Op::Not,
             "&" => Op::AddressOf,
             "*" => Op::Deref,
-            "new" => Op::New,
-            "delete" => Op::Delete,
             _ => return Err("Unknown unary operator"),
         })
     }
@@ -78,8 +86,6 @@ impl Op {
             Op::Assign => "=",
             Op::AddressOf => "&",
             Op::Deref => "*",
-            Op::New => "new",
-            Op::Delete => "delete",
         })
     }
 }
@@ -132,9 +138,9 @@ lazy_static! {
     static ref IDENTIFIER_REGEX: Regex = Regex::new(r"^[a-zA-Z_][a-zA-Z0-9_]*").unwrap();
     static ref INTEGER_LITERAL_REGEX: Regex = Regex::new(r"^[0-9]+").unwrap();
     static ref BOOLEAN_LITERAL_REGEX: Regex = Regex::new(r"^(true|false)").unwrap();
-    static ref OPERATOR_REGEX: Regex = Regex::new(r"^(==|!=|<=|>=|\+|-|\*|/|%|=|<|>|and\b|or\b|not\b|&|new\b|delete\b)").unwrap();
+    static ref OPERATOR_REGEX: Regex = Regex::new(r"^(==|!=|<=|>=|\+|-|\*|/|%|=|<|>|and\b|or\b|not\b|&)").unwrap();
     static ref PUNCTUATION_REGEX: Regex = Regex::new(r"^(\(|\)|\{|\}|,|;|:)").unwrap();
-    static ref KEYWORD_REGEX: Regex = Regex::new(r"^(while\b|do\b|if\b|then\b|else\b|var\b|fun\b|return\b)").unwrap();
+    static ref KEYWORD_REGEX: Regex = Regex::new(r"^(while\b|do\b|if\b|then\b|else\b|var\b|fun\b|return\b|new\b|delete\b)").unwrap();
 
     // Order is significant here. The first match is the one that will be used.
     static ref TOKEN_REGEX_TO_TYPE: Vec<(Regex, TokenType)> = vec![
@@ -321,7 +327,7 @@ mod tests {
             delete x;
         ").expect("Shoulve tokenized");
 
-        assert_eq!(tokens[7].token_type, TokenType::Operator);
-        assert_eq!(tokens[13].token_type, TokenType::Operator);   
+        assert_eq!(tokens[7].token_type, TokenType::Keyword);
+        assert_eq!(tokens[13].token_type, TokenType::Keyword);   
     }
 }

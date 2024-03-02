@@ -2,9 +2,11 @@ use crate::{interpreter::{Param, UserDefinedFunction}, tokenizer::{Op, SourceLoc
 use lazy_static::lazy_static;
 
 lazy_static! {
-    static ref BINARY_OP_PRECEDENCE: Vec<Vec<Op>> = vec![
+    static ref LOGICAL_OP_PRECEDENCE: Vec<Vec<Op>> = vec![
         vec![Op::And],
         vec![Op::Or],
+    ];
+    static ref BINARY_OP_PRECEDENCE: Vec<Vec<Op>> = vec![
         vec![Op::Equals, Op::NotEquals],
         vec![Op::LT, Op::GT, Op::LTE, Op::GTE],
         vec![Op::Add, Op::Sub],
@@ -14,7 +16,6 @@ lazy_static! {
         vec![Op::Not], 
         vec![Op::UnarySub],
         vec![Op::AddressOf, Op::Deref],
-        vec![Op::New, Op::Delete],
     ];
 }
 
@@ -66,6 +67,11 @@ pub enum Expr<T> {
         id: Box<T>,
         type_annotation: Option<Box<T>>,
         init: Box<T>,
+    },
+    Logical {
+        left: Box<T>,
+        operator: Op,
+        right: Box<T>,
     },
     Binary {
         left: Box<T>,
@@ -454,10 +460,47 @@ impl Parser {
         Ok(left)
     }
 
+    ///
+    /// This is a complete copypasta from parse_binary_precedence_level,
+    /// The difference is that it produces an Expr::Logical.
+    fn parse_logical_precedence_level(&mut self, level: usize) -> Result<ASTNode, SyntaxError> {
+        if level >= LOGICAL_OP_PRECEDENCE.len() {
+            return self.parse_binary_precedence_level(0);
+        }
+
+        let ops = LOGICAL_OP_PRECEDENCE
+            .get(level)
+            .expect("Invalid precedence level");
+
+        let mut left = self.parse_logical_precedence_level(level + 1)?;
+
+        loop {
+            if let Ok(operator) = Op::logical_from_str(&self.peek()?.value) {
+                if ops.contains(&operator) {
+                    self.consume(TokenType::Operator)?;
+                    let right = self.parse_logical_precedence_level(level + 1)?;
+                    let start = left.start.clone();
+                    let end = right.end.clone();
+                    left = ASTNode::new(Expr::Logical {
+                        left: Box::new(left),
+                        operator,
+                        right: Box::new(right),
+                    }, start, end)
+                } else {
+                    break;
+                }
+            } else {
+                break;
+            }
+        }
+
+        Ok(left)
+    }
+
     fn parse_assignment_expression(&mut self) -> Result<ASTNode, SyntaxError> {
-        let left = self.parse_binary_precedence_level(0)?;
+        let left = self.parse_logical_precedence_level(0)?;
         let start = left.start.clone();
-        if let Ok(op) = Op::binary_from_str(&self.peek()?.value) {
+        if let Ok(op) = Op::from_str(&self.peek()?.value) {
             if let Op::Assign = op {
                 self.consume(TokenType::Operator)?;
                 let right = self.parse_assignment_expression()?;
@@ -467,7 +510,7 @@ impl Parser {
                     right: Box::new(right),
                 }, start, end))
             } else {
-                self.parse_binary_precedence_level(0)
+                self.parse_logical_precedence_level(0)
             }
         } else {
             Ok(left)
@@ -1254,25 +1297,15 @@ fn assign_to_deref() {
 
 #[test]
 fn new_and_delete() {
-    let n = p("
+    let _n = p("
         new Int(123)
     ");
-    if let Expr::Unary { operand, operator } = n.expr {
-        assert!(matches!(operand.expr, Expr::Call { .. }));
-        assert_eq!(operator, Op::New);
-    } else {
-        panic!("Wrong")
-    }
+    
 
-    let n = p("
+    let _n = p("
         delete x
     ");
-    if let Expr::Unary { operand, operator } = n.expr {
-        assert!(matches!(operand.expr, Expr::Identifier { .. }));
-        assert_eq!(operator, Op::Delete);
-    } else {
-        panic!("Wrong")
-    }
+    
 }
 
 }

@@ -227,6 +227,10 @@ fn typecheck(node: ASTNode, sym_table: &mut Box<SymTable<Type>>) -> TypedASTNode
         Expr::IntegerLiteral { value } => TypedASTNode { expr: Expr::IntegerLiteral { value }, node_type: Type::Integer },
         Expr::BooleanLiteral { value } => TypedASTNode { expr: Expr::BooleanLiteral { value }, node_type: Type::Boolean },
         Expr::Identifier { value } => typecheck_identifier(value, sym_table),
+        Expr::Logical { left, operator, right } => {
+            // Here could be some custom logic, but for now typechecking logical like any binary works.
+            typecheck_binary_op(left, right, operator, sym_table)
+        },
         Expr::Binary { left, operator, right } => {
             typecheck_binary_op(left, right, operator, sym_table)
         },

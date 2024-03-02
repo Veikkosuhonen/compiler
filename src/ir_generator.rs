@@ -206,10 +206,10 @@ fn generate(node: &TypedASTNode, instructions: &mut Vec<IREntry>, var_table: &mu
             });
             dest
         },
-        Expr::Binary { left, operator, right } => {
+        Expr::Logical { left, operator, right } => {
             let dest = var_table.create_unnamed(node.node_type.clone());
             let fun = var_table.get(&operator.to_string());
-
+            
             match fun.name.as_str() {
                 "and" => {
                     let left = generate(&left, instructions, var_table, dest_name.clone());
@@ -239,19 +239,24 @@ fn generate(node: &TypedASTNode, instructions: &mut Vec<IREntry>, var_table: &mu
                     instructions.push(IREntry::copy(right, dest.clone(), 0));
                     instructions.push(IREntry { instruction: Instr::Label(end_label) });
                 },
-                _ => {
-                    let left = generate(&left, instructions, var_table, dest.name.clone());
-                    let right = generate(&right, instructions, var_table, dest.name.clone());
-                    instructions.push(IREntry { 
-                        // location: , 
-                        instruction: Instr::Call { 
-                            fun: Box::new(fun), 
-                            args: vec![Box::new(left), Box::new(right)], 
-                            dest: Box::new(dest.clone()),
-                        }
-                    });
-                },
+                _ => panic!("Unknown logical operation {}", fun.name)
             }
+
+            dest
+        },
+        Expr::Binary { left, operator, right } => {
+            let dest = var_table.create_unnamed(node.node_type.clone());
+            let fun = var_table.get(&operator.to_string());
+            let left = generate(&left, instructions, var_table, dest.name.clone());
+            let right = generate(&right, instructions, var_table, dest.name.clone());
+            instructions.push(IREntry { 
+                // location: , 
+                instruction: Instr::Call { 
+                    fun: Box::new(fun), 
+                    args: vec![Box::new(left), Box::new(right)], 
+                    dest: Box::new(dest.clone()),
+                }
+            });
             
             dest
         },

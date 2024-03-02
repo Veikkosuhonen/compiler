@@ -23,7 +23,7 @@ pub struct UserDefinedFunction {
 
 #[derive(Debug, Clone)]
 pub enum Function {
-    BuiltIn(BuiltIn),
+    BuiltIn(String),
     UserDefined(Rc<UserDefinedFunction>),
 }
 
@@ -119,12 +119,8 @@ impl Stack {
         self.get_addr(addr)
     }
 
-    pub fn unit(&self) -> Address {
-        Address { addr: 0 }
-    }
-
     /// A mess!
-    pub fn block_scope(&mut self, f: impl FnOnce(&mut Self) -> Address) -> Address {
+    pub fn block_scope(&mut self, f: impl FnOnce(&mut Self) -> EvalRes) -> EvalRes {
         let outer_symtab = mem::replace(&mut self.sym_table, Default::default());
         let inner_symtab = SymTable::new(Some(outer_symtab));
         let _ = mem::replace(&mut self.sym_table, inner_symtab);
@@ -138,11 +134,11 @@ impl Stack {
         result
     }
 
-    pub fn function_scope(&mut self, args: &Vec<(Symbol, Address)>, f: impl FnOnce(&mut Self) -> Address) -> Address {
+    pub fn function_scope(&mut self, args: &Vec<(Symbol, Value)>, f: impl FnOnce(&mut Self) -> EvalRes) -> EvalRes {
         let outer_symtab = mem::replace(&mut self.sym_table, Default::default());
         let mut inner_symtab = SymTable::new(Some(outer_symtab));
         for (arg_symbol, arg_val) in args {
-            inner_symtab.symbols.insert(arg_symbol.clone(), arg_val.clone());
+            inner_symtab.symbols.insert(arg_symbol.clone(), self.push(arg_val.clone()));
         }
         let _ = mem::replace(&mut self.sym_table, inner_symtab);
         let result = f(self);
@@ -156,60 +152,46 @@ impl Stack {
     }
 }
 
+pub type EvalRes = (Value, Option<Address>);
+
 fn eval_binary_op(
     left_node: &Box<ASTNode>, 
     right_node: &Box<ASTNode>, 
     operator: &Op, 
     stack: &mut Stack
-) -> Address {
-    let left_val = interpret(&left_node, stack);
-
-    if let Value::Function(op_function) = stack.get(Symbol::Operator(*operator)) {
-        // Lazy eval to enable short circuiting
-        let eval_right = |stack: &mut Stack| { interpret(&right_node, stack) };
-        match op_function {
-            Function::BuiltIn(builtin) => eval_builtin_binary(*builtin, left_val, eval_right, stack),
-            Function::UserDefined(_) => panic!("Not yet implemented")
-        }
-    } else {
-        panic!("Undefined operator {:?}", operator)
-    }
+) -> EvalRes {
+    let left  = interpret(&left_node, stack).0;
+    let right = interpret(&right_node, stack).0;
+    (eval_builtin_binary(*operator, left, right), None)
 }
 
 fn eval_unary_op(
     operand: &Box<ASTNode>,
     operator: &Op,
     stack: &mut Stack
-) -> Address {
+) -> EvalRes {
     let operand = interpret(&operand, stack);
-    if let Value::Function(op_function) = stack.get(Symbol::Operator(*operator)) {
-        match op_function {
-            Function::BuiltIn(builtin) => eval_builtin_unary(*builtin, operand, stack),
-            Function::UserDefined(_) => panic!("Not yet implemented")
-        }
-    } else {
-        panic!("Undefined operator {:?}", operator)
-    }
+    (eval_builtin_unary(*operator, operand, stack), None)
 }
 
 fn eval_call_expression(
     callee: &Box<ASTNode>,
     argument_expr: &Vec<Box<ASTNode>>,
     stack: &mut Stack
-) -> Address {
+) -> EvalRes {
     if let Expr::Identifier { value: function_id } = &callee.expr {
         // This is horribly inefficient, we might be cloning a massive function.
         let called_function = stack.get(Symbol::Identifier(function_id.to_string())).clone();
         if let Value::Function(called_function) = called_function {
             match called_function {
-                Function::BuiltIn(builtin) => {
-                    let builtin = builtin.clone(); // Clone here so no more immutable ref
-                    let mut args: Vec<Address> = vec![];
+                Function::BuiltIn(id) => {
+                    let mut args: Vec<Value> = vec![];
                     for expr in argument_expr {
-                        let addr = interpret(&expr, stack);
-                        args.push(addr);
+                        let arg_v= interpret(&expr, stack).0;
+                        args.push(arg_v);
                     }
-                    eval_builtin_function(builtin, args, stack)
+                    let result = eval_builtin_function(id, args);
+                    (result, None)
                 },
                 Function::UserDefined(function) => eval_user_defined_function(function, argument_expr, stack),
             }
@@ -225,13 +207,13 @@ fn eval_user_defined_function(
     function: Rc<UserDefinedFunction>,
     argument_expr: &Vec<Box<ASTNode>>,
     stack: &mut Stack
-) -> Address {
-    let mut args: Vec<Address> = vec![];
+) -> EvalRes {
+    let mut args: Vec<Value> = vec![];
     for expr in argument_expr {
-        args.push(interpret(&expr, stack));
+        args.push(interpret(&expr, stack).0);
     }
 
-    let mut named_arguments: Vec<(Symbol, Address)> = vec![];
+    let mut named_arguments: Vec<(Symbol, Value)> = vec![];
 
     for (idx, param) in function.params.iter().enumerate() {
         named_arguments.push((
@@ -242,18 +224,54 @@ fn eval_user_defined_function(
 
     stack.function_scope(&named_arguments, |inner| {
         let implicit_return = interpret(&function.body, inner);
-        inner.sym_table.returns.as_ref().unwrap_or(&implicit_return).clone()
+        let ret_addr = inner.sym_table.returns.as_ref();
+        if let Some(addr) = ret_addr {
+            return (
+                inner.get_addr(addr).clone(),
+                Some(addr.clone())
+            )
+        }
+        implicit_return
     })
 }
 
-fn interpret(node: &ASTNode, stack: &mut Stack) -> Address {
+fn eval_assignment_left_side(node: &ASTNode, stack: &mut Stack) -> Address {
+    match &node.expr {
+        Expr::Identifier { value: id } => {
+            stack.sym_table.get(&Symbol::Identifier(id.clone()))
+        },
+        Expr::Unary { operator: Op::Deref, operand } => {
+            let pointer_addr = eval_assignment_left_side(operand, stack);
+            let pointer = stack.get_addr(&pointer_addr);
+            if let Value::Pointer(pointed_addr) = pointer {
+                println!("Assigning to {}", pointed_addr.addr);
+                pointed_addr.clone()
+            } else {
+                panic!("Left hand side of an assignment must be an identifier or a pointer dereference")
+            }
+        },
+        _ => panic!("Left side of an assignment must be an identifier or a pointer dereference"),
+    }
+}
+
+fn interpret(node: &ASTNode, stack: &mut Stack) -> EvalRes {
     match &node.expr {
         Expr::IntegerLiteral { value } => {
-            stack.push(Value::Integer(*value))
+            (Value::Integer(*value), None)
         },
         Expr::BooleanLiteral { value } => {
-            stack.push(Value::Boolean(*value))
-        }
+            (Value::Boolean(*value), None)
+        },
+        Expr::Logical { left, operator, right } => {
+            let left =  interpret(left, stack).0;
+            let left_bval: bool = (&left).into();
+            if *operator == Op::Or {
+                if left_bval { return (left, None) };
+            } else {
+                if !left_bval { return (left, None) };
+            }
+            interpret(&right, stack)
+        },
         Expr::Binary { left, operator, right } => {
             eval_binary_op(left, right, operator, stack)
         },
@@ -261,79 +279,59 @@ fn interpret(node: &ASTNode, stack: &mut Stack) -> Address {
             eval_unary_op(operand, operator, stack)
         }
         Expr::If { condition, then_branch, else_branch } => {
-            let condition_result = interpret(&condition, stack);
-            match stack.get_addr(&condition_result) {
-                Value::Boolean(condition_val) => {
-                    if *condition_val {
-                        interpret(&then_branch, stack)
-                    } else if let Some(else_branch) = else_branch {
-                        interpret(&else_branch, stack)
-                    } else {
-                        stack.unit()
-                    }
-                },
-                _ => panic!("If expression condition must be a boolean"),
+            if interpret(&condition, stack).0.into() {
+                interpret(&then_branch, stack)
+            } else if let Some(else_branch) = else_branch {
+                interpret(&else_branch, stack)
+            } else {
+                (Value::Unit, None)
             }
         },
         Expr::While { condition, body } => {
-            fn eval_cond(stack: &mut Stack, cond: &Box<ASTNode>) -> Value {
-                let addr = interpret(&cond, stack);
-                stack.get_addr(&addr).clone()
-            }
-            while eval_cond(stack, condition).try_into().expect("While expression condition must return a boolean") {
+            while interpret(&condition, stack).0.into() {
                 interpret(&body, stack);
                 if stack.sym_table.returns.is_some() {
                     break;
                 }
             }
-            stack.unit()
+            (Value::Unit, None)
         },
         Expr::Block { statements, result } => {
             stack.block_scope(|inner| {
                 for node in statements {
                     interpret(&node, inner);
                     if inner.sym_table.returns.is_some() {
-                        return inner.unit();
+                        return (Value::Unit, None);
                     }
                 }
                 interpret(&result, inner)
             })
         },
         Expr::Return { result } => {
-            let value = interpret(&result, stack);
-            stack.sym_table.returns = Some(value);
-            stack.unit()
+            let value = interpret(&result, stack).0;
+            stack.sym_table.returns = Some(stack.push(value));
+            (Value::Unit, None)
         },
-        Expr::Identifier { value } => stack.sym_table.get(&Symbol::Identifier(value.clone())),
+        Expr::Identifier { value } => {
+            let addr = stack.sym_table.get(&Symbol::Identifier(value.clone()));
+            (
+                stack.get_addr(&addr).clone(),
+                Some(addr)
+            )
+        },
         Expr::Assignment { left, right } => {
-            match &left.expr {
-                Expr::Identifier { value } => {
-                    // Get where the new value is stored, and overwrite old value with that.
-                    let new_value_addr = interpret(&right, stack);
-                    let value_addr = stack.sym_table.get(&Symbol::Identifier(value.clone()));
-                    stack.memory[value_addr.addr] = stack.memory[new_value_addr.addr].clone();
-                    value_addr
-                },
-                Expr::Unary { operator,.. } => {
-                    match operator {
-                        Op::Deref => {
-                            let value_addr = interpret(left, stack);
-                            let new_value_addr = interpret(&right, stack);
-                            println!("Deref assign to {:?} with value from {:?}", value_addr, new_value_addr);
-                            stack.memory[value_addr.addr] = stack.memory[new_value_addr.addr].clone();
-                            value_addr
-                        },
-                        _ => panic!("Left side of an assignment must be an identifier or a deref unary op"),
-                    }
-                },
-                _ => panic!("Left side of an assignment must be an identifier or a deref unary op"),
-            }
+            let dest_addr = eval_assignment_left_side(left, stack);
+            let value = interpret(&right, stack).0;
+            stack.memory[dest_addr.addr] = value.clone();
+            (value, Some(dest_addr))
         },
         Expr::VariableDeclaration { id, init,.. } => {
             if let Expr::Identifier { value } = &id.expr {
-                let init_value = interpret(&init, stack);
-                stack.sym_table.symbols.insert(Symbol::Identifier(value.clone()), init_value);
-                stack.unit()
+                let init_value = interpret(&init, stack).0;
+                println!("Declaring {:?}", init_value);
+                let address = stack.push(init_value);
+                stack.sym_table.symbols.insert(Symbol::Identifier(value.clone()), address);
+                (Value::Unit, None)
             } else {
                 panic!("Id of a variable declaration must be an identifier");
             }
@@ -341,7 +339,7 @@ fn interpret(node: &ASTNode, stack: &mut Stack) -> Address {
         Expr::Call { callee, arguments } => {
             eval_call_expression(callee, arguments, stack)
         },
-        Expr::Unit => stack.unit(),
+        Expr::Unit => (Value::Unit, None),
     }
 }
 
@@ -349,9 +347,9 @@ fn interpret(node: &ASTNode, stack: &mut Stack) -> Address {
 fn get_toplevel_sym_table() -> Stack {
     let sym_table = SymTable::new(None);
     let mut stack = Stack::new(sym_table);
-    let builtins = get_builtin_function_symbol_value_mappings();
-    for (symbol, val) in builtins {
-        stack.create(symbol, val);
+    for (sym, val) in get_builtin_function_values() {
+        let addr = stack.push(val);
+        stack.sym_table.symbols.insert(sym, addr);
     }
     stack
 }
@@ -369,11 +367,10 @@ pub fn interpret_program(module: &Module<UserDefinedFunction>) -> Value {
         SourceLocation::at(0, 0)
     );
 
-    let return_address = eval_call_expression(&Box::new(main_ref), &vec![], &mut stack);
+    let return_value = eval_call_expression(&Box::new(main_ref), &vec![], &mut stack);
+    stack.debug();
 
-    // stack.debug();
-
-    stack.get_addr(&return_address).clone()
+    return_value.0
 }
 
 #[cfg(test)]
@@ -624,6 +621,7 @@ mod tests {
         var y = &x;
         *y
         ");
+
         if let Value::Integer(i) = res {
             assert_eq!(i, 69);
         }

@@ -1,6 +1,4 @@
-fun f(x: Int): Int {
-    return 10;
-    x * x
-}
-
-f(2);
+fun square(x: Int): Int {
+    return x * x
+ }
+ print_int(square(4))

@@ -351,7 +351,9 @@ fn generate(node: &TypedASTNode, instructions: &mut Vec<IREntry>, var_table: &mu
             instructions.push(IREntry { instruction: Instr::Label(end_label) });
 
             dest
-        }
+        },
+        Expr::New { .. } => todo!("new not implememnted"),
+        Expr::Delete { .. } => todo!("delete not implememnted")
     }
 }
 

@@ -98,6 +98,12 @@ pub enum Expr<T> {
     Return {
         result: Box<T>,
     },
+    New {
+        init: Box<T>,
+    },
+    Delete {
+        id: Box<T>,
+    },
 }
 
 #[derive(Debug)]
@@ -270,19 +276,6 @@ impl Parser {
     }
 
     fn parse_postfix_unary(&mut self) -> Result<ASTNode, SyntaxError> {
-        // let id = self.consume(TokenType::Identifier)?;
-        // let mut end = id.end;
-        // let mut modifiers: Vec<String> = vec![];
-        // while let Ok(modifier) = self.consume_with_value(TokenType::Operator, "*") {
-        //     end = modifier.end.clone();
-        //     modifiers.push(modifier.value);
-        // }
-// 
-        // Ok(ASTNode::new(Expr::Type { 
-        //     id: id.value, 
-        //     modifiers,
-        // }, id.start, end))
-
         let mut top_unary_node = self.parse_factor()?;
         let start = top_unary_node.start.clone();
         while let Ok(operator) = Op::unary_from_str(&self.peek()?.value) {
@@ -358,6 +351,17 @@ impl Parser {
         }, start, end))
     }
 
+    fn parse_new_expression(&mut self) -> Result<ASTNode, SyntaxError> {
+        let start = self.current_start().clone();
+        self.consume_keyword("new")?;
+        let constructor = self.parse_call_expression()?;
+        let end = constructor.end.clone();
+
+        Ok(ASTNode::new(Expr::New {
+            init: Box::new(constructor),
+        }, start, end))
+    }
+
     fn parse_parentheses(&mut self) -> Result<ASTNode, SyntaxError> {
         self.consume_left_paren()?;
         let expr = self.parse_expression()?;
@@ -370,6 +374,8 @@ impl Parser {
             self.parse_if_expression()
         } else if self.current_is("while") {
             self.parse_while_expression()
+        } else if self.current_is("new") {
+            self.parse_new_expression()
         } else {
             Err(self.error_here(&format!("Unexpected keyword {:?}", self.peek()?.value)))
         }
@@ -547,11 +553,21 @@ impl Parser {
         Ok(ASTNode::new(Expr::Return { result: Box::new(result) }, start, end))
     }
 
+    fn parse_delete_expression(&mut self) -> Result<ASTNode, SyntaxError> {
+        let start = self.current_start().clone();
+        self.consume_with_value(TokenType::Keyword, "delete")?;
+        let id = self.parse_identifier()?;
+        let end = id.end.clone();
+        Ok(ASTNode::new(Expr::Delete { id: Box::new(id) }, start, end))
+    }
+
     fn parse_statement(&mut self) -> Result<ASTNode, SyntaxError> {
         if self.current_is("var") {
             self.parse_variable_declaration()
         } else if self.current_is("return") {
             self.parse_return_expression()
+        } else if self.current_is("delete") {
+            self.parse_delete_expression()
         } else {
             self.parse_expression()
         }

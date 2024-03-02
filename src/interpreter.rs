@@ -254,6 +254,16 @@ fn eval_assignment_left_side(node: &ASTNode, stack: &mut Stack) -> Address {
     }
 }
 
+fn eval_constructor_expression(init: &ASTNode, stack: &mut Stack) -> Value {
+    match &init.expr {
+        Expr::Call { arguments,.. } => {
+            // Works on the happy path, fix this later
+            interpret(arguments.first().unwrap(), stack).0
+        },
+        _ => panic!("Constructor must be a call expression"),
+    }
+}
+
 fn interpret(node: &ASTNode, stack: &mut Stack) -> EvalRes {
     match &node.expr {
         Expr::IntegerLiteral { value } => {
@@ -335,6 +345,19 @@ fn interpret(node: &ASTNode, stack: &mut Stack) -> EvalRes {
             } else {
                 panic!("Id of a variable declaration must be an identifier");
             }
+        },
+        Expr::New { init } => {
+            let value = eval_constructor_expression(init, stack);
+            let addr = stack.push(value);
+            (
+                Value::Pointer(addr),
+                None,
+            )
+        },
+        Expr::Delete { id } => {
+            let addr = interpret(id, stack).1.expect("Delete called on a non-allocated variable");
+            stack.memory[addr.addr] = Value::Unit;
+            (Value::Unit, None)
         },
         Expr::Call { callee, arguments } => {
             eval_call_expression(callee, arguments, stack)

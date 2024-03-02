@@ -9,7 +9,7 @@ pub fn report_tokenisation_error(source: &String, error: &TokenisationError) {
         caret.push(' ');
     }
     caret.push('^');
-    println!("Tokenisation error at line {}:\n{}\n{}\n{}", line, source_line, caret, error.message);
+    eprintln!("Tokenisation error at line {}:\n{}\n{}\n{}", line, source_line, caret, error.message);
 }
 
 pub fn report_syntax_error(source: &String, error: &SyntaxError) {
@@ -24,6 +24,6 @@ pub fn report_syntax_error(source: &String, error: &SyntaxError) {
     for _ in start_col - 1..end_col - 1 {
         caret.push('^');
     }
-    println!("Syntax error at line {}:\n{}\n{}\n{}", start_line, line, caret, error.message);
+    eprintln!("Syntax error at line {}:\n{}\n{}\n{}", start_line, line, caret, error.message);
 }
 

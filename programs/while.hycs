@@ -3,7 +3,7 @@ var x = 1;
 var iters = 0;
 var N = 1000;
 while iters < N do {
-    x = x + x + 1;
+    x = x + 1;
     iters = iters + 1;
     print_int(x);
 }

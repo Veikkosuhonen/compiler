@@ -124,24 +124,40 @@ impl Stack {
         let outer_symtab = mem::replace(&mut self.sym_table, Default::default());
         let inner_symtab = SymTable::new(Some(outer_symtab));
         let _ = mem::replace(&mut self.sym_table, inner_symtab);
-        let result = f(self);
+        let original_stack_size = self.memory.len();
+        let mut result = f(self);
         let outer_symtab = mem::replace(&mut self.sym_table.parent, Default::default());
         let returns = self.sym_table.returns.clone();
         let _ = mem::replace(&mut self.sym_table, outer_symtab.unwrap());
-        if returns.is_some() {
-            self.sym_table.returns = returns;
+        if let Some(return_value_addr) = returns {
+            // Copy return value from block's local memory to the return value position
+            let return_value = self.memory.swap_remove(return_value_addr.addr);
+            self.memory.truncate(original_stack_size);
+            let return_value_addr = self.push(return_value);
+            self.sym_table.returns = Some(return_value_addr.clone());
+            result.1 = Some(return_value_addr);
+        } else {
+            self.memory.truncate(original_stack_size);
+            result.1 = None;
         }
         result
     }
 
     pub fn function_scope(&mut self, args: &Vec<(Symbol, Value)>, f: impl FnOnce(&mut Self) -> EvalRes) -> EvalRes {
         let outer_symtab = mem::replace(&mut self.sym_table, Default::default());
+        // Save stack size before pushing arguments
+        let original_stack_size = self.memory.len();
         let mut inner_symtab = SymTable::new(Some(outer_symtab));
         for (arg_symbol, arg_val) in args {
             inner_symtab.symbols.insert(arg_symbol.clone(), self.push(arg_val.clone()));
         }
         let _ = mem::replace(&mut self.sym_table, inner_symtab);
-        let result = f(self);
+        // Eval function. Return value is given in result.0
+        let mut result = f(self);
+        // Restore stack to original size, dropping function locals
+        self.memory.truncate(original_stack_size);
+        // Make sure return value has no address, it would be invalid.
+        result.1 = None;
         let outer_symtab = mem::replace(&mut self.sym_table.parent, Default::default());
         let _ = mem::replace(&mut self.sym_table, outer_symtab.unwrap());
         result
@@ -244,7 +260,6 @@ fn eval_assignment_left_side(node: &ASTNode, stack: &mut Stack) -> Address {
             let pointer_addr = eval_assignment_left_side(operand, stack);
             let pointer = stack.get_addr(&pointer_addr);
             if let Value::Pointer(pointed_addr) = pointer {
-                println!("Assigning to {}", pointed_addr.addr);
                 pointed_addr.clone()
             } else {
                 panic!("Left hand side of an assignment must be an identifier or a pointer dereference")
@@ -338,7 +353,6 @@ fn interpret(node: &ASTNode, stack: &mut Stack) -> EvalRes {
         Expr::VariableDeclaration { id, init,.. } => {
             if let Expr::Identifier { value } = &id.expr {
                 let init_value = interpret(&init, stack).0;
-                println!("Declaring {:?}", init_value);
                 let address = stack.push(init_value);
                 stack.sym_table.symbols.insert(Symbol::Identifier(value.clone()), address);
                 (Value::Unit, None)
@@ -391,7 +405,9 @@ pub fn interpret_program(module: &Module<UserDefinedFunction>) -> Value {
     );
 
     let return_value = eval_call_expression(&Box::new(main_ref), &vec![], &mut stack);
-    stack.debug();
+    // stack.debug();
+
+    eprintln!("stack len = {}", stack.memory.len());
 
     return_value.0
 }

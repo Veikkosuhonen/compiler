@@ -1,6 +1,6 @@
 
 fun fibonacci(n: Int): Int {
-    print_int(n);
+    // print_int(n);
     if n <= 0 then {
         0
     } else {
@@ -12,4 +12,8 @@ fun fibonacci(n: Int): Int {
     }
 }
 
-print_int(fibonacci(read_int()));
+var i = 0;
+while i < 2000 do {
+    print_int(fibonacci(11));
+    i = i + 1;
+}

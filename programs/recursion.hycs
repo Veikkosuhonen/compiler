@@ -1,5 +1,5 @@
 fun recurse(x: Int, i: Int): Int {
-    print_int(x);
+    // print_int(x);
     if i > 10 then {
         x
     } else {

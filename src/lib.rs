@@ -1,4 +1,4 @@
-use std::fs;
+use std::{fs, time::Instant};
 
 use interpreter::UserDefinedFunction;
 use parser::Module;
@@ -35,14 +35,17 @@ fn parse_source(contents: String) -> Module<UserDefinedFunction> {
 
 pub fn parse_file(path: &String) -> Module<UserDefinedFunction> {
     let contents = read_file(path);
+    let start = Instant::now();
     let module = parse_source(contents);
-
+    eprintln!("Tokenize & parse in {} ms", start.elapsed().as_millis());
     module
 }
 
 pub fn interpret_file(path: &String) -> interpreter::Value {
     let module = parse_file(path);
+    let start = Instant::now();
     let result = interpreter::interpret_program(&module);
+    eprintln!("Interpret in {} ms", start.elapsed().as_millis());
 
     result
 }

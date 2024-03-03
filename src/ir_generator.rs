@@ -426,4 +426,13 @@ mod tests {
 
         // println!("{}", _ir.get("main").unwrap().iter().map(|i| i.to_string()).collect::<Vec<String>>().join("\n"))
     }
+
+    #[test]
+    fn logical_expr() {
+        let _ir = i("
+            true and false
+        ");
+
+        println!("{}", _ir.get("main").unwrap().iter().map(|i| i.to_string()).collect::<Vec<String>>().join("\n"))
+    }
 }

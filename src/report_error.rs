@@ -2,8 +2,9 @@ use crate::{parser::SyntaxError, tokenizer::TokenisationError};
 
 pub fn report_tokenisation_error(source: &String, error: &TokenisationError) {
     let line = error.location.line;
+    let line_idx = line.checked_sub(1).unwrap_or(0);
     let col = error.location.column;
-    let source_line = source.split("\n").nth(line - 1).unwrap();
+    let source_line = source.split("\n").nth(line_idx).unwrap_or("");
     let mut caret = String::new();
     for _ in 0..col {
         caret.push(' ');
@@ -14,9 +15,10 @@ pub fn report_tokenisation_error(source: &String, error: &TokenisationError) {
 
 pub fn report_syntax_error(source: &String, error: &SyntaxError) {
     let start_line = error.start.line;
+    let line_idx = start_line.checked_sub(1).unwrap_or(0);
     let start_col = error.start.column;
     let end_col = error.end.column;
-    let line = source.split("\n").nth(start_line - 1).unwrap();
+    let line = source.split("\n").nth(line_idx).unwrap_or("");
     let mut caret = String::new();
     for _ in 0..start_col - 1 {
         caret.push(' ');

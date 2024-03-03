@@ -228,8 +228,7 @@ fn typecheck(node: ASTNode, sym_table: &mut Box<SymTable<Type>>) -> TypedASTNode
         Expr::BooleanLiteral { value } => TypedASTNode { expr: Expr::BooleanLiteral { value }, node_type: Type::Boolean },
         Expr::Identifier { value } => typecheck_identifier(value, sym_table),
         Expr::Logical { left, operator, right } => {
-            // Here could be some custom logic, but for now typechecking logical like any binary works.
-            typecheck_binary_op(left, right, operator, sym_table)
+            typecheck_logical_op(left, right, operator, sym_table)
         },
         Expr::Binary { left, operator, right } => {
             typecheck_binary_op(left, right, operator, sym_table)
@@ -498,6 +497,23 @@ fn typecheck_variable_declaration(
         panic!("Id of a variable declaration must be an identifier");
     }
 }
+
+fn typecheck_logical_op(
+    left_expr: Box<ASTNode>, 
+    right_expr: Box<ASTNode>, 
+    operator: Op, 
+    sym_table: &mut Box<SymTable<Type>>
+) -> TypedASTNode {
+    if let Type::Function(op_function) = sym_table.get(&mut Symbol::Operator(operator)) {
+        let left  = Box::new(typecheck(*left_expr, sym_table));
+        let right = Box::new(typecheck(*right_expr, sym_table));
+        let node_type = op_function.typecheck_call(&vec![&left, &right]);
+        TypedASTNode { expr: Expr::Logical { left, operator, right }, node_type }
+    } else {
+        panic!("Undefined operator {:?}", operator)
+    }
+}
+
 
 fn typecheck_binary_op(
     left_expr: Box<ASTNode>, 
@@ -879,6 +895,17 @@ mod tests {
             assert!(matches!(result.node_type, Type::Unit))
         } else {
             panic!("Wrong!")
+        }
+    }
+
+    #[test]
+    fn logical_expr() {
+        let m = t("
+            true and false
+        ");
+
+        if let Expr::Block { result,.. } = &m.main().body.expr {
+            assert!(matches!(result.expr, Expr::Logical {.. }));
         }
     }
 }

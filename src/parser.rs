@@ -1324,4 +1324,15 @@ fn new_and_delete() {
     
 }
 
+    #[test]
+    fn logical_expr() {
+        let _n = p("
+            true and false
+        ");
+
+        println!("{:?}",  _n);
+
+        assert!(matches!(_n.expr, Expr::Logical { .. }));
+    }
+
 }

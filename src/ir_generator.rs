@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::{builtin_functions::get_builtin_function_ir_vars, parser::{Expr, Module}, tokenizer::Op, type_checker::{Type, TypedASTNode, TypedUserDefinedFunction}};
+use crate::{builtin_functions::{get_builtin_function_ir_vars, get_builtin_type_constructor_ir_vars}, parser::{Expr, Module}, tokenizer::Op, type_checker::{Type, TypedASTNode, TypedUserDefinedFunction}};
 
 #[derive(Clone, Debug)]
 pub struct IRVar {
@@ -142,6 +142,9 @@ fn create_top_level_var_table(global_functions: &Vec<TypedUserDefinedFunction>, 
     for (name, var) in get_builtin_function_ir_vars() {
         var_table.vars.insert(name, var);
     }
+    for (name, var) in get_builtin_type_constructor_ir_vars() {
+        var_table.vars.insert(name, var);
+    }
 
     for function in global_functions {
         let sym = function.id.clone();
@@ -260,28 +263,7 @@ fn generate(node: &TypedASTNode, instructions: &mut Vec<IREntry>, var_table: &mu
             
             dest
         },
-        Expr::Call { callee, arguments } => {
-            if let Expr::Identifier { value } = &callee.expr {
-                let dest = var_table.create_unnamed(node.node_type.clone());
-                let mut argument_vars: Vec<Box<IRVar>> = vec![];
-                for arg in arguments {
-                    argument_vars.push(Box::new(generate(&arg, instructions, var_table, dest.name.clone())));
-                }
-                let fun = var_table.get(value);
-
-                instructions.push(IREntry { 
-                    // location: , 
-                    instruction: Instr::Call { 
-                        fun: Box::new(fun), 
-                        args: argument_vars, 
-                        dest: Box::new(dest.clone()),
-                    }
-                });
-                dest
-            } else {
-                panic!("Callee must be an identifier");
-            }
-        },
+        Expr::Call { callee, arguments } => generate_call(callee, arguments, instructions, var_table),
         Expr::Return { result } => {
             let return_var = generate(&result, instructions, var_table, dest_name.clone());
             instructions.push(IREntry::copy(return_var.clone(), var_table.get(&String::from("_return")), 0));
@@ -368,6 +350,51 @@ fn generate_assignment_left_side(node: &Box<TypedASTNode>, instructions: &mut Ve
     }
 }
 
+fn generate_call(callee: &Box<TypedASTNode>, arguments: &Vec<Box<TypedASTNode>>, instructions: &mut Vec<IREntry>, var_table: &mut IRVarTable) -> IRVar {
+    if let Expr::Identifier { value } = &callee.expr {
+        let fun = var_table.get(value);
+        let fun_type = fun.var_type.get_callable_type();
+
+        if let Type::Constructor(ctype) = fun_type.return_type {
+            generate_constructor_call(fun, *ctype, arguments, instructions, var_table)
+        } else {
+            generate_function_call(fun, fun_type.return_type, arguments, instructions, var_table)
+        }
+    } else {
+        panic!("Callee must be an identifier");
+    }
+}
+
+fn generate_constructor_call(fun: IRVar, constructor_type: Type, arguments: &Vec<Box<TypedASTNode>>, instructions: &mut Vec<IREntry>, var_table: &mut IRVarTable) -> IRVar {
+    let dest = var_table.create_unnamed(constructor_type);
+    let dest_name = dest.name.clone();
+
+    // Copy args to constructor shape
+    for arg in arguments {
+        let arg_var = generate(&arg, instructions, var_table, dest_name.clone());
+        instructions.push(IREntry::copy(arg_var, dest.clone(), 0));
+    }
+    
+    dest
+}
+
+fn generate_function_call(fun: IRVar, return_type: Type, arguments: &Vec<Box<TypedASTNode>>, instructions: &mut Vec<IREntry>, var_table: &mut IRVarTable) -> IRVar {
+    let dest = var_table.create_unnamed(return_type);
+    let mut argument_vars: Vec<Box<IRVar>> = vec![];
+    for arg in arguments {
+        argument_vars.push(Box::new(generate(&arg, instructions, var_table, dest.name.clone())));
+    }
+    instructions.push(IREntry { 
+        // location: , 
+        instruction: Instr::Call { 
+            fun: Box::new(fun), 
+            args: argument_vars, 
+            dest: Box::new(dest.clone()),
+        }
+    });
+    dest
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{parse_source, type_checker::typecheck_program};
@@ -431,6 +458,15 @@ mod tests {
     fn logical_expr() {
         let _ir = i("
             true and false
+        ");
+
+        // println!("{}", _ir.get("main").unwrap().iter().map(|i| i.to_string()).collect::<Vec<String>>().join("\n"))
+    }
+
+    #[test]
+    fn heap_alloc() {
+        let _ir = i("
+            var x = Int(123);
         ");
 
         println!("{}", _ir.get("main").unwrap().iter().map(|i| i.to_string()).collect::<Vec<String>>().join("\n"))

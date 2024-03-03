@@ -1,4 +1,4 @@
-use std::{io, slice::Iter};
+use std::io;
 
 use lazy_static::lazy_static;
 
@@ -118,8 +118,8 @@ lazy_static! {
     ];
 }
 
-pub fn get_builtin_referrable_types() -> Iter<'static, (Symbol, Type)> {
-    BUILTIN_REFERRABLE_TYPES.iter()
+pub fn get_builtin_referrable_types() -> Vec<(Symbol, Type)> {
+    BUILTIN_REFERRABLE_TYPES.iter().map(|(sym, t)| (sym.clone(), Type::Typeref(Box::new(t.clone())))).collect()
 }
 
 pub fn get_builtin_function_values() -> Vec<(Symbol, Value)> {
@@ -235,5 +235,11 @@ pub fn get_builtin_function_ir_vars() -> Vec<(String, IRVar)> {
     let ops = get_builtin_function_types();
     ops.iter().map(|(symbol, var_type)| 
         (symbol.to_string(), IRVar { name: symbol.to_string(), var_type: var_type.clone() })
+    ).collect()
+}
+
+pub fn get_builtin_type_constructor_ir_vars() -> Vec<(String, IRVar)> {
+    get_builtin_referrable_types().iter().map(|(symbol, var_type)| 
+        (symbol.to_string(), IRVar { name: symbol.to_string(), var_type: Type::Function(Box::new(var_type.get_callable_type())) })
     ).collect()
 }

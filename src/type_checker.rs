@@ -215,7 +215,7 @@ fn get_toplevel_sym_table() -> Box<SymTable<Type>> {
     }
 
     for (symbol, ref_type) in get_builtin_referrable_types() {
-        sym_table.symbols.insert(symbol.clone(), Type::Typeref(Box::new(ref_type.clone())));
+        sym_table.symbols.insert(symbol, ref_type);
     }
 
     sym_table

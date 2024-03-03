@@ -262,23 +262,6 @@ fn typecheck(node: ASTNode, sym_table: &mut Box<SymTable<Type>>) -> TypedASTNode
             sym_table.returns = Some(result.node_type.clone());
             TypedASTNode { expr: Expr::Return { result: Box::new(result) }, node_type: Type::Unit }
         },
-        Expr::New { init } => {
-            let constructor = typecheck(*init, sym_table);
-            if let Type::Constructor(constructed_type) = &constructor.node_type {
-                let node_type = Type::Pointer(constructed_type.clone());
-                TypedASTNode { expr: Expr::New { init: Box::new(constructor) }, node_type }
-            } else {
-                panic!("New expression init must be of type Constructor")
-            }
-        },
-        Expr::Delete { id } => {
-            let id = typecheck(*id, sym_table);
-            if let Type::Pointer(_) = &id.node_type {
-                TypedASTNode { expr: Expr::Delete { id: Box::new(id) }, node_type: Type::Unit }
-            } else {
-                panic!("Delete can only be called on a pointer")
-            }
-        },
     }
 }
 
@@ -899,6 +882,12 @@ mod tests {
     }
 
     #[test]
+    #[should_panic(expected = "Invalid argument type at index 0, expected Constructor(Generic(\"T\")) but got Integer")]
+    fn new_only_accepts_constructor() {
+        t("new 1");
+    }
+
+    #[test]
     fn logical_expr() {
         let m = t("
             true and false
@@ -906,6 +895,8 @@ mod tests {
 
         if let Expr::Block { result,.. } = &m.main().body.expr {
             assert!(matches!(result.expr, Expr::Logical {.. }));
+        } else {
+            panic!("Wrong!")
         }
     }
 }

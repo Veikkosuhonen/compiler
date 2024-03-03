@@ -334,8 +334,6 @@ fn generate(node: &TypedASTNode, instructions: &mut Vec<IREntry>, var_table: &mu
 
             dest
         },
-        Expr::New { .. } => todo!("new not implememnted"),
-        Expr::Delete { .. } => todo!("delete not implememnted")
     }
 }
 
@@ -356,7 +354,7 @@ fn generate_call(callee: &Box<TypedASTNode>, arguments: &Vec<Box<TypedASTNode>>,
         let fun_type = fun.var_type.get_callable_type();
 
         if let Type::Constructor(ctype) = fun_type.return_type {
-            generate_constructor_call(fun, *ctype, arguments, instructions, var_table)
+            generate_constructor_call(*ctype, arguments, instructions, var_table)
         } else {
             generate_function_call(fun, fun_type.return_type, arguments, instructions, var_table)
         }
@@ -365,7 +363,7 @@ fn generate_call(callee: &Box<TypedASTNode>, arguments: &Vec<Box<TypedASTNode>>,
     }
 }
 
-fn generate_constructor_call(fun: IRVar, constructor_type: Type, arguments: &Vec<Box<TypedASTNode>>, instructions: &mut Vec<IREntry>, var_table: &mut IRVarTable) -> IRVar {
+fn generate_constructor_call(constructor_type: Type, arguments: &Vec<Box<TypedASTNode>>, instructions: &mut Vec<IREntry>, var_table: &mut IRVarTable) -> IRVar {
     let dest = var_table.create_unnamed(constructor_type);
     let dest_name = dest.name.clone();
 

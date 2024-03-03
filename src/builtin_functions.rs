@@ -44,6 +44,8 @@ pub fn eval_builtin_function(id: String, args: Vec<Value>) -> Value {
         "print_int" => print_int(args),
         "print_bool" => print_bool(args),
         "read_int" => read_int(args),
+        "Int"  => args.first().unwrap().clone(),
+        "Bool" => args.first().unwrap().clone(),
         _ => panic!("Unknown builtin function {id}")
     }
 }
@@ -84,6 +86,10 @@ pub fn eval_builtin_unary(op: Op, operand: EvalRes, stack: &mut Stack) -> Value 
         let addr = operand.1.unwrap_or_else(|| stack.push(operand.0));
         return Value::Pointer(addr)
     }
+    if Op::New == op {
+        let addr = stack.alloc(operand.0);
+        return Value::Pointer(addr)
+    }
 
     match operand.0 {
         Value::Boolean(bval) => {
@@ -101,6 +107,7 @@ pub fn eval_builtin_unary(op: Op, operand: EvalRes, stack: &mut Stack) -> Value 
         Value::Pointer(addr) => {
             match op {
                 Op::Deref => stack.get_addr(&addr).clone(),
+                Op::Delete => { stack.free(&addr); Value::Unit },
                 _ => panic!("Invalid operator for pointer unary operation {:?}", op)
             }
         },
@@ -126,7 +133,9 @@ pub fn get_builtin_function_values() -> Vec<(Symbol, Value)> {
     [
         "print_int",
         "print_bool",
-        "read_int"
+        "read_int",
+        "Int",
+        "Bool",
     ].iter().map(|name| (
         Symbol::Identifier(name.to_string()),
         Value::Function(crate::interpreter::Function::BuiltIn(name.to_string()))
@@ -202,6 +211,14 @@ pub fn get_builtin_function_types() -> Vec<(Symbol, Type)> {
         (Op::Deref, FunctionType {
             param_types: vec![Type::Pointer(Box::new(Type::generic("T")))],
             return_type: Type::generic("T"),
+        }),
+        (Op::New, FunctionType {
+            param_types: vec![Type::Constructor(Box::new(Type::generic("T")))],
+            return_type: Type::Pointer(Box::new(Type::generic("T"))),
+        }),
+        (Op::Delete, FunctionType {
+            param_types: vec![Type::Pointer(Box::new(Type::generic("T")))],
+            return_type: Type::Unit,
         }),
     ];
 

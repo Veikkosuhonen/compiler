@@ -1,6 +1,7 @@
 use std::mem;
 use std::rc::Rc;
 use std::vec;
+use std::fmt;
 
 use crate::sym_table::{SymTable, Symbol};
 use crate::parser::{ASTNode, Expr, Module};
@@ -13,12 +14,21 @@ pub struct Param {
     pub param_type: Box<ASTNode>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct UserDefinedFunction {
     pub id: String,
     pub body: Box<ASTNode>,
     pub params: Vec<Param>,
     pub return_type: Box<ASTNode>,
+}
+
+
+impl fmt::Debug for UserDefinedFunction {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("UserDefinedFunction")
+            .field("id", &self.id)
+            .finish()
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -83,20 +93,28 @@ impl From<Value> for i32 {
 }
 
 #[derive(Clone, Default, PartialEq, Debug)]
+pub enum AddressKind { #[default] Stack, Heap }
+
+#[derive(Clone, Default, PartialEq, Debug)]
 pub struct Address {
     pub addr: usize,
+    pub kind: AddressKind,
+}
+
+impl Address {
+    pub fn stack(addr: usize) -> Self { Address { addr, kind: AddressKind::Stack } }
+    pub fn heap(addr: usize)  -> Self { Address { addr, kind: AddressKind::Heap } }
 }
 
 pub struct Stack {
     pub sym_table: Box<SymTable<Address>>,
-    pub memory: Vec<Value>,
+    pub stack: Vec<Value>,
+    pub heap: Vec<Value>,
 }
 
 impl Stack {
     pub fn new(sym_table: Box<SymTable<Address>>) -> Stack {
-        let mut stack = Stack { sym_table, memory: vec![] };
-        stack.push(Value::Unit);
-        stack
+        Stack { sym_table, stack: vec![], heap: vec![] }
     }
 
     pub fn create(&mut self, sym: Symbol, val: Value) {
@@ -105,13 +123,26 @@ impl Stack {
     }
 
     pub fn push(&mut self, val: Value) -> Address {
-        let addr = self.memory.len();
-        self.memory.push(val);
-        Address { addr }
+        let addr = self.stack.len();
+        self.stack.push(val);
+        Address::stack(addr)
+    }
+
+    pub fn alloc(&mut self, val: Value) -> Address {
+        let addr = self.heap.len();
+        self.heap.push(val);
+        Address::heap(addr)
+    }
+
+    pub fn free(&mut self, _addr: &Address) {
+        // Todo what
     }
 
     pub fn get_addr(&self, addr: &Address) -> &Value {
-        &self.memory[addr.addr]
+        match addr.kind {
+            AddressKind::Stack => &self.stack[addr.addr],
+            AddressKind::Heap => &self.heap[addr.addr],
+        }
     }
 
     pub fn get(&self, sym: Symbol) -> &Value {
@@ -124,20 +155,21 @@ impl Stack {
         let outer_symtab = mem::replace(&mut self.sym_table, Default::default());
         let inner_symtab = SymTable::new(Some(outer_symtab));
         let _ = mem::replace(&mut self.sym_table, inner_symtab);
-        let original_stack_size = self.memory.len();
+        let original_stack_size = self.stack.len();
         let mut result = f(self);
         let outer_symtab = mem::replace(&mut self.sym_table.parent, Default::default());
         let returns = self.sym_table.returns.clone();
         let _ = mem::replace(&mut self.sym_table, outer_symtab.unwrap());
+        // self.debug();
         if let Some(return_value_addr) = returns {
             // Copy return value from block's local memory to the return value position
-            let return_value = self.memory.swap_remove(return_value_addr.addr);
-            self.memory.truncate(original_stack_size);
+            let return_value = self.stack.swap_remove(return_value_addr.addr);
+            self.stack.truncate(original_stack_size);
             let return_value_addr = self.push(return_value);
             self.sym_table.returns = Some(return_value_addr.clone());
             result.1 = Some(return_value_addr);
         } else {
-            self.memory.truncate(original_stack_size);
+            self.stack.truncate(original_stack_size);
             result.1 = None;
         }
         result
@@ -146,7 +178,7 @@ impl Stack {
     pub fn function_scope(&mut self, args: &Vec<(Symbol, Value)>, f: impl FnOnce(&mut Self) -> EvalRes) -> EvalRes {
         let outer_symtab = mem::replace(&mut self.sym_table, Default::default());
         // Save stack size before pushing arguments
-        let original_stack_size = self.memory.len();
+        let original_stack_size = self.stack.len();
         let mut inner_symtab = SymTable::new(Some(outer_symtab));
         for (arg_symbol, arg_val) in args {
             inner_symtab.symbols.insert(arg_symbol.clone(), self.push(arg_val.clone()));
@@ -155,7 +187,7 @@ impl Stack {
         // Eval function. Return value is given in result.0
         let mut result = f(self);
         // Restore stack to original size, dropping function locals
-        self.memory.truncate(original_stack_size);
+        self.stack.truncate(original_stack_size);
         // Make sure return value has no address, it would be invalid.
         result.1 = None;
         let outer_symtab = mem::replace(&mut self.sym_table.parent, Default::default());
@@ -164,7 +196,7 @@ impl Stack {
     }
 
     pub fn debug(&self) {
-        println!("{}", self.memory.iter().enumerate().map(|(addr, v)| format!("{}| {:?}", addr, v)).collect::<Vec<String>>().join("\n"));
+        println!("{}", self.stack.iter().enumerate().map(|(addr, v)| format!("{}| {:?}", addr, v)).collect::<Vec<String>>().join("\n"));
     }
 }
 
@@ -347,7 +379,7 @@ fn interpret(node: &ASTNode, stack: &mut Stack) -> EvalRes {
         Expr::Assignment { left, right } => {
             let dest_addr = eval_assignment_left_side(left, stack);
             let value = interpret(&right, stack).0;
-            stack.memory[dest_addr.addr] = value.clone();
+            stack.stack[dest_addr.addr] = value.clone();
             (value, Some(dest_addr))
         },
         Expr::VariableDeclaration { id, init,.. } => {
@@ -362,7 +394,7 @@ fn interpret(node: &ASTNode, stack: &mut Stack) -> EvalRes {
         },
         Expr::New { init } => {
             let value = eval_constructor_expression(init, stack);
-            let addr = stack.push(value);
+            let addr = stack.alloc(value);
             (
                 Value::Pointer(addr),
                 None,
@@ -370,7 +402,7 @@ fn interpret(node: &ASTNode, stack: &mut Stack) -> EvalRes {
         },
         Expr::Delete { id } => {
             let addr = interpret(id, stack).1.expect("Delete called on a non-allocated variable");
-            stack.memory[addr.addr] = Value::Unit;
+            stack.free(&addr);
             (Value::Unit, None)
         },
         Expr::Call { callee, arguments } => {
@@ -405,9 +437,8 @@ pub fn interpret_program(module: &Module<UserDefinedFunction>) -> Value {
     );
 
     let return_value = eval_call_expression(&Box::new(main_ref), &vec![], &mut stack);
-    // stack.debug();
 
-    eprintln!("stack len = {}", stack.memory.len());
+    eprintln!("stack len = {}", stack.stack.len());
 
     return_value.0
 }
@@ -725,7 +756,7 @@ mod tests {
 
     #[test]
     fn can_pass_function_pointer_as_arg() {
-        let _res = i("
+        let res = i("
         fun sign(x: Int): Int { if x > 0 then 1 else -1 }
 
         var func_pointer = &sign;
@@ -737,20 +768,43 @@ mod tests {
 
         call(func_pointer, -87)
         ");
-        // if let Value::Integer(i) = res {
-        //     assert_eq!(i, -1);
-        // }
+        if let Value::Integer(i) = res {
+            assert_eq!(i, -1);
+        } else {
+            panic!("Wrong, got {:?}", res)
+        }
     }
 
     #[test]
-    fn can_heap_alloc() {
-        let _res = i("
+    fn new_and_delete() {
+        let res = i("
         var x: Int* = new Int(123);
+        var y = 1;
         print_int(*x);
         delete x;
+        -1
         ");
-        // if let Value::Integer(i) = res {
-        //     assert_eq!(i, -1);
-        // }
+        if let Value::Integer(i) = res {
+            assert_eq!(i, -1);
+        } else {
+            panic!("Wrong, got {:?}", res)
+        }
+    }
+
+    #[test]
+    fn heap_alloc_works() {
+        let res = i("
+        fun alloc(): Int* {
+            var p = new Int(123);
+            return p;
+        }
+        var x: Int* = alloc();
+        *x
+        ");
+        if let Value::Integer(i) = res {
+            assert_eq!(i, 123);
+        } else {
+            panic!("Wrong, got {:?}", res)
+        }
     }
 }

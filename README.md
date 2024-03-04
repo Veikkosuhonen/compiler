@@ -1,22 +1,23 @@
 # Hycs [![Rust](https://github.com/Veikkosuhonen/compiler/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/Veikkosuhonen/compiler/actions/workflows/ci.yml)
 
-A simple C-like language I wrote in HY Compilers 2024. It compiles to x86_64 assembly and also has an interpreter.
+HY Compilers 2024 project. Can be interpreted as well as compiled to x86_64 assembly.
 
 I also made a [vscode plugin](https://github.com/Veikkosuhonen/hy-compilers-language-support) for it to add syntax highlighting 
 
 ## Current features
 
-- All the basic C language feature such as...
-- Variables, If, While, Functions
+- All the basic C-like language feature such as variables, control flow, functions
 - Handwritten parser
 - Interpreter
 - Type checker
 - Compile to x86_64 assembly
-- Lots of unit- and E2E tests
+- Pointers
+- Lots of unit- and E2E tests, run in Github Actions CI
 
 ## Todo
 
-- Pointers
+- Heap alloc
 - Arrays
 - Structs
 - First-class functions
+- Analysis?

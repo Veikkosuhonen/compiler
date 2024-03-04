@@ -135,7 +135,8 @@ fn generate_call(fun: &Box<IRVar>, args: &Vec<Box<IRVar>>, dest: &Box<IRVar>, ad
 
     match callee {
         Symbol::Operator(op) => {
-            let arg_1_loc = get_var_address(&args[0].name, addresses);
+            let arg_1 = &args[0];
+            let arg_1_loc = get_var_address(&arg_1.name, addresses);
             let arg_2_opt = &args.get(1).map(|ir_var| get_var_address(&ir_var.name, addresses));
 
             if let Some(arg_2_loc) = arg_2_opt {
@@ -230,6 +231,22 @@ fn generate_call(fun: &Box<IRVar>, args: &Vec<Box<IRVar>>, dest: &Box<IRVar>, ad
                             mov(&arg_1_loc, "%rax"),
                             mov("(%rax)", "%rax"),
                             mov("%rax", &dest_loc),
+                        ]
+                    },
+                    Op::New => {
+                        let mut mm = [vec![
+                            mov(format!("${}", arg_1.size()).as_str(), "%rdi"),
+                            format!("call malloc"),
+                            format!("test %rax, %rax"),
+                            format!("jz .Lend"),
+                        ], copy_to_addr(&arg_1_loc, "%rax", &1)].concat();
+                        mm.push(mov("%rax", &dest_loc));
+                        mm
+                    },
+                    Op::Delete => {
+                        vec![
+                            mov(&arg_1_loc, "%rdi"),
+                            format!("call free"),
                         ]
                     },
                     _ => todo!("{:?}", op)
@@ -355,7 +372,8 @@ fn add_stdlib_code(source: String) -> String {
 # Metadata for debuggers and other tools
 .extern printf
 .extern scanf
-.extern clock
+.extern malloc
+.extern free
 
 .section .text  # Begins code and data
 

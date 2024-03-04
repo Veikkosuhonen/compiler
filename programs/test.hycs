@@ -1,4 +1,10 @@
-fun square(x: Int): Int {
-    return x * x
- }
- print_int(square(4))
+fun f(): Int* {
+    var x: Int* = new Int(123);
+    return x;
+}
+
+var p = f();
+
+print_int(*p);
+
+delete p;

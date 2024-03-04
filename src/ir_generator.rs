@@ -20,6 +20,14 @@ impl IRVar {
     fn to_string(&self) -> String {
         self.name.to_string()
     }
+
+    pub fn size(&self) -> usize {
+        match &self.var_type {
+            Type::Integer => 8,
+            Type::Boolean => 8,
+            _ => todo!(),
+        }
+    }
 }
 
 struct IRVarTable {

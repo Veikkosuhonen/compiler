@@ -1,0 +1,13 @@
+name "Pointer to heap object"
+
+fun f(): Int* {
+    var x: Int* = new Int(123);
+    return x;
+}
+
+var p = f();
+
+print_int(*p);
+expect 123
+
+delete p;

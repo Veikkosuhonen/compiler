@@ -1,32 +1,32 @@
 use std::collections::HashMap;
 
 use crate::builtin_functions::{get_builtin_function_types, get_builtin_referrable_types};
-use crate::interpreter::UserDefinedFunction;
+use crate::interpreter::{Struct, UserDefinedFunction};
 use crate::sym_table::{SymTable, Symbol};
 use crate::parser::{ASTNode, Expr, Module};
 use crate::tokenizer::Op;
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct FunctionType {
-    pub param_types: Vec<Type>,
+    pub param_types: Vec<TypedParam>,
     pub return_type: Type,
 }
 
 impl FunctionType {
-    fn check_arg_count(&self, argument_expr: &Vec<&Box<TypedASTNode>>) {
-        if self.param_types.len() != argument_expr.len() {
-            panic!("Wrong number of arguments, expected {} but got {}", self.param_types.len(), argument_expr.len())
+    fn check_arg_count(&self, argument_expr_len: usize) {
+        if self.param_types.len() != argument_expr_len {
+            panic!("Wrong number of arguments, expected {} but got {}", self.param_types.len(), argument_expr_len)
         }
     }
 
-    fn typecheck_call(&self, argument_expr: &Vec<&Box<TypedASTNode>>) -> Type {
-        self.check_arg_count(&argument_expr);
+    fn typecheck_unnamed_args_call(&self, argument_expr: &Vec<&Box<TypedASTNode>>) -> Type {
+        self.check_arg_count(argument_expr.len());
         let mut constraints: HashMap<String, Type> = HashMap::new();
     
-        for (idx, param_type) in self.param_types.iter().enumerate() {
+        for (idx, param) in self.param_types.iter().enumerate() {
             let arg = &argument_expr[idx];
 
-            let mut resolution = arg.node_type.satisfy(param_type);
+            let mut resolution = arg.node_type.satisfy(&param.param_type);
             if let Some((type_id, type_arg)) = resolution.constraint {
                 if let Some(required_type) = constraints.get(&type_id) {
                     // The following resolution will either be resolved or a fail, it wont have constraints because we dont allow generic arg to satisfy generic type param.
@@ -40,12 +40,54 @@ impl FunctionType {
 
             resolution.constraint = None;
             if !resolution.is_resolved() {
-                panic!("Invalid argument type at index {}, expected {:?} but got {:?}", idx, param_type, arg.node_type)
+                panic!("Invalid argument type at index {}, expected {:?} but got {:?}", idx, param, arg.node_type)
             }
         }
 
         self.return_type.resolve(&mut constraints)
     }
+
+    fn typecheck_named_args_call(&self, argument_expr: &Vec<(String, Box<TypedASTNode>)>) -> Type {
+        self.check_arg_count(argument_expr.len());
+        let mut constraints: HashMap<String, Type> = HashMap::new();
+    
+        for arg in argument_expr {
+            let param = self.param_types.iter().find(|param| param.name == arg.0).expect(format!("No such parameter: {}", arg.0).as_str());
+            let arg_name = &arg.0;
+            let arg = &arg.1;
+        
+            let mut resolution = arg.node_type.satisfy(&param.param_type);
+            if let Some((type_id, type_arg)) = resolution.constraint {
+                if let Some(required_type) = constraints.get(&type_id) {
+                    // The following resolution will either be resolved or a fail, it wont have constraints because we dont allow generic arg to satisfy generic type param.
+                    if !type_arg.satisfy(required_type).is_resolved() {
+                        panic!("Invalid argument type for param {}, expected {:?} but got {:?}", arg_name, required_type, type_arg)
+                    }
+                } else {
+                    constraints.insert(type_id, type_arg);
+                }
+            }
+
+            resolution.constraint = None;
+            if !resolution.is_resolved() {
+                panic!("Invalid argument type for param {}, expected {:?} but got {:?}", arg_name, param, arg.node_type)
+            }
+        }
+
+        self.return_type.resolve(&mut constraints)
+    }
+
+    pub fn unnamed_params(param_types: Vec<Type>, return_type: Type) -> FunctionType {
+        FunctionType {
+            param_types: param_types.iter().map(|t| TypedParam { name: "".to_string(), param_type: t.clone() }).collect(),
+            return_type
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct StructType {
+    fields: HashMap<String, Type>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -53,6 +95,7 @@ pub enum Type {
     Integer,
     Boolean,
     Function(Box<FunctionType>),
+    Struct(StructType),
     Pointer(Box<Type>),
     Generic(String),
     Typeref(Box<Type>),
@@ -64,7 +107,10 @@ pub enum Type {
 impl Type {
     pub fn get_constructor_type(&self) -> Type {
         let return_type = Type::Typeref(Box::new(self.clone()));
-        let param_types = vec![self.clone()];
+        let param_types = match self {
+            Type::Struct(struct_type) => struct_type.fields.iter().map(|(name, t)| TypedParam { name: name.clone(), param_type: t.clone() }).collect(),
+            _ => vec![TypedParam { name: "val".to_string(), param_type: self.clone() }],
+        };
         Type::Function(Box::new(FunctionType { param_types, return_type }))
     }
 }
@@ -135,9 +181,15 @@ impl Type {
     pub fn get_callable_type(&self) -> FunctionType {
         match self {
             Type::Function(ftype) => *ftype.clone(),
-            Type::Typeref(referred_type) => FunctionType {
-                param_types: vec![*referred_type.clone()],
-                return_type: Type::Constructor(Box::new(*referred_type.clone()))
+            Type::Typeref(referred_type) => match referred_type.as_ref() {
+                Type::Struct(struct_type) => FunctionType {
+                    param_types: struct_type.fields.iter().map(|(name, t)| TypedParam { name: name.clone(), param_type: t.clone() }).collect(),
+                    return_type: Type::Constructor(Box::new(*referred_type.clone())),
+                },
+                _ => FunctionType::unnamed_params(
+                    vec![*referred_type.clone()],
+                    Type::Constructor(Box::new(*referred_type.clone()))
+                ),
             },
             _ => panic!("{:?} is not callable", self)
         }
@@ -150,10 +202,10 @@ pub struct TypedASTNode {
     pub node_type: Type,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct TypedParam {
+    pub name: String,
     pub param_type: Type,
-    pub id: String,
 }
 
 #[derive(Debug, Clone)]
@@ -164,7 +216,13 @@ pub struct TypedUserDefinedFunction {
     pub func_type: FunctionType,
 }
 
-impl Module<TypedUserDefinedFunction> {
+#[derive(Debug, Clone)]
+pub struct TypedStruct {
+    pub id: String,
+    pub fields: Vec<TypedParam>,
+}
+
+impl Module<TypedUserDefinedFunction, TypedStruct> {
     pub fn main(&self) -> &TypedUserDefinedFunction {
         self.functions.iter().find(|func| func.id == "main").expect("Main does not exist")
     }
@@ -183,14 +241,41 @@ impl Module<TypedUserDefinedFunction> {
     }
 }
 
-pub fn typecheck_program(module: Module<UserDefinedFunction>) -> Module<TypedUserDefinedFunction> {
+pub fn typecheck_program(module: Module<UserDefinedFunction, Struct>) -> Module<TypedUserDefinedFunction, TypedStruct> {
     let mut sym_table = get_toplevel_sym_table();
     let mut functions: Vec<TypedUserDefinedFunction> = vec![];
+    let mut structs: Vec<TypedStruct> = vec![];
+
+    for struct_def in &module.structs {
+        let id = Symbol::Identifier(struct_def.id.clone());
+        let struct_type = get_struct_type(&struct_def, &mut sym_table);
+        sym_table.symbols.insert(id, Type::Typeref(Box::new(Type::Struct(struct_type.clone()))));
+    }
 
     for func in &module.functions {
         let id = Symbol::Identifier(func.id.clone());
         let function_type = get_function_type(&func, &mut sym_table);
         sym_table.symbols.insert(id, Type::Function(Box::new(function_type.clone())));
+    }
+
+    for struct_def in module.structs {
+        let struct_type_ref = sym_table.get(&Symbol::Identifier(struct_def.id.clone()));
+        if let Type::Typeref(struct_type) = struct_type_ref {
+            if let Type::Struct(struct_type) = *struct_type {
+                let typed_struct = TypedStruct {
+                    id: struct_def.id, 
+                    fields: struct_type.fields.iter().map(|(name, param_type)| TypedParam { 
+                        name: name.clone(), 
+                        param_type: param_type.clone() 
+                    }).collect() 
+                };
+                structs.push(typed_struct);
+            } else {
+                panic!("{}'s declared type is not a struct", struct_def.id)
+            }
+        } else {
+            panic!("{} has no defined type", struct_def.id)
+        }
     }
 
     for func in module.functions {
@@ -203,7 +288,7 @@ pub fn typecheck_program(module: Module<UserDefinedFunction>) -> Module<TypedUse
         }
     }
 
-    Module { functions }
+    Module { functions, structs }
 }
 
 fn get_toplevel_sym_table() -> Box<SymTable<Type>> {
@@ -262,6 +347,9 @@ fn typecheck(node: ASTNode, sym_table: &mut Box<SymTable<Type>>) -> TypedASTNode
             sym_table.returns = Some(result.node_type.clone());
             TypedASTNode { expr: Expr::Return { result: Box::new(result) }, node_type: Type::Unit }
         },
+        Expr::StructInstance { struct_name, fields } => {
+            typecheck_struct_instance(struct_name, fields, sym_table)
+        },
     }
 }
 
@@ -269,17 +357,30 @@ fn get_function_type(
     func: &UserDefinedFunction,
     sym_table: &mut Box<SymTable<Type>>,
 ) -> FunctionType {
-    let params: Vec<(Symbol, Type)> = func.params.iter().map(|param| {
-        let sym = Symbol::Identifier(param.name.clone());
-        (sym, typecheck_type_annotation_referred_type(&param.param_type, sym_table))
+    let param_types: Vec<TypedParam> = func.params.iter().map(|param| {
+        TypedParam { name: param.name.clone(), param_type: typecheck_type_annotation_referred_type(&param.param_type, sym_table) }
     }).collect();
     let return_type_name = &func.return_type;
     let return_type = typecheck_type_annotation_referred_type(&return_type_name, sym_table);
 
     FunctionType { 
-        param_types: params.iter().map(|(_, val)| val.clone()).collect(),
+        param_types,
         return_type
     }
+}
+
+fn get_struct_type(
+    struct_def: &Struct,
+    sym_table: &mut Box<SymTable<Type>>,
+) -> StructType {
+    let fields: Vec<TypedParam> = struct_def.fields.iter().map(|field| {
+        TypedParam {
+            name: field.name.clone(),
+            param_type: typecheck_type_annotation_referred_type(&field.param_type, sym_table)
+        }
+    }).collect();
+
+    StructType { fields: fields.iter().map(|f| (f.name.clone(), f.param_type.clone())).collect() }
 }
 
 fn typecheck_function(
@@ -289,7 +390,7 @@ fn typecheck_function(
 ) -> TypedUserDefinedFunction {
     let params = func.params.iter().enumerate().map(|(idx, param)| {
         let sym = Symbol::Identifier(param.name.clone());
-        (sym, func_type.param_types.get(idx).unwrap().clone())
+        (sym, func_type.param_types.get(idx).unwrap().param_type.clone())
     }).collect::<Vec<(Symbol, Type)>>();
 
     let body = sym_table.function_scope(&params, |inner| {
@@ -329,7 +430,7 @@ fn typecheck_assignable(
         Expr::Unary { operand, operator: Op::Deref } => {
             if let Type::Function(deref_func) = sym_table.get(&mut Symbol::Operator(Op::Deref)) {
                 let operand = Box::new(typecheck_assignable(operand, sym_table));
-                let node_type = deref_func.typecheck_call(&vec![&operand]);
+                let node_type = deref_func.typecheck_unnamed_args_call(&vec![&operand]);
                 TypedASTNode {
                     expr: Expr::Unary { operand, operator: Op::Deref },
                     node_type,
@@ -490,7 +591,7 @@ fn typecheck_logical_op(
     if let Type::Function(op_function) = sym_table.get(&mut Symbol::Operator(operator)) {
         let left  = Box::new(typecheck(*left_expr, sym_table));
         let right = Box::new(typecheck(*right_expr, sym_table));
-        let node_type = op_function.typecheck_call(&vec![&left, &right]);
+        let node_type = op_function.typecheck_unnamed_args_call(&vec![&left, &right]);
         TypedASTNode { expr: Expr::Logical { left, operator, right }, node_type }
     } else {
         panic!("Undefined operator {:?}", operator)
@@ -507,7 +608,7 @@ fn typecheck_binary_op(
     if let Type::Function(op_function) = sym_table.get(&mut Symbol::Operator(operator)) {
         let left  = Box::new(typecheck(*left_expr, sym_table));
         let right = Box::new(typecheck(*right_expr, sym_table));
-        let node_type = op_function.typecheck_call(&vec![&left, &right]);
+        let node_type = op_function.typecheck_unnamed_args_call(&vec![&left, &right]);
         TypedASTNode { expr: Expr::Binary { left, operator, right }, node_type }
     } else {
         panic!("Undefined operator {:?}", operator)
@@ -521,7 +622,7 @@ fn typecheck_unary_op(
 ) -> TypedASTNode {
     if let Type::Function(op_function) = sym_table.get(&mut Symbol::Operator(operator)) {
         let operand = Box::new(typecheck(*operand, sym_table));
-        let node_type = op_function.typecheck_call(&vec![&operand]);
+        let node_type = op_function.typecheck_unnamed_args_call(&vec![&operand]);
         TypedASTNode { expr: Expr::Unary { operand, operator }, node_type }
     } else {
         panic!("Undefined operator {:?}", operator)
@@ -541,7 +642,7 @@ fn typecheck_call_expression(
         let arg = Box::new(typecheck(*expr, sym_table));
         typed_argument_expr.push(arg);
     }
-    let node_type = call_type.typecheck_call(&typed_argument_expr.iter().collect());
+    let node_type = call_type.typecheck_unnamed_args_call(&typed_argument_expr.iter().collect());
     TypedASTNode {
         expr: Expr::Call { 
             callee: Box::new(callee),
@@ -549,7 +650,29 @@ fn typecheck_call_expression(
         },
         node_type,
     }
+}
 
+fn typecheck_struct_instance(
+    id: String,
+    fields: Vec<(String, Box<ASTNode>)>,
+    sym_table: &mut Box<SymTable<Type>>
+) -> TypedASTNode {
+    let struct_type = sym_table.get(&Symbol::Identifier(id.clone()));
+    let constructor_type = struct_type.get_callable_type();
+
+    let mut typed_named_argument_expr: Vec<(String, Box<TypedASTNode>)> = vec![];
+
+    for (name, expr) in fields {
+        let arg = typecheck(*expr, sym_table);
+        typed_named_argument_expr.push((name.clone(), Box::new(arg.clone())));
+    }
+
+    let node_type = constructor_type.typecheck_named_args_call(&typed_named_argument_expr);
+    TypedASTNode {
+        expr: Expr::StructInstance { struct_name: id, fields: typed_named_argument_expr },
+        node_type,
+    }
+    
 }
 
 #[cfg(test)]
@@ -558,7 +681,7 @@ mod tests {
     use crate::parser::parse;
     use super::*;
 
-    fn t(src: &str) -> Module<TypedUserDefinedFunction> {
+    fn t(src: &str) -> Module<TypedUserDefinedFunction, TypedStruct> {
         let tokens: Vec<Token> = tokenize(src).expect("Tokenizing to succeed");
         let module = parse(tokens).expect("Parsing to succeed");
         typecheck_program(module)
@@ -895,6 +1018,57 @@ mod tests {
 
         if let Expr::Block { result,.. } = &m.main().body.expr {
             assert!(matches!(result.expr, Expr::Logical {.. }));
+        } else {
+            panic!("Wrong!")
+        }
+    }
+
+    #[test]
+    fn struct_instance() {
+        let _n = t("
+            struct Point {
+                x: Int,
+                y: Int
+            }
+        ");
+
+        let s = _n.structs.first().unwrap();
+        assert_eq!(s.id, "Point");
+        assert_eq!(s.fields.len(), 2);
+        assert_eq!(s.fields.first().unwrap().name, "x");
+        assert_eq!(s.fields.first().unwrap().param_type, Type::Integer);
+    }
+
+    #[test]
+    fn struct_instance_type() {
+        let m = t("
+            struct Point {
+                x: Int,
+                y: Int
+            }
+            Point { x: 1, y: 2 }
+        ");
+        if let Expr::Block { result,.. } = &m.main().body.expr {
+            assert!(matches!(result.node_type, Type::Constructor(_)))
+        } else {
+            panic!("Wrong!")
+        }
+    }
+
+    #[test]
+    fn struct_param_type() {
+        let m = t("
+            struct Point {
+                x: Int,
+                y: Int
+            }
+            fun f(p: Point*): Point* {
+                return p
+            }
+            f(new Point { x: 1, y: 2 })
+        ");
+        if let Expr::Block { result,.. } = &m.main().body.expr {
+            // assert!(matches!(result.node_type, Type::Constructor(_)))
         } else {
             panic!("Wrong!")
         }

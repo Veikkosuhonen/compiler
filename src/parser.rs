@@ -1,4 +1,6 @@
-use crate::{interpreter::{Param, UserDefinedFunction}, tokenizer::{Op, SourceLocation, Token, TokenType}};
+use std::str;
+
+use crate::{interpreter::{Param, Struct, UserDefinedFunction}, tokenizer::{Op, SourceLocation, Token, TokenType}};
 use lazy_static::lazy_static;
 
 lazy_static! {
@@ -99,14 +101,19 @@ pub enum Expr<T> {
     Return {
         result: Box<T>,
     },
+    StructInstance {
+        struct_name: String,
+        fields: Vec<(String, Box<T>)>,
+    },
 }
 
 #[derive(Debug)]
-pub struct Module<F> {
+pub struct Module<F, S> {
     pub functions: Vec<F>,
+    pub structs: Vec<S>,
 }
 
-impl Module<UserDefinedFunction> {
+impl Module<UserDefinedFunction, Struct> {
     pub fn main(&self) -> &UserDefinedFunction {
         self.functions.iter().find(|func| func.id == "main").expect("Main does not exist")
     }
@@ -363,6 +370,32 @@ impl Parser {
         }
     }
 
+    fn parse_struct(&mut self) -> Result<ASTNode, SyntaxError> {
+        let start = self.current_start().clone();
+        let struct_id = self.consume(TokenType::Identifier)?.value;
+        self.consume_left_curly()?;
+        let mut fields: Vec<(String, Box<ASTNode>)> = vec![];
+        if !self.current_is("}") {
+            loop {
+                let field_name = self.consume(TokenType::Identifier)?.value;
+                self.consume_with_value(TokenType::Punctuation, ":")?;
+                let field_value = self.parse_expression()?;
+                fields.push((field_name, Box::new(field_value)));
+                if self.current_is("}") {
+                    break;
+                }
+                self.consume_comma()?;
+            }
+        }
+
+        let end = self.current_end().clone();
+        self.consume_block_end()?;
+        Ok(ASTNode::new(Expr::StructInstance {
+            struct_name: struct_id,
+            fields,
+        }, start, end))
+    }
+
     fn parse_factor(&mut self) -> Result<ASTNode, SyntaxError> {
         let token = self.peek()?;
 
@@ -373,6 +406,8 @@ impl Parser {
             TokenType::Identifier => {
                 if self.next_is("(") {
                     self.parse_call_expression()
+                } else if self.next_is("{") {
+                    self.parse_struct()
                 } else {
                     self.parse_identifier()
                 }
@@ -584,11 +619,32 @@ impl Parser {
         })
     }
 
-    fn parse_block_expression(&mut self) -> Result<ASTNode, SyntaxError> {
-        self.parse_block(false, &mut Vec::new())
+    fn parse_struct_definition(&mut self) -> Result<Struct, SyntaxError> {
+        self.consume_keyword("struct")?;
+        let id = self.consume(TokenType::Identifier)?.value;
+        self.consume_left_curly()?;
+        let mut fields: Vec<Param> = vec![];
+        if !self.current_is("}") {
+            loop {
+                let field_name = self.consume(TokenType::Identifier)?.value;
+                self.consume_with_value(TokenType::Punctuation, ":")?;
+                let type_annotation = self.parse_postfix_unary()?;
+                fields.push(Param { name: field_name, param_type: Box::new(type_annotation) });
+                if self.current_is("}") {
+                    break;
+                }
+                self.consume_comma()?;
+            }
+        }
+        self.consume_block_end()?;
+        Ok(Struct { id, fields })
     }
 
-    fn parse_block(&mut self, functions_allowed: bool, functions: &mut Vec<UserDefinedFunction>) -> Result<ASTNode, SyntaxError> {
+    fn parse_block_expression(&mut self) -> Result<ASTNode, SyntaxError> {
+        self.parse_block(false, &mut Vec::new(), &mut Vec::new())
+    }
+
+    fn parse_block(&mut self, functions_allowed: bool, functions: &mut Vec<UserDefinedFunction>, structs: &mut Vec<Struct>) -> Result<ASTNode, SyntaxError> {
         self.consume_left_curly()?;
         let start = self.current_start().clone();
         let mut statements: Vec<Box<ASTNode>> = vec![];
@@ -596,6 +652,9 @@ impl Parser {
             if functions_allowed && self.current_is("fun") {
                 let fun = self.parse_function_definition()?;
                 functions.push(fun);
+            } else if functions_allowed && self.current_is("struct") {
+                let struct_def = self.parse_struct_definition()?;
+                structs.push(struct_def);
             } else {
                 if self.consume_block_end().is_ok() {
                     let end: SourceLocation = self.current_end().clone();
@@ -618,20 +677,22 @@ impl Parser {
         }
     }
 
-    fn parse_top_level_block(&mut self) -> Result<(ASTNode, Vec<UserDefinedFunction>), SyntaxError> {
+    fn parse_top_level_block(&mut self) -> Result<(ASTNode, Vec<UserDefinedFunction>, Vec<Struct>), SyntaxError> {
         let mut functions: Vec<UserDefinedFunction> = vec![];
-        let body = self.parse_block(true, &mut functions)?;
+        let mut structs: Vec<Struct> = vec![];
+        let body = self.parse_block(true, &mut functions, &mut structs)?;
 
         Ok((
             body,
-            functions
+            functions,
+            structs,
         ))
     }
 }
 
-pub fn parse(tokens: Vec<Token>) -> Result<Module<UserDefinedFunction>, SyntaxError> {
+pub fn parse(tokens: Vec<Token>) -> Result<Module<UserDefinedFunction, Struct>, SyntaxError> {
     let mut parser = Parser::new(tokens);
-    let (ast, mut functions) = parser.parse_top_level_block()?;
+    let (ast, mut functions, structs) = parser.parse_top_level_block()?;
 
     if parser.current_index < parser.tokens.len() {
         let token = parser.peek()?;
@@ -652,12 +713,13 @@ pub fn parse(tokens: Vec<Token>) -> Result<Module<UserDefinedFunction>, SyntaxEr
 
     Ok(Module {
         functions,
+        structs,
     })
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::{interpreter::UserDefinedFunction, parser::parse, tokenizer::{tokenize, Op, Token}};
+    use crate::{interpreter::{Struct, UserDefinedFunction}, parser::parse, tokenizer::{tokenize, Op, Token}};
 
     use super::{ASTNode, Expr, Module};
 
@@ -673,7 +735,7 @@ fn p(source: &str) -> Box<ASTNode> {
     }
 }
 
-fn parse_module(source: &str) -> Module<UserDefinedFunction> {
+fn parse_module(source: &str) -> Module<UserDefinedFunction, Struct> {
     parse(
         tokenize(source).expect("Should've been able to tokenize the source")
     ).expect("Should've been able to parse the source")
@@ -1302,9 +1364,36 @@ fn new_and_delete() {
             true and false
         ");
 
-        println!("{:?}",  _n);
-
         assert!(matches!(_n.expr, Expr::Logical { .. }));
+    }
+
+    #[test]
+    fn struct_def() {
+        let module = parse_module("
+            struct Point {
+                x: Int,
+                y: Int
+            }
+        ");
+
+        assert_eq!(module.structs.first().unwrap().id, "Point");
+    }
+
+    #[test]
+    fn struct_instance() {
+        let _n = p("
+            Point {
+                x: 1 + 2,
+                y: 2 + 3
+            }
+        ");
+
+        if let Expr::StructInstance { fields, struct_name } = _n.expr {
+            assert_eq!(fields.len(), 2);
+            assert_eq!(struct_name, "Point");
+        } else {
+            panic!("Wrong")
+        }
     }
 
 }

@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::{builtin_functions::{get_builtin_function_ir_vars, get_builtin_type_constructor_ir_vars}, parser::{Expr, Module}, tokenizer::Op, type_checker::{Type, TypedASTNode, TypedUserDefinedFunction}};
+use crate::{builtin_functions::{get_builtin_function_ir_vars, get_builtin_type_constructor_ir_vars}, parser::{Expr, Module}, tokenizer::Op, type_checker::{Type, TypedASTNode, TypedStruct, TypedUserDefinedFunction}};
 
 #[derive(Clone, Debug)]
 pub struct IRVar {
@@ -113,7 +113,7 @@ pub fn generate_ir_code(ir: HashMap<String, Vec<IREntry>>) -> String {
     ir.iter().map(|(_, ir)| ir).map(|func_ir| { func_ir.iter().map(|ir| { ir.to_string() }).collect::<Vec<String>>().join("\n") }).collect::<Vec<String>>().join("\n\n")
 }
 
-pub fn generate_ir(module: Module<TypedUserDefinedFunction>) -> HashMap<String, Vec<IREntry>> {
+pub fn generate_ir(module: Module<TypedUserDefinedFunction, TypedStruct>) -> HashMap<String, Vec<IREntry>> {
 
     let mut module_functions_ir: HashMap<String, Vec<IREntry>> = HashMap::new();
 
@@ -121,8 +121,8 @@ pub fn generate_ir(module: Module<TypedUserDefinedFunction>) -> HashMap<String, 
         let mut var_table = create_top_level_var_table(&module.functions, &function.id);
         let mut params: Vec<IRVar> = vec![];
         for (idx, param_name) in function.params.iter().enumerate() {
-            let param_type = function.func_type.param_types.get(idx).unwrap();
-            let ir_var = var_table.create(param_name.clone(), param_type.clone());
+            let param = function.func_type.param_types.get(idx).unwrap();
+            let ir_var = var_table.create(param_name.clone(), param.param_type.clone());
             var_table.vars.insert(param_name.clone(), ir_var.clone());
             params.push(ir_var);
         }
@@ -342,6 +342,7 @@ fn generate(node: &TypedASTNode, instructions: &mut Vec<IREntry>, var_table: &mu
 
             dest
         },
+        Expr::StructInstance { struct_name, fields } => todo!()
     }
 }
 

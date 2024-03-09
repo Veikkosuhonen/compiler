@@ -146,7 +146,7 @@ lazy_static! {
     static ref BOOLEAN_LITERAL_REGEX: Regex = Regex::new(r"^(true|false)").unwrap();
     static ref OPERATOR_REGEX: Regex = Regex::new(r"^(==|!=|<=|>=|\+|-|\*|/|%|=|<|>|and\b|or\b|not\b|&|new\b|delete\b)").unwrap();
     static ref PUNCTUATION_REGEX: Regex = Regex::new(r"^(\(|\)|\{|\}|,|;|:)").unwrap();
-    static ref KEYWORD_REGEX: Regex = Regex::new(r"^(while\b|do\b|if\b|then\b|else\b|var\b|fun\b|return\b)").unwrap();
+    static ref KEYWORD_REGEX: Regex = Regex::new(r"^(while\b|do\b|if\b|then\b|else\b|var\b|fun\b|return\b|struct\b)").unwrap();
 
     // Order is significant here. The first match is the one that will be used.
     static ref TOKEN_REGEX_TO_TYPE: Vec<(Regex, TokenType)> = vec![
@@ -335,5 +335,14 @@ mod tests {
 
         assert_eq!(tokens[7].token_type, TokenType::Operator);
         assert_eq!(tokens[13].token_type, TokenType::Operator);   
+    }
+
+    #[test]
+    fn struct_declaration_tokenizes() {
+        let tokens = tokenize("
+            struct Point { x: Int, y: Int }
+        ").expect("Shoulve tokenized");
+
+        assert_eq!(tokens[1].token_type, TokenType::Keyword);   
     }
 }

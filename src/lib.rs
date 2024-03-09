@@ -1,9 +1,9 @@
 use std::{fs, time::Instant};
 
-use interpreter::UserDefinedFunction;
+use interpreter::{Struct, UserDefinedFunction};
 use parser::Module;
 use report_error::{report_syntax_error, report_tokenisation_error};
-use type_checker::TypedUserDefinedFunction;
+use type_checker::{TypedStruct, TypedUserDefinedFunction};
 pub mod tokenizer;
 pub mod parser;
 pub mod interpreter;
@@ -21,7 +21,7 @@ fn read_file(path: &String) -> String {
     contents
 }
 
-fn parse_source(contents: String) -> Module<UserDefinedFunction> {
+fn parse_source(contents: String) -> Module<UserDefinedFunction, Struct> {
     let tokens = tokenizer::tokenize(&contents)
         .or_else(|err| { report_tokenisation_error(&contents, &err); Err(err) })
         .expect("Should've been able to tokenize the source");
@@ -33,7 +33,7 @@ fn parse_source(contents: String) -> Module<UserDefinedFunction> {
     module
 }
 
-pub fn parse_file(path: &String) -> Module<UserDefinedFunction> {
+pub fn parse_file(path: &String) -> Module<UserDefinedFunction, Struct> {
     let contents = read_file(path);
     let start = Instant::now();
     let module = parse_source(contents);
@@ -50,7 +50,7 @@ pub fn interpret_file(path: &String) -> interpreter::Value {
     result
 }
 
-pub fn typecheck_file(path: &String) -> Module<TypedUserDefinedFunction> {
+pub fn typecheck_file(path: &String) -> Module<TypedUserDefinedFunction, TypedStruct> {
     let module = parse_file(path);
     let result = type_checker::typecheck_program(module);
 

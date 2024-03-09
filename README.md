@@ -12,12 +12,12 @@ I also made a [vscode plugin](https://github.com/Veikkosuhonen/hy-compilers-lang
 - Type checker
 - Compile to x86_64 assembly
 - Pointers
+- Heap allocation
 - Lots of unit- and E2E tests, run in Github Actions CI
 
 ## Todo
 
-- Heap alloc
-- Arrays
 - Structs
+- Arrays
 - First-class functions
 - Analysis?

@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::mem;
 use std::rc::Rc;
 use std::vec;
@@ -22,7 +23,6 @@ pub struct UserDefinedFunction {
     pub return_type: Box<ASTNode>,
 }
 
-
 impl fmt::Debug for UserDefinedFunction {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("UserDefinedFunction")
@@ -43,11 +43,23 @@ impl PartialEq for Function {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct Struct {
+    pub id: String,
+    pub fields: Vec<Param>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct StructValue {
+    pub fields: HashMap<String, Value>,
+}
+
 #[derive(Debug, Clone, Default, PartialEq)]
 pub enum Value {
     Integer(i32),
     Boolean(bool),
     Function(Function),
+    Struct(StructValue),
     Pointer(Address),
     #[default] Unit,
 }
@@ -106,15 +118,15 @@ impl Address {
     pub fn heap(addr: usize)  -> Self { Address { addr, kind: AddressKind::Heap } }
 }
 
-pub struct Stack {
+pub struct Memory {
     pub sym_table: Box<SymTable<Address>>,
     pub stack: Vec<Value>,
     pub heap: Vec<Value>,
 }
 
-impl Stack {
-    pub fn new(sym_table: Box<SymTable<Address>>) -> Stack {
-        Stack { sym_table, stack: vec![], heap: vec![] }
+impl Memory {
+    pub fn new(sym_table: Box<SymTable<Address>>) -> Memory {
+        Memory { sym_table, stack: vec![], heap: vec![] }
     }
 
     pub fn create(&mut self, sym: Symbol, val: Value) {
@@ -206,7 +218,7 @@ fn eval_binary_op(
     left_node: &Box<ASTNode>, 
     right_node: &Box<ASTNode>, 
     operator: &Op, 
-    stack: &mut Stack
+    stack: &mut Memory
 ) -> EvalRes {
     let left  = interpret(&left_node, stack).0;
     let right = interpret(&right_node, stack).0;
@@ -216,7 +228,7 @@ fn eval_binary_op(
 fn eval_unary_op(
     operand: &Box<ASTNode>,
     operator: &Op,
-    stack: &mut Stack
+    stack: &mut Memory
 ) -> EvalRes {
     let operand = interpret(&operand, stack);
     (eval_builtin_unary(*operator, operand, stack), None)
@@ -225,7 +237,7 @@ fn eval_unary_op(
 fn eval_call_expression(
     callee: &Box<ASTNode>,
     argument_expr: &Vec<Box<ASTNode>>,
-    stack: &mut Stack
+    stack: &mut Memory
 ) -> EvalRes {
     if let Expr::Identifier { value: function_id } = &callee.expr {
         // This is horribly inefficient, we might be cloning a massive function.
@@ -254,7 +266,7 @@ fn eval_call_expression(
 fn eval_user_defined_function(
     function: Rc<UserDefinedFunction>,
     argument_expr: &Vec<Box<ASTNode>>,
-    stack: &mut Stack
+    stack: &mut Memory
 ) -> EvalRes {
     let mut args: Vec<Value> = vec![];
     for expr in argument_expr {
@@ -283,7 +295,7 @@ fn eval_user_defined_function(
     })
 }
 
-fn eval_assignment_left_side(node: &ASTNode, stack: &mut Stack) -> Address {
+fn eval_assignment_left_side(node: &ASTNode, stack: &mut Memory) -> Address {
     match &node.expr {
         Expr::Identifier { value: id } => {
             stack.sym_table.get(&Symbol::Identifier(id.clone()))
@@ -301,7 +313,7 @@ fn eval_assignment_left_side(node: &ASTNode, stack: &mut Stack) -> Address {
     }
 }
 
-fn interpret(node: &ASTNode, stack: &mut Stack) -> EvalRes {
+fn interpret(node: &ASTNode, stack: &mut Memory) -> EvalRes {
     match &node.expr {
         Expr::IntegerLiteral { value } => {
             (Value::Integer(*value), None)
@@ -385,14 +397,22 @@ fn interpret(node: &ASTNode, stack: &mut Stack) -> EvalRes {
         Expr::Call { callee, arguments } => {
             eval_call_expression(callee, arguments, stack)
         },
+        Expr::StructInstance { fields,.. } => {
+            let mut struct_fields = HashMap::new();
+            for (field_name, field_value) in fields {
+                let value = interpret(&field_value, stack).0;
+                struct_fields.insert(field_name.clone(), value);
+            }
+            (Value::Struct(StructValue { fields: struct_fields }), None)
+        },
         Expr::Unit => (Value::Unit, None),
     }
 }
 
 /// Returns the "stack"
-fn get_toplevel_sym_table() -> Stack {
+fn get_toplevel_sym_table() -> Memory {
     let sym_table = SymTable::new(None);
-    let mut stack = Stack::new(sym_table);
+    let mut stack = Memory::new(sym_table);
     for (sym, val) in get_builtin_function_values() {
         let addr = stack.push(val);
         stack.sym_table.symbols.insert(sym, addr);
@@ -400,7 +420,7 @@ fn get_toplevel_sym_table() -> Stack {
     stack
 }
 
-pub fn interpret_program(module: &Module<UserDefinedFunction>) -> Value {
+pub fn interpret_program(module: &Module<UserDefinedFunction, Struct>) -> Value {
     let mut stack = get_toplevel_sym_table();
     
     for func in &module.functions {
@@ -783,5 +803,17 @@ mod tests {
         } else {
             panic!("Wrong, got {:?}", res)
         }
+    }
+
+    #[test]
+    fn struct_creation() {
+        let _res = i("
+        struct Point {
+            x: Int,
+            y: Int
+        }
+        var p = new Point { x: 1, y: 2 };
+        p
+        ");
     }
 }

@@ -2,7 +2,7 @@ use std::io;
 
 use lazy_static::lazy_static;
 
-use crate::{interpreter::{EvalRes, Stack, Value}, ir_generator::IRVar, sym_table::Symbol, tokenizer::Op, type_checker::{FunctionType, Type}};
+use crate::{interpreter::{EvalRes, Memory, Value}, ir_generator::IRVar, sym_table::Symbol, tokenizer::Op, type_checker::{FunctionType, Type}};
 
 fn print_int(args: Vec<Value>) -> Value {
     let arg = args.get(0).expect("Number of arguments to print_int should be 1");
@@ -81,7 +81,7 @@ pub fn eval_builtin_binary(op: Op, left: Value, right: Value) -> Value {
     }
 }
 
-pub fn eval_builtin_unary(op: Op, operand: EvalRes, stack: &mut Stack) -> Value {
+pub fn eval_builtin_unary(op: Op, operand: EvalRes, stack: &mut Memory) -> Value {
     if Op::AddressOf == op {
         let addr = operand.1.unwrap_or_else(|| stack.push(operand.0));
         return Value::Pointer(addr)
@@ -144,97 +144,97 @@ pub fn get_builtin_function_values() -> Vec<(Symbol, Value)> {
 
 pub fn get_builtin_function_types() -> Vec<(Symbol, Type)> {
     let ops = vec![
-        (Op::Add, FunctionType {
-            param_types: vec![Type::Integer, Type::Integer],
-            return_type: Type::Integer,
-        }),
-        (Op::Sub, FunctionType {
-            param_types: vec![Type::Integer, Type::Integer],
-            return_type: Type::Integer,
-        }),
-        (Op::UnarySub, FunctionType {
-            param_types: vec![Type::Integer],
-            return_type: Type::Integer,
-        }),
-        (Op::Mul, FunctionType {
-            param_types: vec![Type::Integer, Type::Integer],
-            return_type: Type::Integer,
-        }),
-        (Op::Div, FunctionType {
-            param_types: vec![Type::Integer, Type::Integer],
-            return_type: Type::Integer,
-        }),
-        (Op::Mod, FunctionType {
-            param_types: vec![Type::Integer, Type::Integer],
-            return_type: Type::Integer,
-        }),
-        (Op::Not, FunctionType {
-            param_types: vec![Type::Boolean],
-            return_type: Type::Boolean,
-        }),
-        (Op::LT, FunctionType {
-            param_types: vec![Type::Integer, Type::Integer],
-            return_type: Type::Boolean,
-        }),
-        (Op::GT, FunctionType {
-            param_types: vec![Type::Integer, Type::Integer],
-            return_type: Type::Boolean,
-        }),
-        (Op::LTE, FunctionType {
-            param_types: vec![Type::Integer, Type::Integer],
-            return_type: Type::Boolean,
-        }),
-        (Op::GTE, FunctionType {
-            param_types: vec![Type::Integer, Type::Integer],
-            return_type: Type::Boolean,
-        }),
-        (Op::And, FunctionType {
-            param_types: vec![Type::Boolean, Type::Boolean],
-            return_type: Type::Boolean,
-        }),
-        (Op::Or, FunctionType {
-            param_types: vec![Type::Boolean, Type::Boolean],
-            return_type: Type::Boolean,
-        }),
-        (Op::Equals, FunctionType {
-            param_types: vec![Type::generic("T"), Type::generic("T")],
-            return_type: Type::Boolean,
-        }),
-        (Op::NotEquals, FunctionType {
-            param_types: vec![Type::generic("T"), Type::generic("T")],
-            return_type: Type::Boolean,
-        }),
-        (Op::AddressOf, FunctionType {
-            param_types: vec![Type::generic("T")],
-            return_type: Type::Pointer(Box::new(Type::generic("T"))),
-        }),
-        (Op::Deref, FunctionType {
-            param_types: vec![Type::Pointer(Box::new(Type::generic("T")))],
-            return_type: Type::generic("T"),
-        }),
-        (Op::New, FunctionType {
-            param_types: vec![Type::Constructor(Box::new(Type::generic("T")))],
-            return_type: Type::Pointer(Box::new(Type::generic("T"))),
-        }),
-        (Op::Delete, FunctionType {
-            param_types: vec![Type::Pointer(Box::new(Type::generic("T")))],
-            return_type: Type::Unit,
-        }),
+        (Op::Add, FunctionType ::unnamed_params(
+             vec![Type::Integer, Type::Integer],
+            Type::Integer,
+        )),
+        (Op::Sub, FunctionType ::unnamed_params(
+             vec![Type::Integer, Type::Integer],
+            Type::Integer,
+        )),
+        (Op::UnarySub, FunctionType ::unnamed_params(
+             vec![Type::Integer],
+            Type::Integer,
+        )),
+        (Op::Mul, FunctionType ::unnamed_params(
+             vec![Type::Integer, Type::Integer],
+            Type::Integer,
+        )),
+        (Op::Div, FunctionType ::unnamed_params(
+             vec![Type::Integer, Type::Integer],
+            Type::Integer,
+        )),
+        (Op::Mod, FunctionType ::unnamed_params(
+             vec![Type::Integer, Type::Integer],
+            Type::Integer,
+        )),
+        (Op::Not, FunctionType ::unnamed_params(
+             vec![Type::Boolean],
+            Type::Boolean,
+        )),
+        (Op::LT, FunctionType ::unnamed_params(
+             vec![Type::Integer, Type::Integer],
+            Type::Boolean,
+        )),
+        (Op::GT, FunctionType ::unnamed_params(
+             vec![Type::Integer, Type::Integer],
+            Type::Boolean,
+        )),
+        (Op::LTE, FunctionType ::unnamed_params(
+             vec![Type::Integer, Type::Integer],
+            Type::Boolean,
+        )),
+        (Op::GTE, FunctionType ::unnamed_params(
+             vec![Type::Integer, Type::Integer],
+            Type::Boolean,
+        )),
+        (Op::And, FunctionType ::unnamed_params(
+             vec![Type::Boolean, Type::Boolean],
+            Type::Boolean,
+        )),
+        (Op::Or, FunctionType ::unnamed_params(
+             vec![Type::Boolean, Type::Boolean],
+            Type::Boolean,
+        )),
+        (Op::Equals, FunctionType ::unnamed_params(
+             vec![Type::generic("T"), Type::generic("T")],
+            Type::Boolean,
+        )),
+        (Op::NotEquals, FunctionType ::unnamed_params(
+             vec![Type::generic("T"), Type::generic("T")],
+            Type::Boolean,
+        )),
+        (Op::AddressOf, FunctionType ::unnamed_params(
+             vec![Type::generic("T")],
+            Type::Pointer(Box::new(Type::generic("T"))),
+        )),
+        (Op::Deref, FunctionType ::unnamed_params(
+             vec![Type::Pointer(Box::new(Type::generic("T")))],
+            Type::generic("T"),
+        )),
+        (Op::New, FunctionType ::unnamed_params(
+             vec![Type::Constructor(Box::new(Type::generic("T")))],
+            Type::Pointer(Box::new(Type::generic("T"))),
+        )),
+        (Op::Delete, FunctionType ::unnamed_params(
+             vec![Type::Pointer(Box::new(Type::generic("T")))],
+            Type::Unit,
+        )),
     ];
 
     let functions = vec![
-        ("print_int", FunctionType {
-            param_types: vec![Type::Integer],
-            return_type: Type::Unit,
-        }),
-        ("print_bool", FunctionType {
-            param_types: vec![Type::Boolean],
-            return_type: Type::Unit,
-        }),
-        ("read_int", FunctionType {
-            param_types: vec![],
-            return_type: Type::Integer,
-        }),
+        ("print_int", FunctionType ::unnamed_params(
+             vec![Type::Integer],
+            Type::Unit,
+        )),
+        ("print_bool", FunctionType ::unnamed_params(
+             vec![Type::Boolean],
+            Type::Unit,
+        )),
+        ("read_int", FunctionType ::unnamed_params(
+             vec![],
+            Type::Integer,
+        )),
     ];
 
     let mapped_ops = ops.iter().map(|(op, ftype)| {

@@ -95,6 +95,13 @@ impl Memory {
         Memory { sym_table, stack: vec![], heap: vec![] }
     }
 
+    pub fn assign(&mut self, addr: &Address, val: Value) {
+        match addr.kind {
+            AddressKind::Stack => self.stack[addr.addr] = val,
+            AddressKind::Heap => self.heap[addr.addr] = val
+        }
+    }
+
     pub fn create(&mut self, sym: Symbol, val: Value, val_type: Type) {
         let addr = self.push(val);
         self.sym_table.symbols.insert(sym, (addr, val_type));
@@ -331,10 +338,31 @@ fn eval_assignment_left_side(node: &TypedASTNode, memory: &mut Memory) -> Addres
                 panic!("Left hand side of an assignment must be an identifier or a pointer dereference")
             }
         },
-        // Expr::Member { parent, name } => {
-// 
-        // },
-        _ => panic!("Left side of an assignment must be an identifier or a pointer dereference"),
+        Expr::Member { parent, name } => {
+            let r = eval_member_expr(parent, name, memory);
+            r.1.unwrap()
+        },
+        _ => panic!("Left side of an assignment must be an identifier, member expression or a pointer dereference"),
+    }
+}
+
+fn eval_member_expr(parent: &TypedASTNode, name: &String, memory: &mut Memory) -> EvalRes {
+    let pointer_value = interpret(parent, memory).0;
+    if let Value::Pointer(addr) = pointer_value {
+        let member_idx = match &parent.node_type {
+            Type::Pointer(pointer_type) => match pointer_type.as_ref() {
+                Type::Struct(struct_type) => struct_type.fields.iter().enumerate().find(|(_, param)| param.name == *name).unwrap().0,
+                _ => unreachable!()
+            },
+            _ => unreachable!()
+        };
+        let mut member_addr = addr.clone();
+        member_addr.addr += member_idx;
+        memory.debug();
+        println!("{} {}", member_addr.addr, member_idx);
+        (memory.get_addr(&member_addr).clone(), Some(member_addr))
+    } else {
+        unreachable!()
     }
 }
 
@@ -406,7 +434,7 @@ fn interpret(node: &TypedASTNode, memory: &mut Memory) -> EvalRes {
         Expr::Assignment { left, right } => {
             let dest_addr = eval_assignment_left_side(left, memory);
             let value = interpret(&right, memory).0;
-            memory.stack[dest_addr.addr] = value.clone();
+            memory.assign(&dest_addr, value.clone());
             (value, Some(dest_addr))
         },
         Expr::VariableDeclaration { id, init,.. } => {
@@ -437,25 +465,7 @@ fn interpret(node: &TypedASTNode, memory: &mut Memory) -> EvalRes {
             }
         },
         Expr::Unit => (Value::Unit, None),
-        Expr::Member { parent, name } => {
-            let pointer_value = interpret(parent, memory).0;
-            if let Value::Pointer(addr) = pointer_value {
-                let member_idx = match &parent.node_type {
-                    Type::Pointer(pointer_type) => match pointer_type.as_ref() {
-                        Type::Struct(struct_type) => struct_type.fields.iter().enumerate().find(|(_, param)| param.name == *name).unwrap().0,
-                        _ => unreachable!()
-                    },
-                    _ => unreachable!()
-                };
-                let mut member_addr = addr.clone();
-                member_addr.addr += member_idx;
-                memory.debug();
-                println!("{} {}", member_addr.addr, member_idx);
-                (memory.get_addr(&member_addr).clone(), Some(member_addr))
-            } else {
-                unreachable!()
-            }
-        },
+        Expr::Member { parent, name } => eval_member_expr(parent, name, memory),
     }
 }
 
@@ -845,6 +855,20 @@ mod tests {
         ");
         if let Value::Integer(i) = res {
             assert_eq!(i, 123);
+        } else {
+            panic!("Wrong, got {:?}", res)
+        }
+    }
+
+    #[test]
+    fn can_assign_to_heap() {
+        let res = i("
+        var x: Int* = new Int(123);
+        *x = 321;
+        *x
+        ");
+        if let Value::Integer(i) = res {
+            assert_eq!(i, 321);
         } else {
             panic!("Wrong, got {:?}", res)
         }

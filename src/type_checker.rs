@@ -474,9 +474,10 @@ fn typecheck_assignable(
                     node_type,
                 }
             } else {
-                panic!("Deref is not defined. Fix code pls.")
+                unreachable!()
             }
         },
+        Expr::Member { .. } => typecheck(*dest, sym_table),
         _ => panic!("Left side of an assignment can only be an Identifier or a Deref unary expression")
     }
 }

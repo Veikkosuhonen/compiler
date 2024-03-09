@@ -342,7 +342,8 @@ fn generate(node: &TypedASTNode, instructions: &mut Vec<IREntry>, var_table: &mu
 
             dest
         },
-        Expr::StructInstance { struct_name, fields } => todo!()
+        Expr::StructInstance { struct_name, fields } => todo!(),
+        Expr::Member { parent, name } => todo!()
     }
 }
 

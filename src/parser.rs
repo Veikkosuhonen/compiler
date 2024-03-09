@@ -85,6 +85,10 @@ pub enum Expr<T> {
         operand: Box<T>,
         operator: Op,
     },
+    Member {
+        parent: Box<T>,
+        name: String,
+    },
     If {
         condition: Box<T>,
         then_branch: Box<T>,
@@ -415,16 +419,33 @@ impl Parser {
             TokenType::Punctuation => match token.value.as_str() {
                 "(" => self.parse_parentheses(),
                 "{" => self.parse_block_expression(),
-                _ => Err(self.error_here(format!("Unexpected token: {:?}", token).as_str())),
+                _ => Err(self.error_here(format!("Unexpected token: {:?}, expected a left brace", token).as_str())),
             },
             TokenType::None => Err(self.error_here("Unexpected end of file")),
-            _ => Err(self.error_here(format!("Unexpected token: {:?}", token).as_str())),
+            _ => Err(self.error_here(format!("Unexpected token {:?}, expected a factor", token).as_str())),
         }
+    }
+
+    fn parse_member_expression(&mut self) -> Result<ASTNode, SyntaxError> {
+        let mut parent = self.parse_factor()?;
+        loop {
+            if !self.current_is(".") {
+                break;
+            }
+            self.consume(TokenType::Operator)?;
+            let member_token = self.consume(TokenType::Identifier)?;
+            let start = parent.start.clone();
+            let end = member_token.end.clone();
+            let name = member_token.value;
+            parent = ASTNode::new(Expr::Member { parent: Box::new(parent), name }, start, end);
+        }
+
+        Ok(parent)
     }
 
     fn parse_unary_precedence_level(&mut self, level: usize) -> Result<ASTNode, SyntaxError> {
         if level >= UNARY_OP_PRECEDENCE.len() {
-            return self.parse_factor();
+            return self.parse_member_expression();
         }
 
         let ops = UNARY_OP_PRECEDENCE
@@ -445,7 +466,7 @@ impl Parser {
                 self.parse_unary_precedence_level(level + 1)
             }
         } else {
-            self.parse_factor()
+            self.parse_member_expression()
         }
     }
 
@@ -483,9 +504,6 @@ impl Parser {
         Ok(left)
     }
 
-    ///
-    /// This is a complete copypasta from parse_binary_precedence_level,
-    /// The difference is that it produces an Expr::Logical.
     fn parse_logical_precedence_level(&mut self, level: usize) -> Result<ASTNode, SyntaxError> {
         if level >= LOGICAL_OP_PRECEDENCE.len() {
             return self.parse_binary_precedence_level(0);
@@ -1391,6 +1409,26 @@ fn new_and_delete() {
         if let Expr::StructInstance { fields, struct_name } = _n.expr {
             assert_eq!(fields.len(), 2);
             assert_eq!(struct_name, "Point");
+        } else {
+            panic!("Wrong")
+        }
+    }
+
+    #[test]
+    fn member_access() {
+        let _n = p("
+            struct Point {
+                x: Int,
+                y: Int
+            }
+
+            var p = new Point { x: 1, y: 2 }
+
+            p.x
+        ");
+
+        if let Expr::Member { name,.. } = _n.expr {
+            assert_eq!(name, "x");
         } else {
             panic!("Wrong")
         }

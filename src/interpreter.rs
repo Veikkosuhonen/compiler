@@ -406,6 +406,17 @@ fn interpret(node: &ASTNode, stack: &mut Memory) -> EvalRes {
             (Value::Struct(StructValue { fields: struct_fields }), None)
         },
         Expr::Unit => (Value::Unit, None),
+        Expr::Member { parent, name } => {
+            let parent = interpret(parent, stack).0;
+            match parent {
+                Value::Pointer(addr) => match stack.get_addr(&addr) {
+                    Value::Struct(struct_value) => (struct_value.fields.get(name).expect("Struct has no such value").clone(), None),
+                    _ => panic!("Pointer in a member expression does not point to a struct"),
+                },
+                Value::Struct(struct_value) => (struct_value.fields.get(name).expect("Struct has no such value").clone(), None),
+                _ => panic!("Tried to do member access on a value that is not a struct or a pointer to struct")
+            }
+        },
     }
 }
 
@@ -815,5 +826,26 @@ mod tests {
         var p = new Point { x: 1, y: 2 };
         p
         ");
+    }
+
+    #[test]
+    fn member_access() {
+        let res = i("
+            struct Vector { x: Int, y: Int, z: Int }
+            struct Particle {
+                pos: Vector*,
+                vel: Vector*
+            }
+            var p = new Particle { 
+                pos: new Vector { x: 0, y: 0, z: -10 },
+                vel: new Vector { x: 0, y: -1, z: 0 }
+            }
+            p.pos.z
+        ");
+        if let Value::Integer(i) = res {
+            assert_eq!(i, -10);
+        } else {
+            panic!("Wrong, got {:?}", res)
+        }
     }
 }

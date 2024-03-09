@@ -23,6 +23,7 @@ pub enum Op {
     Deref,
     New,
     Delete,
+    Member,
 }
 
 impl Op {
@@ -54,6 +55,7 @@ impl Op {
             "<=" => Op::LTE,
             ">=" => Op::GTE,
             "=" => Op::Assign,
+            "." => Op::Member,
             _ => return Err("Unknown binary operator"),
         })
     }
@@ -92,6 +94,7 @@ impl Op {
             Op::Deref => "*",
             Op::New => "new",
             Op::Delete => "delete",
+            Op::Member => ".",
         })
     }
 }
@@ -144,7 +147,7 @@ lazy_static! {
     static ref IDENTIFIER_REGEX: Regex = Regex::new(r"^[a-zA-Z_][a-zA-Z0-9_]*").unwrap();
     static ref INTEGER_LITERAL_REGEX: Regex = Regex::new(r"^[0-9]+").unwrap();
     static ref BOOLEAN_LITERAL_REGEX: Regex = Regex::new(r"^(true|false)").unwrap();
-    static ref OPERATOR_REGEX: Regex = Regex::new(r"^(==|!=|<=|>=|\+|-|\*|/|%|=|<|>|and\b|or\b|not\b|&|new\b|delete\b)").unwrap();
+    static ref OPERATOR_REGEX: Regex = Regex::new(r"^(==|!=|<=|>=|\+|-|\*|/|%|=|<|>|and\b|or\b|not\b|&|new\b|delete\b|\.)").unwrap();
     static ref PUNCTUATION_REGEX: Regex = Regex::new(r"^(\(|\)|\{|\}|,|;|:)").unwrap();
     static ref KEYWORD_REGEX: Regex = Regex::new(r"^(while\b|do\b|if\b|then\b|else\b|var\b|fun\b|return\b|struct\b)").unwrap();
 
@@ -344,5 +347,14 @@ mod tests {
         ").expect("Shoulve tokenized");
 
         assert_eq!(tokens[1].token_type, TokenType::Keyword);   
+    }
+
+    #[test]
+    fn member_variable_access() {
+        let tokens = tokenize("
+            p.v.x;
+        ").expect("Shoulve tokenized");
+
+        assert_eq!(tokens[3].token_type, TokenType::Operator);   
     }
 }

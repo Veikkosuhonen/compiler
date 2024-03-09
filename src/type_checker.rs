@@ -350,6 +350,24 @@ fn typecheck(node: ASTNode, sym_table: &mut Box<SymTable<Type>>) -> TypedASTNode
         Expr::StructInstance { struct_name, fields } => {
             typecheck_struct_instance(struct_name, fields, sym_table)
         },
+        Expr::Member { parent, name } => {
+            let parent = typecheck(*parent, sym_table);
+            let struct_type = match &parent.node_type {
+                Type::Struct(struct_type) => struct_type,
+                Type::Pointer(pointer_type) => match pointer_type.as_ref() {
+                    Type::Struct(struct_type) => struct_type,
+                    _ => panic!("Left side pointer of a member expression must point to a struct")
+                }
+                _ => panic!("Left side of a member expression must be a struct or a pointer to struct"),
+            };
+            
+            let member_type = struct_type.fields.get(&name).expect(format!("Struct does not have a member '{name}'").as_str()).clone();
+            
+            TypedASTNode {
+                expr: Expr::Member { parent: Box::new(parent), name },
+                node_type: member_type,
+            }
+        },
     }
 }
 
@@ -1069,6 +1087,27 @@ mod tests {
         ");
         if let Expr::Block { result,.. } = &m.main().body.expr {
             // assert!(matches!(result.node_type, Type::Constructor(_)))
+        } else {
+            panic!("Wrong!")
+        }
+    }
+
+    #[test]
+    fn member_access() {
+        let m = t("
+            struct Vector { x: Int, y: Int, z: Int }
+            struct Particle {
+                pos: Vector*,
+                vel: Vector*
+            }
+            var p = new Particle { 
+                pos: new Vector { x: 0, y: 0, z: 0 },
+                vel: new Vector { x: 0, y: -1, z: 0 }
+            }
+            p.pos.z
+        ");
+        if let Expr::Block { result,.. } = &m.main().body.expr {
+            assert!(matches!(result.node_type, Type::Integer))
         } else {
             panic!("Wrong!")
         }

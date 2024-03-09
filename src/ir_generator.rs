@@ -446,8 +446,6 @@ mod tests {
             var x = 1;
             &x
         ");
-
-        // println!("{}", _ir.get("main").unwrap().iter().map(|i| i.to_string()).collect::<Vec<String>>().join("\n"))
     }
 
     #[test]
@@ -458,8 +456,6 @@ mod tests {
             **y = 2;
             x
         ");
-
-        // println!("{}", _ir.get("main").unwrap().iter().map(|i| i.to_string()).collect::<Vec<String>>().join("\n"))
     }
 
     #[test]
@@ -467,14 +463,12 @@ mod tests {
         let _ir = i("
             true and false
         ");
-
-        // println!("{}", _ir.get("main").unwrap().iter().map(|i| i.to_string()).collect::<Vec<String>>().join("\n"))
     }
 
     #[test]
     fn heap_alloc() {
         let _ir = i("
-            var x = Int(123);
+            var x = new Int(123);
         ");
 
         println!("{}", _ir.get("main").unwrap().iter().map(|i| i.to_string()).collect::<Vec<String>>().join("\n"))

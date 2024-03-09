@@ -1,4 +1,4 @@
-name "fibonacci(10)"
+// name "fibonacci(10)"
 
 fun fibonacci(n: Int): Int {
     if n <= 0 then {
@@ -13,11 +13,11 @@ fun fibonacci(n: Int): Int {
 }
 
 print_int(fibonacci(10));
-expect 55
+// expect 55
 
----
+//===
 
-name "find factors"
+// name "find factors"
 // https://stackoverflow.com/questions/2844703/algorithm-to-find-the-factors-of-a-given-number-shortest-method
 var number = 3 * 3 * 5 * 7 * 11 * 11;
 
@@ -34,4 +34,4 @@ while (number > 1) do {
 };
 
 print_int(numberFactors);
-expect 6
+// expect 6

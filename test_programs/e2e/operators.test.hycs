@@ -1,186 +1,186 @@
 
-name "GT"
+// name "GT"
 
 print_bool(2 > 1);
-expect 1
+// expect 1
 
 print_bool(1 > 2);
-expect 0
+// expect 0
 
----
+//===
 
-name "GTE"
+// name "GTE"
 
 print_bool(1 >= 1);
-expect 1
+// expect 1
 
 print_bool(1 >= 2);
-expect 0
+// expect 0
 
----
+//===
 
-name "LT"
+// name "LT"
 
 print_bool(1 < 2);
-expect 1
+// expect 1
 
 print_bool(2 < 1);
-expect 0
+// expect 0
 
----
+//===
 
-name "LTE"
+// name "LTE"
 
 print_bool(1 <= 1);
-expect 1
+// expect 1
 
 print_bool(2 <= 1);
-expect 0
+// expect 0
 
----
+//===
 
-name "Equals<Int>"
+// name "Equals<Int>"
 
 print_bool(123 == 123);
-expect 1
+// expect 1
 
 print_bool(122 == 123);
-expect 0
+// expect 0
 
----
+//===
 
-name "Equals<Bool>"
+// name "Equals<Bool>"
 
 print_bool(true == true);
-expect 1
+// expect 1
 
 print_bool(true == false);
-expect 0
+// expect 0
 
----
+//===
 
-name "NotEquals<Int>"
+// name "NotEquals<Int>"
 
 print_bool(122 != 123);
-expect 1
+// expect 1
 
 print_bool(123 != 123);
-expect 0
+// expect 0
 
----
+//===
 
-name "NotEquals<Bool>"
+// name "NotEquals<Bool>"
 
 print_bool(true != false);
-expect 1
+// expect 1
 
 print_bool(true != true);
-expect 0
+// expect 0
 
----
+//===
 
-name "Not"
+// name "Not"
 
 print_bool(not false);
-expect 1
+// expect 1
 
 print_bool(not true);
-expect 0
+// expect 0
 
----
+//===
 
-name "And"
+// name "And"
 
 print_bool(true and true);
-expect 1
+// expect 1
 
 print_bool(false and true);
-expect 0
+// expect 0
 
----
+//===
 
-name "Or"
+// name "Or"
 
 print_bool(true or true);
-expect 1
+// expect 1
 
 print_bool(true or false);
-expect 1
+// expect 1
 
 print_bool(false or false);
-expect 0
+// expect 0
 
----
+//===
 
-name "Mul"
+// name "Mul"
 
 print_int(7 * 7);
-expect 49
+// expect 49
 
----
+//===
 
-name "Div"
+// name "Div"
 
 print_int(7 / 7);
-expect 1
+// expect 1
 
----
+//===
 
-name "Mod"
+// name "Mod"
 
 print_int(7 % 6);
-expect 1
+// expect 1
 
----
+//===
 
-name "Add"
+// name "Add"
 
 print_int(7 + 7);
-expect 14
+// expect 14
 
----
+//===
 
-name "Sub"
+// name "Sub"
 
 print_int(7 - 7);
-expect 0
+// expect 0
 
 print_int(999 - 1);
-expect 998
+// expect 998
 
----
+//===
 
-name "Mul & UnarySub"
+// name "Mul & UnarySub"
 
 print_int(7 * -7);
-expect -49
+// expect -49
 
----
+//===
 
-name "And evals right when left is true"
+// name "And evals right when left is true"
 
 print_bool(true and { print_int(2); false });
-expect 2
-expect 0
+// expect 2
+// expect 0
 
----
+//===
 
-name "And shortcircuits when left is false"
+// name "And shortcircuits when left is false"
 
 print_bool(false and { print_int(2); true });
-expect 0
+// expect 0
 
----
+//===
 
-name "Or evals right when left is false"
+// name "Or evals right when left is false"
 
 print_bool(false or { print_int(2); true });
-expect 2
-expect 1
+// expect 2
+// expect 1
 
----
+//===
 
-name "Or shortcircuits when left is true"
+// name "Or shortcircuits when left is true"
 
 print_bool(true or { print_int(2); false });
-expect 1
+// expect 1

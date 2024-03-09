@@ -1,24 +1,24 @@
-name "Pointer to int and dereference"
+// name "Pointer to int and dereference"
 
 var x = 1234;
 var y = &x;
 
 print_int(*y);
-expect 1234
+// expect 1234
 
----
+//===
 
-name "Assign to pointer dereference"
+// name "Assign to pointer dereference"
 
 var x = 4321;
 var y = &x;
 *y = 1234;
 print_int(x);
-expect 1234
+// expect 1234
 
----
+//===
 
-name "Pointers example"
+// name "Pointers example"
 
 fun square(p: Int*): Unit {
     *p = *p * *p;
@@ -27,4 +27,4 @@ fun square(p: Int*): Unit {
 var x: Int = 3;
 square(&x);
 print_int(x); // Prints 9
-expect 9
+// expect 9

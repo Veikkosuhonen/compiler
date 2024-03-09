@@ -1,4 +1,4 @@
-name "Basic function call"
+// name "Basic function call"
 
 fun add(x: Int, y: Int): Int {
     x + y
@@ -7,22 +7,22 @@ fun add(x: Int, y: Int): Int {
 var z = add(1, 2);
 print_int(z);
 
-expect 3
+// expect 3
 
----
+//===
 
-name "Function calling intrinsic"
+// name "Function calling intrinsic"
 
 fun print(x: Int) {
     print_int(x);
 }
 
 print(5);
-expect 5
+// expect 5
 
----
+//===
 
-name "Function calling another user function"
+// name "Function calling another user function"
 
 fun foo(): Int {
     1
@@ -33,11 +33,11 @@ fun bar(x: Int): Int {
 }
 
 print_int(bar(4));
-expect 5
+// expect 5
 
----
+//===
 
-name "Function with returns"
+// name "Function with returns"
 
 fun foo(x: Int): Int {
     if x == 42 then {
@@ -48,14 +48,14 @@ fun foo(x: Int): Int {
 }
 
 print_int(foo(4));
-expect 8
+// expect 8
 
 print_int(foo(42));
-expect 42
+// expect 42
 
----
+//===
 
-name "Function with return from while loop"
+// name "Function with return from while loop"
 
 fun foo(x: Int): Int {
     while x > 0 do {
@@ -68,17 +68,17 @@ fun foo(x: Int): Int {
 }
 
 print_int(foo(4));
-expect 0
+// expect 0
 
 print_int(foo(42));
-expect 42
+// expect 42
 
 print_int(foo(100));
-expect 42
+// expect 42
 
----
+//===
 
-name "Recursion"
+// name "Recursion"
 
 fun recurse(x: Int, i: Int): Int {
     print_int(x);
@@ -90,25 +90,25 @@ fun recurse(x: Int, i: Int): Int {
 }
 
 var n = read_int();
-input 2
+// input 2
 
 recurse(n, 0);
-expect 2
-expect 4
-expect 8
-expect 16
-expect 32
-expect 64
-expect 128
-expect 256
-expect 512
-expect 1024
-expect 2048
-expect 4096
+// expect 2
+// expect 4
+// expect 8
+// expect 16
+// expect 32
+// expect 64
+// expect 128
+// expect 256
+// expect 512
+// expect 1024
+// expect 2048
+// expect 4096
 
----
+//===
 
-name "Mutual recursion"
+// name "Mutual recursion"
 
 fun mut_rec1(i: Int): Int {
     print_int(1);
@@ -130,15 +130,15 @@ fun mut_rec2(i: Int): Int {
 
 mut_rec1(1);
 
-expect 1
-expect 2
-expect 1
-expect 2
-expect 1
+// expect 1
+// expect 2
+// expect 1
+// expect 2
+// expect 1
 
----
+//===
 
-name "fibonacci(2)"
+// name "fibonacci(2)"
 
 fun fibonacci(n: Int): Int {
     if n <= 0 then {
@@ -154,4 +154,4 @@ fun fibonacci(n: Int): Int {
 
 print_int(fibonacci(2));
 
-expect 1
+// expect 1

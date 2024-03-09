@@ -1,4 +1,4 @@
-name "Pointer to heap object"
+// name "Pointer to heap object"
 
 fun f(): Int* {
     var x: Int* = new Int(123);
@@ -8,6 +8,17 @@ fun f(): Int* {
 var p = f();
 
 print_int(*p);
-expect 123
+// expect 123
 
 delete p;
+
+//===
+
+// name "Alloc and write to heap"
+
+var i = new Int(123);
+
+*i = 321;
+
+print_int(*i);
+// expect 321

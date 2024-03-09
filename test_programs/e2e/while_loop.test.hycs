@@ -1,6 +1,6 @@
-name "Simple while loop"
+// name "Simple while loop"
 
-input 5
+// input 5
 
 var x = read_int();
 
@@ -13,11 +13,11 @@ while i < 10 do {
 
 print_bool(x > 5000);
 
-expect 1
+// expect 1
 
----
+//===
 
-name "Never-while loop"
+// name "Never-while loop"
 
 while false do {
     print_bool(false);
@@ -25,11 +25,11 @@ while false do {
 
 print_bool(true);
 
-expect 1
+// expect 1
 
----
+//===
 
-name "Nested once-while loops"
+// name "Nested once-while loops"
 
 var once1 = true;
 var once2 = true;
@@ -46,4 +46,4 @@ while once1 do {
     };
 };
 
-expect 42
+// expect 42

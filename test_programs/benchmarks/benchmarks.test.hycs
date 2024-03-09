@@ -1,4 +1,4 @@
-name "10x fibonacci(26)"
+// name "10x fibonacci(26)"
 
 fun fibonacci(n: Int): Int {
     if n <= 0 then {
@@ -22,11 +22,11 @@ while i < 10 do {
 
 0
 
-time 200
+// time 200
 
----
+//===
 
-name "100x find factors"
+// name "100x find factors"
 
 // https://stackoverflow.com/questions/2844703/algorithm-to-find-the-factors-of-a-given-number-shortest-method
 fun findFactors(number: Int): Int {
@@ -58,4 +58,4 @@ while i < 100 do {
 
 0
 
-time 20
+// time 20

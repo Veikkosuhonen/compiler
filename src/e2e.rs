@@ -42,7 +42,7 @@ fn run_test_file(path: String, compile_only: bool) -> JoinHandle<Vec<String>> {
 
         lines.push(format!("\n*** Running test suite {} ***\n", test_id));
         let source = fs::read_to_string(path).expect("Should've been able to read the file");
-        let tests = source.split("---").collect::<Vec<&str>>();
+        let tests = source.split("//===").collect::<Vec<&str>>();
         for (i, test_source) in tests.iter().enumerate() {
             lines.push(format!("\n{}/{} ", i + 1, tests.len()));
             lines.append(&mut run_test(test_source, format!("{test_id}_{i}"), compile_only));
@@ -68,23 +68,23 @@ fn run_test(source: &str, id: String, compile_only: bool) -> Vec<String> {
     let mut expected_time: Option<u128> = None;
 
     let program_source = source.split("\n").enumerate().filter(|(line_number, line)| {
-        if line.trim_start().starts_with("input") {
+        if line.trim_start().starts_with("// input") {
             inputs.push(line.split_whitespace().last().unwrap().parse().expect("Should've been able to parse i32 after 'input'"));
             false
-        } else if line.trim_start().starts_with("expect") {
+        } else if line.trim_start().starts_with("// expect") {
             expects.push((
                 *line_number,
                 line.split_whitespace().last().unwrap().parse().expect("Should've been able to parse i32 after 'expect'")
             ));
             false
-        } else if line.trim_start().starts_with("name") {
+        } else if line.trim_start().starts_with("// name") {
             name = Some(line.split_whitespace()
                 .collect::<Vec<&str>>()
                 .get(1..)
                 .expect("Test name to follow 'name'")
                 .join(" "));
             false
-        } else if line.trim_start().starts_with("time") {
+        } else if line.trim_start().starts_with("// time") {
             expected_time = Some(line.split_whitespace().last().unwrap().parse().expect("Should've been able to parse i32 after 'time'"));
             false
         } else {

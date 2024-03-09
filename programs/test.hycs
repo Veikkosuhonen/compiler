@@ -1,10 +1,7 @@
-fun f(): Int* {
-    var x: Int* = new Int(123);
-    return x;
-}
+var a = 1;
+var b = 2;
+var c = 3;
 
-var p = f();
-
-print_int(*p);
-
-delete p;
+print_int({ if true then { a }; b });
+print_int({ if true then { a }; b; c });
+print_int({ if true then { a } else { b }; 3 });

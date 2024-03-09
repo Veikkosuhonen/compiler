@@ -82,15 +82,6 @@ pub fn eval_builtin_binary(op: Op, left: Value, right: Value) -> Value {
 }
 
 pub fn eval_builtin_unary(op: Op, operand: EvalRes, stack: &mut Memory) -> Value {
-    if Op::AddressOf == op {
-        let addr = operand.1.unwrap_or_else(|| stack.push(operand.0));
-        return Value::Pointer(addr)
-    }
-    if Op::New == op {
-        let addr = stack.alloc(operand.0);
-        return Value::Pointer(addr)
-    }
-
     match operand.0 {
         Value::Boolean(bval) => {
             match op {
@@ -129,20 +120,38 @@ pub fn get_builtin_referrable_types() -> Vec<(Symbol, Type)> {
     BUILTIN_REFERRABLE_TYPES.iter().map(|(sym, t)| (sym.clone(), Type::Typeref(Box::new(t.clone())))).collect()
 }
 
-pub fn get_builtin_function_values() -> Vec<(Symbol, Value)> {
-    [
-        "print_int",
-        "print_bool",
-        "read_int",
-        "Int",
-        "Bool",
-    ].iter().map(|name| (
-        Symbol::Identifier(name.to_string()),
-        Value::Function(crate::interpreter::Function::BuiltIn(name.to_string()))
+pub fn get_builtin_function_types() -> Vec<(Symbol, Type)> {
+    let functions = vec![
+        ("print_int", FunctionType ::unnamed_params(
+             vec![Type::Integer],
+            Type::Unit,
+        )),
+        ("print_bool", FunctionType ::unnamed_params(
+             vec![Type::Boolean],
+            Type::Unit,
+        )),
+        ("read_int", FunctionType ::unnamed_params(
+             vec![],
+            Type::Integer,
+        )),
+    ];
+
+    functions.iter().map(|(id, ftype)| {
+        (Symbol::Identifier(id.to_string()),  Type::Function(Box::new(ftype.clone())))
+    }).collect()
+}
+
+pub fn get_builtin_function_values() -> Vec<(Symbol, (Value, Type))> {
+    get_builtin_function_types().iter().chain(get_builtin_referrable_types().iter()).map(|(sym, _type)| (
+        sym.clone(),
+        (
+            Value::Function(crate::interpreter::Function::BuiltIn(sym.to_string())),
+            _type.clone()
+        )
     )).collect()
 }
 
-pub fn get_builtin_function_types() -> Vec<(Symbol, Type)> {
+pub fn get_builtin_function_and_operator_types() -> Vec<(Symbol, Type)> {
     let ops = vec![
         (Op::Add, FunctionType ::unnamed_params(
              vec![Type::Integer, Type::Integer],
@@ -222,34 +231,17 @@ pub fn get_builtin_function_types() -> Vec<(Symbol, Type)> {
         )),
     ];
 
-    let functions = vec![
-        ("print_int", FunctionType ::unnamed_params(
-             vec![Type::Integer],
-            Type::Unit,
-        )),
-        ("print_bool", FunctionType ::unnamed_params(
-             vec![Type::Boolean],
-            Type::Unit,
-        )),
-        ("read_int", FunctionType ::unnamed_params(
-             vec![],
-            Type::Integer,
-        )),
-    ];
-
-    let mapped_ops = ops.iter().map(|(op, ftype)| {
+    let mut mapped_ops: Vec<(Symbol, Type)> = ops.iter().map(|(op, ftype)| {
         (Symbol::Operator(*op), Type::Function(Box::new(ftype.clone())))
-    });
+    }).collect();
 
-    let mapped_funcs = functions.iter().map(|(id, ftype)| {
-        (Symbol::Identifier(id.to_string()),  Type::Function(Box::new(ftype.clone())))
-    });
+    mapped_ops.extend(get_builtin_function_types());
 
-    mapped_ops.chain(mapped_funcs).collect()
+    mapped_ops
 }
 
 pub fn get_builtin_function_ir_vars() -> Vec<(String, IRVar)> {
-    let ops = get_builtin_function_types();
+    let ops = get_builtin_function_and_operator_types();
     ops.iter().map(|(symbol, var_type)| 
         (symbol.to_string(), IRVar { name: symbol.to_string(), var_type: var_type.clone() })
     ).collect()

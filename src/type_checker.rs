@@ -1,15 +1,26 @@
+use core::fmt;
 use std::collections::HashMap;
 
-use crate::builtin_functions::{get_builtin_function_types, get_builtin_referrable_types};
-use crate::interpreter::{Struct, UserDefinedFunction};
+use crate::builtin_functions::{get_builtin_function_and_operator_types, get_builtin_referrable_types};
 use crate::sym_table::{SymTable, Symbol};
-use crate::parser::{ASTNode, Expr, Module};
-use crate::tokenizer::Op;
+use crate::parser::{ASTNode, Expr, Module, Struct, UserDefinedFunction};
+use crate::tokenizer::{Op, SourceLocation};
 
-#[derive(Debug, Clone, PartialEq, Default)]
+#[derive(Clone, PartialEq, Default)]
 pub struct FunctionType {
     pub param_types: Vec<TypedParam>,
     pub return_type: Type,
+}
+
+impl fmt::Debug for FunctionType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut fm = f.debug_struct("FunctionType");
+        for p in &self.param_types {
+            fm.field(&p.name, &p.param_type);
+        }
+        fm.field("return", &self.return_type);
+        fm.finish()
+    }
 }
 
 impl FunctionType {
@@ -40,7 +51,7 @@ impl FunctionType {
 
             resolution.constraint = None;
             if !resolution.is_resolved() {
-                panic!("Invalid argument type at index {}, expected {:?} but got {:?}", idx, param, arg.node_type)
+                panic!("Invalid argument type at index {}, expected {:?} but got {:?}", idx, param.param_type, arg.node_type)
             }
         }
 
@@ -70,7 +81,7 @@ impl FunctionType {
 
             resolution.constraint = None;
             if !resolution.is_resolved() {
-                panic!("Invalid argument type for param {}, expected {:?} but got {:?}", arg_name, param, arg.node_type)
+                panic!("Invalid argument type for param {}, expected {:?} but got {:?}", arg_name, param.param_type, arg.node_type)
             }
         }
 
@@ -86,16 +97,11 @@ impl FunctionType {
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
-pub struct StructType {
-    fields: HashMap<String, Type>,
-}
-
-#[derive(Debug, Clone, Default, PartialEq)]
 pub enum Type {
     Integer,
     Boolean,
     Function(Box<FunctionType>),
-    Struct(StructType),
+    Struct(TypedStruct),
     Pointer(Box<Type>),
     Generic(String),
     Typeref(Box<Type>),
@@ -105,13 +111,13 @@ pub enum Type {
 }
 
 impl Type {
-    pub fn get_constructor_type(&self) -> Type {
+    pub fn get_constructor_type(&self) -> FunctionType {
         let return_type = Type::Typeref(Box::new(self.clone()));
         let param_types = match self {
-            Type::Struct(struct_type) => struct_type.fields.iter().map(|(name, t)| TypedParam { name: name.clone(), param_type: t.clone() }).collect(),
+            Type::Struct(struct_type) => struct_type.fields.clone(),
             _ => vec![TypedParam { name: "val".to_string(), param_type: self.clone() }],
         };
-        Type::Function(Box::new(FunctionType { param_types, return_type }))
+        FunctionType { param_types, return_type }
     }
 }
 
@@ -183,7 +189,7 @@ impl Type {
             Type::Function(ftype) => *ftype.clone(),
             Type::Typeref(referred_type) => match referred_type.as_ref() {
                 Type::Struct(struct_type) => FunctionType {
-                    param_types: struct_type.fields.iter().map(|(name, t)| TypedParam { name: name.clone(), param_type: t.clone() }).collect(),
+                    param_types: struct_type.fields.clone(),
                     return_type: Type::Constructor(Box::new(*referred_type.clone())),
                 },
                 _ => FunctionType::unnamed_params(
@@ -202,13 +208,19 @@ pub struct TypedASTNode {
     pub node_type: Type,
 }
 
+impl TypedASTNode {
+    pub fn new(expr: Expr<TypedASTNode>, node_type: Type, start: SourceLocation, end: SourceLocation) -> TypedASTNode {
+        TypedASTNode { expr, node_type }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct TypedParam {
     pub name: String,
     pub param_type: Type,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct TypedUserDefinedFunction {
     pub id: String,
     pub body: Box<TypedASTNode>,
@@ -216,7 +228,15 @@ pub struct TypedUserDefinedFunction {
     pub func_type: FunctionType,
 }
 
-#[derive(Debug, Clone)]
+impl fmt::Debug for TypedUserDefinedFunction {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("TypedUserDefinedFunction")
+            .field("id", &self.id)
+            .finish()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct TypedStruct {
     pub id: String,
     pub fields: Vec<TypedParam>,
@@ -264,10 +284,7 @@ pub fn typecheck_program(module: Module<UserDefinedFunction, Struct>) -> Module<
             if let Type::Struct(struct_type) = *struct_type {
                 let typed_struct = TypedStruct {
                     id: struct_def.id, 
-                    fields: struct_type.fields.iter().map(|(name, param_type)| TypedParam { 
-                        name: name.clone(), 
-                        param_type: param_type.clone() 
-                    }).collect() 
+                    fields: struct_type.fields, 
                 };
                 structs.push(typed_struct);
             } else {
@@ -294,7 +311,7 @@ pub fn typecheck_program(module: Module<UserDefinedFunction, Struct>) -> Module<
 fn get_toplevel_sym_table() -> Box<SymTable<Type>> {
     let mut sym_table = SymTable::new(None);
 
-    let builtins = get_builtin_function_types();
+    let builtins = get_builtin_function_and_operator_types();
     for (symbol, val) in builtins {
         sym_table.symbols.insert(symbol, val);
     }
@@ -353,15 +370,18 @@ fn typecheck(node: ASTNode, sym_table: &mut Box<SymTable<Type>>) -> TypedASTNode
         Expr::Member { parent, name } => {
             let parent = typecheck(*parent, sym_table);
             let struct_type = match &parent.node_type {
-                Type::Struct(struct_type) => struct_type,
                 Type::Pointer(pointer_type) => match pointer_type.as_ref() {
                     Type::Struct(struct_type) => struct_type,
                     _ => panic!("Left side pointer of a member expression must point to a struct")
                 }
-                _ => panic!("Left side of a member expression must be a struct or a pointer to struct"),
+                _ => panic!("Left side of a member expression must be a pointer to a struct"),
             };
             
-            let member_type = struct_type.fields.get(&name).expect(format!("Struct does not have a member '{name}'").as_str()).clone();
+            let member_type = struct_type.fields
+                .iter()
+                .find(|param| param.name == name)
+                .expect(format!("Struct does not have a member '{name}'").as_str())
+                .param_type.clone();
             
             TypedASTNode {
                 expr: Expr::Member { parent: Box::new(parent), name },
@@ -390,7 +410,7 @@ fn get_function_type(
 fn get_struct_type(
     struct_def: &Struct,
     sym_table: &mut Box<SymTable<Type>>,
-) -> StructType {
+) -> TypedStruct {
     let fields: Vec<TypedParam> = struct_def.fields.iter().map(|field| {
         TypedParam {
             name: field.name.clone(),
@@ -398,7 +418,7 @@ fn get_struct_type(
         }
     }).collect();
 
-    StructType { fields: fields.iter().map(|f| (f.name.clone(), f.param_type.clone())).collect() }
+    TypedStruct { fields, id: struct_def.id.clone() }
 }
 
 fn typecheck_function(
@@ -1085,7 +1105,7 @@ mod tests {
             }
             f(new Point { x: 1, y: 2 })
         ");
-        if let Expr::Block { result,.. } = &m.main().body.expr {
+        if let Expr::Block { .. } = &m.main().body.expr {
             // assert!(matches!(result.node_type, Type::Constructor(_)))
         } else {
             panic!("Wrong!")

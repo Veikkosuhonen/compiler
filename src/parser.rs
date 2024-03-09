@@ -1,6 +1,7 @@
+use core::fmt;
 use std::str;
 
-use crate::{interpreter::{Param, Struct, UserDefinedFunction}, tokenizer::{Op, SourceLocation, Token, TokenType}};
+use crate::tokenizer::{Op, SourceLocation, Token, TokenType};
 use lazy_static::lazy_static;
 
 lazy_static! {
@@ -44,6 +45,34 @@ impl ASTNode {
     pub fn implicit_type_annotation(id: &str) -> ASTNode {
         ASTNode { expr: Expr::Identifier { value: String::from(id) }, start: SourceLocation::at(0, 0), end: SourceLocation::at(0, 0) }
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct Param {
+    pub name: String,
+    pub param_type: Box<ASTNode>,
+}
+
+#[derive(Clone)]
+pub struct UserDefinedFunction {
+    pub id: String,
+    pub body: Box<ASTNode>,
+    pub params: Vec<Param>,
+    pub return_type: Box<ASTNode>,
+}
+
+impl fmt::Debug for UserDefinedFunction {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("UserDefinedFunction")
+            .field("id", &self.id)
+            .finish()
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Struct {
+    pub id: String,
+    pub fields: Vec<Param>,
 }
 
 #[derive(Debug, Clone)]
@@ -281,16 +310,16 @@ impl Parser {
         Ok(ASTNode::new(Expr::Identifier { value: token.value }, token.start, token.end))
     }
 
-    fn parse_postfix_unary(&mut self) -> Result<ASTNode, SyntaxError> {
-        let mut top_unary_node = self.parse_factor()?;
-        let start = top_unary_node.start.clone();
+    fn parse_type_annotation(&mut self) -> Result<ASTNode, SyntaxError> {
+        let mut identifer = self.parse_identifier()?;
+        let start = identifer.start.clone();
         while let Ok(operator) = Op::unary_from_str(&self.peek()?.value) {
             self.consume(TokenType::Operator)?;
             let end = self.current_start().clone();
-            top_unary_node = ASTNode::new(Expr::Unary { operand: Box::new(top_unary_node), operator }, start.clone(), end);
+            identifer = ASTNode::new(Expr::Unary { operand: Box::new(identifer), operator }, start.clone(), end);
         }
 
-        Ok(top_unary_node)
+        Ok(identifer)
     }
 
     fn parse_call_expression(&mut self) -> Result<ASTNode, SyntaxError> {
@@ -568,7 +597,7 @@ impl Parser {
         let id = self.parse_identifier()?;
         let mut type_annotation = None;
         if self.consume_with_value(TokenType::Punctuation, ":").is_ok() {
-            type_annotation = Some(self.parse_postfix_unary()?);
+            type_annotation = Some(self.parse_type_annotation()?);
         }
         self.consume_with_value(TokenType::Operator, "=")?;
         let init = self.parse_expression()?;
@@ -608,7 +637,7 @@ impl Parser {
             loop {
                 let arg = self.consume(TokenType::Identifier)?.value;
                 self.consume_with_value(TokenType::Punctuation, ":")?;
-                let type_annotation = self.parse_postfix_unary()?;
+                let type_annotation = self.parse_type_annotation()?;
                 params.push(Param { name: arg, param_type: Box::new(type_annotation) });
                 if self.current_is(")") {
                     break;
@@ -617,10 +646,9 @@ impl Parser {
             }
         }
         self.consume_right_paren()?;
-
         let mut return_type = None;
         if self.consume_with_value(TokenType::Punctuation, ":").is_ok() {
-            return_type = Some(self.parse_postfix_unary()?);
+            return_type = Some(self.parse_type_annotation()?);
         }
 
         let body = self.parse_block_expression()?;
@@ -646,7 +674,7 @@ impl Parser {
             loop {
                 let field_name = self.consume(TokenType::Identifier)?.value;
                 self.consume_with_value(TokenType::Punctuation, ":")?;
-                let type_annotation = self.parse_postfix_unary()?;
+                let type_annotation = self.parse_type_annotation()?;
                 fields.push(Param { name: field_name, param_type: Box::new(type_annotation) });
                 if self.current_is("}") {
                     break;
@@ -737,9 +765,9 @@ pub fn parse(tokens: Vec<Token>) -> Result<Module<UserDefinedFunction, Struct>, 
 
 #[cfg(test)]
 mod tests {
-    use crate::{interpreter::{Struct, UserDefinedFunction}, parser::parse, tokenizer::{tokenize, Op, Token}};
+    use crate::tokenizer::{tokenize, Op, Token};
 
-    use super::{ASTNode, Expr, Module};
+    use super::*;
 
 
 fn p(source: &str) -> Box<ASTNode> {

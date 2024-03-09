@@ -1,7 +1,6 @@
 use std::{fs, time::Instant};
 
-use interpreter::{Struct, UserDefinedFunction};
-use parser::Module;
+use parser::{Module, Struct, UserDefinedFunction};
 use report_error::{report_syntax_error, report_tokenisation_error};
 use type_checker::{TypedStruct, TypedUserDefinedFunction};
 pub mod tokenizer;
@@ -41,8 +40,15 @@ pub fn parse_file(path: &String) -> Module<UserDefinedFunction, Struct> {
     module
 }
 
-pub fn interpret_file(path: &String) -> interpreter::Value {
+pub fn typecheck_file(path: &String) -> Module<TypedUserDefinedFunction, TypedStruct> {
     let module = parse_file(path);
+    let result = type_checker::typecheck_program(module);
+
+    result
+}
+
+pub fn interpret_file(path: &String) -> interpreter::Value {
+    let module = typecheck_file(path);
     let start = Instant::now();
     let result = interpreter::interpret_program(&module);
     eprintln!("Interpret in {} ms", start.elapsed().as_millis());
@@ -50,9 +56,3 @@ pub fn interpret_file(path: &String) -> interpreter::Value {
     result
 }
 
-pub fn typecheck_file(path: &String) -> Module<TypedUserDefinedFunction, TypedStruct> {
-    let module = parse_file(path);
-    let result = type_checker::typecheck_program(module);
-
-    result
-}

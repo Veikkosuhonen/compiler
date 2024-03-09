@@ -355,6 +355,6 @@ mod tests {
             p.v.x;
         ").expect("Shoulve tokenized");
 
-        assert_eq!(tokens[3].token_type, TokenType::Operator);   
+        assert_eq!(tokens[2].token_type, TokenType::Operator);   
     }
 }

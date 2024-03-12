@@ -5,28 +5,28 @@ use crate::{builtin_functions::{get_builtin_function_ir_vars, get_builtin_type_c
 #[derive(Clone, Debug)]
 pub struct IRVar {
     pub name: String,
+    pub field: Option<String>,
     pub var_type: Type
 }
 
 impl IRVar {
-    fn new(name: String, var_type: Type) -> IRVar {
-        IRVar { name, var_type }
+    pub fn new(name: String, var_type: Type) -> IRVar {
+        IRVar { name, field: None, var_type }
     }
 
     fn unit() -> IRVar {
-        IRVar { name: String::from("U"), var_type: Type::Unit }
+        IRVar { name: String::from("U"), field: None, var_type: Type::Unit }
     }
 
     fn to_string(&self) -> String {
-        self.name.to_string()
+        match &self.field {
+            Some(fname) => format!("{}.{}: {:?}", self.name.to_string(), fname, self.var_type),
+            None => format!("{}: {:?}", self.name.to_string(), self.var_type),
+        }
     }
 
     pub fn size(&self) -> usize {
-        match &self.var_type {
-            Type::Integer => 8,
-            Type::Boolean => 8,
-            _ => todo!(),
-        }
+        self.var_type.size()
     }
 }
 
@@ -43,18 +43,26 @@ impl IRVarTable {
     }
 
     fn unconflicting_name(&mut self, mut name: String) -> String {
-        if self.vars.contains_key(&name) {
-            name = format!("{name}0");
+        while self.vars.contains_key(&name) {
+            name = format!("var_{}", self.var_idx);
+            self.var_idx += 1;
         }
         name
     }
 
     fn create(&mut self, name: String, var_type: Type) -> IRVar {
-        IRVar::new(self.unconflicting_name(name), var_type)
+        let name = self.unconflicting_name(name);
+        let var = IRVar::new(name.clone(), var_type);
+        self.vars.insert(name, var.clone());
+        var
+    }
+
+    fn create_with_field(&mut self, name: String, field: String, var_type: Type) -> IRVar {
+        IRVar { name, field: Some(field), var_type }
     }
 
     fn create_unnamed(&mut self, var_type: Type) -> IRVar {
-        let var = IRVar::new(self.unconflicting_name(format!("var_{}", self.var_idx)), var_type);
+        let var = self.create(format!("var_{}", self.var_idx), var_type);
         self.var_idx += 1;
         var
     }
@@ -74,11 +82,12 @@ impl IRVarTable {
 pub enum Instr {
     LoadIntConst { value: i32, dest: Box<IRVar> },
     LoadBoolConst { value: bool, dest: Box<IRVar> },
-    Copy { source: Box<IRVar>, dest: Box<IRVar>, pointer_nesting: usize },
+    Copy { source: Box<IRVar>, dest: Box<IRVar> },
     Call { fun: Box<IRVar>, args: Vec<Box<IRVar>>, dest: Box<IRVar> },
     Jump(String),
     CondJump { cond: Box<IRVar>, then_label: String, else_label: String },
     FunctionLabel { name: String, params: Vec<IRVar> },
+    Declare { var: Box<IRVar> },
     Label(String),
 }
 
@@ -89,21 +98,22 @@ pub struct IREntry {
 }
 
 impl IREntry {
-    fn copy(src: IRVar, dest: IRVar, pointer_nesting: usize) -> IREntry {
-        IREntry { instruction: Instr::Copy { source: Box::new(src), dest: Box::new(dest), pointer_nesting } }
+    fn copy(src: IRVar, dest: IRVar) -> IREntry {
+        IREntry { instruction: Instr::Copy { source: Box::new(src), dest: Box::new(dest) } }
     }
 }
 
 impl IREntry {
     pub fn to_string(&self) -> String {
         match &self.instruction {
+            Instr::Declare { var } => format!("Declare({})", var.to_string()),
             Instr::Label(label) => format!("Label({})", label.clone()),
             Instr::FunctionLabel { name, params } => format!("Function({}({}))", name.clone(), params.iter().map(|p| { p.name.clone() }).collect::<Vec<String>>().join(", ")),
             Instr::Jump(label) => format!("Jump({})", label.clone()),
             Instr::CondJump { cond, else_label, then_label } => format!("CondJump({}, {}, {})", cond.to_string(), then_label.clone(), else_label.clone()),
             Instr::LoadIntConst { value, dest } => format!("LoadIntConst({}, {})", value, dest.to_string()),
             Instr::LoadBoolConst { value, dest } => format!("LoadBoolConst({}, {})", value, dest.to_string()),
-            Instr::Copy { source, dest, pointer_nesting } => format!("Copy({}, {}{}{})", source.to_string(), "(".repeat(*pointer_nesting), dest.to_string(), ")".repeat(*pointer_nesting)),
+            Instr::Copy { source, dest } => format!("Copy({}, {})", source.to_string(), dest.to_string()),
             Instr::Call { fun, args, dest } => format!("Call({}, [{}], {})", fun.to_string(), args.iter().map(|arg| arg.to_string()).collect::<Vec<String>>().join(","), dest.to_string()),
         }
     }
@@ -123,11 +133,8 @@ pub fn generate_ir(module: Module<TypedUserDefinedFunction, TypedStruct>) -> Has
         for (idx, param_name) in function.params.iter().enumerate() {
             let param = function.func_type.param_types.get(idx).unwrap();
             let ir_var = var_table.create(param_name.clone(), param.param_type.clone());
-            var_table.vars.insert(param_name.clone(), ir_var.clone());
             params.push(ir_var);
         }
-        let return_var = var_table.create(String::from("_return"), function.func_type.return_type.clone());
-        var_table.vars.insert(return_var.name.clone(), return_var);
         let function_ir = generate_function_ir(function, params, var_table);
         module_functions_ir.insert(function.id.to_string(), function_ir);
     }
@@ -138,8 +145,8 @@ pub fn generate_ir(module: Module<TypedUserDefinedFunction, TypedStruct>) -> Has
 fn generate_function_ir(func: &TypedUserDefinedFunction, params: Vec<IRVar>, mut var_table: IRVarTable) -> Vec<IREntry> {
     let mut function_instructions: Vec<IREntry> = vec![];
     function_instructions.push(IREntry { instruction: Instr::FunctionLabel { name: func.id.clone(), params  } });
-    let result = generate(&func.body, &mut function_instructions, &mut var_table, String::from("_return"));
-    function_instructions.push(IREntry::copy(result, var_table.get(&String::from("_return")), 0));
+    let return_var = var_table.create(String::from("_return"), func.func_type.return_type.clone());
+    let _ = generate(&func.body, &mut function_instructions, &mut var_table, &return_var);
     function_instructions.push(IREntry { instruction: Instr::Label(format!(".L{}_end", func.id)) });
     function_instructions
 }
@@ -158,18 +165,17 @@ fn create_top_level_var_table(global_functions: &Vec<TypedUserDefinedFunction>, 
         let sym = function.id.clone();
         var_table.vars.insert(
             sym.clone(), 
-            IRVar { name: sym, var_type: Type::Function(Box::new(function.func_type.clone())) }
+            IRVar::new(sym, Type::Function(Box::new(function.func_type.clone())))
         );
     }
 
     var_table
 }
 
-fn generate(node: &TypedASTNode, instructions: &mut Vec<IREntry>, var_table: &mut IRVarTable, dest_name: String) -> IRVar {
+fn generate(node: &TypedASTNode, instructions: &mut Vec<IREntry>, var_table: &mut IRVarTable, dest: &IRVar) -> IRVar {
     match &node.expr {
         Expr::Unit => IRVar::unit(),
         Expr::IntegerLiteral { value } => {
-            let dest = var_table.create_unnamed(node.node_type.clone());
             instructions.push(IREntry { 
                 // location: , 
                 instruction: Instr::LoadIntConst { 
@@ -177,10 +183,9 @@ fn generate(node: &TypedASTNode, instructions: &mut Vec<IREntry>, var_table: &mu
                     dest: Box::new(dest.clone()),
                 }
             });
-            dest
+            dest.clone()
         },
         Expr::BooleanLiteral { value } => {
-            let dest = var_table.create_unnamed( node.node_type.clone());
             instructions.push(IREntry { 
                 // location: , 
                 instruction: Instr::LoadBoolConst { 
@@ -188,14 +193,20 @@ fn generate(node: &TypedASTNode, instructions: &mut Vec<IREntry>, var_table: &mu
                     dest: Box::new(dest.clone()),
                 }
             });
-            dest
+            dest.clone()
         },
         Expr::Identifier { value } => {
-            var_table.get(value)
+            let src = var_table.get(value);
+            if src.name != dest.name {
+                instructions.push(IREntry::copy(src, dest.clone()));
+                return dest.clone()
+            }
+            src
         },
         Expr::VariableDeclaration { id, init,.. } => {
             if let Expr::Identifier { value } = &id.expr {
-                let init = generate(&init, instructions, var_table, value.clone());
+                let dest = var_table.create(value.clone(), init.node_type.clone());
+                let init = generate(&init, instructions, var_table, &dest);
                 var_table.vars.insert(value.clone(), init.clone());
                 init
             } else {
@@ -203,8 +214,7 @@ fn generate(node: &TypedASTNode, instructions: &mut Vec<IREntry>, var_table: &mu
             }
         },
         Expr::Unary { operand, operator } => {
-            let dest = var_table.create_unnamed(node.node_type.clone());
-            let operand = generate(&operand, instructions, var_table, dest.name.clone());
+            let operand = generate(&operand, instructions, var_table, dest);
             let fun = var_table.get(&operator.to_string());
 
             instructions.push(IREntry { 
@@ -215,51 +225,49 @@ fn generate(node: &TypedASTNode, instructions: &mut Vec<IREntry>, var_table: &mu
                     dest: Box::new(dest.clone()),
                 }
             });
-            dest
+            dest.clone()
         },
         Expr::Logical { left, operator, right } => {
-            let dest = var_table.create_unnamed(node.node_type.clone());
             let fun = var_table.get(&operator.to_string());
             
             match fun.name.as_str() {
                 "and" => {
-                    let left = generate(&left, instructions, var_table, dest_name.clone());
+                    let left = generate(&left, instructions, var_table, dest);
                     let return_left_label = var_table.create_local_label();
                     let end_label = var_table.create_local_label();
                     let return_right_label = var_table.create_local_label();
                     instructions.push(IREntry { instruction: Instr::CondJump { cond: Box::new(left.clone()), then_label: return_right_label.clone(), else_label: return_left_label.clone() } });
                     instructions.push(IREntry { instruction: Instr::Label(return_left_label) });
-                    instructions.push(IREntry::copy(left, dest.clone(), 0));
+                    instructions.push(IREntry::copy(left, dest.clone()));
                     instructions.push(IREntry { instruction: Instr::Jump(end_label.clone()) });
                     instructions.push(IREntry { instruction: Instr::Label(return_right_label) });
-                    let right = generate(&right, instructions, var_table, dest_name.clone());
-                    instructions.push(IREntry::copy(right, dest.clone(), 0));
+                    let right = generate(&right, instructions, var_table, dest);
+                    instructions.push(IREntry::copy(right, dest.clone()));
                     instructions.push(IREntry { instruction: Instr::Label(end_label) });
                 },
                 "or" => {
-                    let left = generate(&left, instructions, var_table, dest_name.clone());
+                    let left = generate(&left, instructions, var_table, dest);
                     let return_left_label = var_table.create_local_label();
                     let end_label = var_table.create_local_label();
                     let return_right_label = var_table.create_local_label();
                     instructions.push(IREntry { instruction: Instr::CondJump { cond: Box::new(left.clone()), then_label: return_left_label.clone(), else_label: return_right_label.clone() } });
                     instructions.push(IREntry { instruction: Instr::Label(return_left_label) });
-                    instructions.push(IREntry::copy(left, dest.clone(), 0));
+                    instructions.push(IREntry::copy(left, dest.clone()));
                     instructions.push(IREntry { instruction: Instr::Jump(end_label.clone()) });
                     instructions.push(IREntry { instruction: Instr::Label(return_right_label) });
-                    let right = generate(&right, instructions, var_table, dest_name.clone());
-                    instructions.push(IREntry::copy(right, dest.clone(), 0));
+                    let right = generate(&right, instructions, var_table, dest);
+                    instructions.push(IREntry::copy(right, dest.clone()));
                     instructions.push(IREntry { instruction: Instr::Label(end_label) });
                 },
                 _ => panic!("Unknown logical operation {}", fun.name)
             }
 
-            dest
+            dest.clone()
         },
         Expr::Binary { left, operator, right } => {
-            let dest = var_table.create_unnamed(node.node_type.clone());
             let fun = var_table.get(&operator.to_string());
-            let left = generate(&left, instructions, var_table, dest.name.clone());
-            let right = generate(&right, instructions, var_table, dest.name.clone());
+            let left = generate(&left, instructions, var_table, dest);
+            let right = generate(&right, instructions, var_table, dest);
             instructions.push(IREntry { 
                 // location: , 
                 instruction: Instr::Call { 
@@ -269,34 +277,34 @@ fn generate(node: &TypedASTNode, instructions: &mut Vec<IREntry>, var_table: &mu
                 }
             });
             
-            dest
+            dest.clone()
         },
         Expr::Call { callee, arguments } => generate_call(callee, arguments, instructions, var_table),
         Expr::Return { result } => {
-            let return_var = generate(&result, instructions, var_table, dest_name.clone());
-            instructions.push(IREntry::copy(return_var.clone(), var_table.get(&String::from("_return")), 0));
+            let return_var = generate(&result, instructions, var_table, dest);
+            instructions.push(IREntry::copy(return_var.clone(), var_table.get(&String::from("_return"))));
             instructions.push(IREntry { instruction: Instr::Jump(format!(".L{}_end", var_table.fun_name)) });
             return_var
         },
         Expr::Assignment { left, right } => {
-            let (left, pointer_nesting) = generate_assignment_left_side(left, instructions, var_table);
-            let right = generate(&right, instructions, var_table, dest_name.clone());
-            instructions.push(IREntry::copy(right.clone(), left, pointer_nesting));
+            let left = generate_assignment_left_side(left, instructions, var_table);
+            let temp = var_table.create_unnamed(right.node_type.clone());
+            let right = generate(&right, instructions, var_table, &temp);
+            instructions.push(IREntry::copy(right.clone(), left));
             right
         },
         Expr::Block { statements, result } => {
             for stmnt in statements {
-                generate(&stmnt, instructions, var_table, dest_name.clone());
+                generate(&stmnt, instructions, var_table, dest);
             }
-            generate(&result, instructions, var_table, dest_name)
+            generate(&result, instructions, var_table, dest)
         },
         Expr::If { condition, then_branch, else_branch } => {
             let then_label = var_table.create_local_label();
             let end_label = var_table.create_local_label();
             let else_label = if else_branch.is_some() { var_table.create_local_label() } else { end_label.clone() };
-            let dest = var_table.create(dest_name.clone(), node.node_type.clone());
 
-            let condition = generate(&condition, instructions, var_table, dest_name.clone());
+            let condition = generate(&condition, instructions, var_table, dest);
             instructions.push(IREntry { instruction: Instr::CondJump { 
                 cond: Box::new(condition), 
                 then_label: then_label.clone(),
@@ -304,29 +312,28 @@ fn generate(node: &TypedASTNode, instructions: &mut Vec<IREntry>, var_table: &mu
             }});
 
             instructions.push(IREntry { instruction: Instr::Label(then_label) });
-            let then_branch = generate(&then_branch, instructions, var_table, dest_name.clone());
-            instructions.push(IREntry::copy(then_branch, dest.clone(), 0));
+            let then_branch = generate(&then_branch, instructions, var_table, dest);
+            instructions.push(IREntry::copy(then_branch, dest.clone()));
 
             if let Some(else_branch) = else_branch {
                 instructions.push(IREntry { instruction: Instr::Jump(end_label.clone()) });
                 instructions.push(IREntry { instruction: Instr::Label(else_label) });
-                let else_branch = generate(&else_branch, instructions, var_table, dest_name);
-                instructions.push(IREntry::copy(else_branch, dest.clone(), 0));
+                let else_branch = generate(&else_branch, instructions, var_table, dest);
+                instructions.push(IREntry::copy(else_branch, dest.clone()));
             }
 
             instructions.push(IREntry { instruction: Instr::Label(end_label) });
 
-            dest
+            dest.clone()
         },
         Expr::While { condition, body } => {
             let while_label = var_table.create_local_label();
             let do_label = var_table.create_local_label();
             let end_label = var_table.create_local_label();
-            let dest = var_table.create(dest_name.clone(), node.node_type.clone());
 
             instructions.push(IREntry { instruction: Instr::Label(while_label.clone()) });
 
-            let condition = generate(&condition, instructions, var_table, dest_name.clone());
+            let condition = generate(&condition, instructions, var_table, dest);
             instructions.push(IREntry { instruction: Instr::CondJump { 
                 cond: Box::new(condition), 
                 then_label: do_label.clone(),
@@ -334,25 +341,46 @@ fn generate(node: &TypedASTNode, instructions: &mut Vec<IREntry>, var_table: &mu
             }});
 
             instructions.push(IREntry { instruction: Instr::Label(do_label) });
-            let body = generate(&body, instructions, var_table, dest_name);
-            instructions.push(IREntry::copy(body, dest.clone(), 0));
+            let body = generate(&body, instructions, var_table, dest);
+            instructions.push(IREntry::copy(body, dest.clone()));
             instructions.push(IREntry { instruction: Instr::Jump(while_label) });
 
             instructions.push(IREntry { instruction: Instr::Label(end_label) });
 
-            dest
+            dest.clone()
         },
-        Expr::StructInstance { struct_name, fields } => todo!(),
-        Expr::Member { parent, name } => todo!()
+        Expr::StructInstance { fields,.. } => {
+            let constructor_type = node.node_type.clone();
+            generate_named_params_constructor_call(constructor_type, fields, instructions, var_table)
+        },
+        Expr::Member { parent, name } => {
+            let parent_var = match &parent.expr {
+                Expr::Identifier { value } => var_table.get(value),
+                _ => {
+                    let temp = var_table.create_unnamed(parent.node_type.clone());
+                    generate(&parent, instructions, var_table, &temp)
+                }
+            };
+
+            let source = var_table.create_with_field(parent_var.name, name.clone(), parent.node_type.clone());
+            instructions.push(IREntry::copy(source, dest.clone()));
+            dest.clone()
+        }
     }
 }
 
-fn generate_assignment_left_side(node: &Box<TypedASTNode>, instructions: &mut Vec<IREntry>, var_table: &mut IRVarTable) -> (IRVar, usize) {
+fn generate_assignment_left_side(node: &Box<TypedASTNode>, instructions: &mut Vec<IREntry>, var_table: &mut IRVarTable) -> IRVar {
     match &node.expr {
-        Expr::Identifier { value } => (var_table.get(&value), 0),
+        Expr::Identifier { value } => var_table.get(&value),
         Expr::Unary { operand, operator: Op::Deref } => {
-            let (irvar, nesting) = generate_assignment_left_side(&operand, instructions, var_table);
-            (irvar, nesting + 1)
+            let pointer_var = generate_assignment_left_side(&operand, instructions, var_table);
+            var_table.create_with_field(pointer_var.name, String::from("value"), pointer_var.var_type)
+        },
+        Expr::Member { parent, name } => {
+            let parent_var = generate_assignment_left_side(&parent, instructions, var_table);
+            eprintln!("Assigning to member of struct: {:?}", parent_var);
+            let dest = var_table.create_with_field(parent_var.name, name.clone(), parent.node_type.clone());
+            dest
         },
         _ => panic!("Encountered invalid assignment left side when generating IR: {:?}", node)
     }
@@ -373,14 +401,39 @@ fn generate_call(callee: &Box<TypedASTNode>, arguments: &Vec<Box<TypedASTNode>>,
     }
 }
 
+fn generate_named_params_constructor_call(constructor_type: Type, arguments: &Vec<(String, Box<TypedASTNode>)>, instructions: &mut Vec<IREntry>, var_table: &mut IRVarTable) -> IRVar {
+    if let Type::Constructor(constructed_type) = constructor_type {
+        let func_type = constructed_type.get_constructor_type();
+
+        // Struct var
+        let struct_var = var_table.create_unnamed(*constructed_type.clone());
+        instructions.push(IREntry { instruction: Instr::Declare { var: Box::new(struct_var.clone()) } });
+
+
+        // Generate args
+        for param in func_type.param_types {
+            let (_, arg_node) = arguments.iter().find(|(name, _)| *name == param.name).unwrap();
+            let field_var = var_table.create_with_field(
+                struct_var.name.clone(), 
+                param.name,
+                *constructed_type.clone()
+            );
+            generate(arg_node, instructions, var_table, &field_var);
+        }
+        
+        struct_var
+    } else {
+        unreachable!()
+    }
+}
+
 fn generate_constructor_call(constructor_type: Type, arguments: &Vec<Box<TypedASTNode>>, instructions: &mut Vec<IREntry>, var_table: &mut IRVarTable) -> IRVar {
     let dest = var_table.create_unnamed(constructor_type);
-    let dest_name = dest.name.clone();
 
-    // Copy args to constructor shape
+    // Generate args
     for arg in arguments {
-        let arg_var = generate(&arg, instructions, var_table, dest_name.clone());
-        instructions.push(IREntry::copy(arg_var, dest.clone(), 0));
+        let arg_var = generate(&arg, instructions, var_table, &dest);
+        instructions.push(IREntry::copy(arg_var, dest.clone()));
     }
     
     dest
@@ -390,7 +443,8 @@ fn generate_function_call(fun: IRVar, return_type: Type, arguments: &Vec<Box<Typ
     let dest = var_table.create_unnamed(return_type);
     let mut argument_vars: Vec<Box<IRVar>> = vec![];
     for arg in arguments {
-        argument_vars.push(Box::new(generate(&arg, instructions, var_table, dest.name.clone())));
+        let arg_var = var_table.create_unnamed(arg.node_type.clone());
+        argument_vars.push(Box::new(generate(&arg, instructions, var_table, &arg_var)));
     }
     instructions.push(IREntry { 
         // location: , 
@@ -431,7 +485,7 @@ mod tests {
 
     #[test]
     fn function() {
-        let _ = i("
+        let _ir = i("
             fun f(x: Int): Int {
                 x + 1
             }
@@ -469,6 +523,70 @@ mod tests {
     fn heap_alloc() {
         let _ir = i("
             var x = new Int(123);
+        ");
+    }
+
+    #[test]
+    fn struct_instance() {
+        let _ir = i("
+            struct Dog { size: Int, isHungry: Bool }
+            var doggo = new Dog { isHungry: false, size: 100 };
+            var hungry_doggo = new Dog { isHungry: true, size: 200 };
+            hungry_doggo
+        ");
+
+        // println!("{}", _ir.get("main").unwrap().iter().map(|i| i.to_string()).collect::<Vec<String>>().join("\n"))
+    }
+
+    #[test]
+    fn struct_member_access() {
+        let _ir = i("
+            struct Tail { length: Int }
+            struct Dog { size: Int, isHungry: Bool, tail: Tail* }
+            var doggo = new Dog { isHungry: false, size: 100, tail: new Tail { length: 30 } };
+            doggo.tail.length
+        ");
+
+        // println!("{}", _ir.get("main").unwrap().iter().map(|i| i.to_string()).collect::<Vec<String>>().join("\n"))
+    }
+
+    #[test]
+    fn correct_arg_vars() {
+        let _ir = i("
+                fun identity(x: Int): Int {
+                    x
+                }
+                
+                fun tuplaa(x: Int): Int {
+                    identity(x) + identity(x)
+                }
+                
+                print_int(tuplaa(69));
+                ");
+
+        // println!("{}", _ir.get("main").unwrap().iter().map(|i| i.to_string()).collect::<Vec<String>>().join("\n"))
+    }
+
+    #[test]
+    fn struct_created_by_function() {
+        let _ir = i("
+            struct Dog { size: Int, isHungry: Bool }
+            fun create_dog(size: Int, isHungry: Bool): Dog* {
+                new Dog { size: size, isHungry: isHungry }
+            }
+            var doggo = create_dog(100, false);
+            doggo
+        ");
+
+        // println!("{}", _ir.get("main").unwrap().iter().map(|i| i.to_string()).collect::<Vec<String>>().join("\n"))
+    }
+
+    #[test]
+    fn assign_to_struct_member() {
+        let _ir = i("
+            struct Dog { size: Int, isHungry: Bool }
+            var doggo = new Dog { size: 100, isHungry: false };
+            doggo.size = 200;
         ");
 
         println!("{}", _ir.get("main").unwrap().iter().map(|i| i.to_string()).collect::<Vec<String>>().join("\n"))

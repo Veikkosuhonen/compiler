@@ -108,8 +108,8 @@ pub fn eval_builtin_unary(op: Op, operand: EvalRes, stack: &mut Memory) -> Value
 
 lazy_static! {
     static ref BUILTIN_REFERRABLE_TYPES: [(Symbol, Type); 4] = [
-        (Symbol::Identifier(String::from("Int")), Type::Integer), 
-        (Symbol::Identifier(String::from("Bool")), Type::Boolean),
+        (Symbol::Identifier(String::from("Int")), Type::Int), 
+        (Symbol::Identifier(String::from("Bool")), Type::Bool),
         (Symbol::Identifier(String::from("Unit")), Type::Unit),
         (Symbol::Identifier(String::from("Unknown")), Type::Unknown),
         // (Symbol::Identifier(String::from("Pointer")), Type::Pointer(Box::new(Type::generic("T"))))
@@ -123,16 +123,16 @@ pub fn get_builtin_referrable_types() -> Vec<(Symbol, Type)> {
 pub fn get_builtin_function_types() -> Vec<(Symbol, Type)> {
     let functions = vec![
         ("print_int", FunctionType ::unnamed_params(
-             vec![Type::Integer],
+             vec![Type::Int],
             Type::Unit,
         )),
         ("print_bool", FunctionType ::unnamed_params(
-             vec![Type::Boolean],
+             vec![Type::Bool],
             Type::Unit,
         )),
         ("read_int", FunctionType ::unnamed_params(
              vec![],
-            Type::Integer,
+            Type::Int,
         )),
     ];
 
@@ -154,64 +154,64 @@ pub fn get_builtin_function_values() -> Vec<(Symbol, (Value, Type))> {
 pub fn get_builtin_function_and_operator_types() -> Vec<(Symbol, Type)> {
     let ops = vec![
         (Op::Add, FunctionType ::unnamed_params(
-             vec![Type::Integer, Type::Integer],
-            Type::Integer,
+             vec![Type::Int, Type::Int],
+            Type::Int,
         )),
         (Op::Sub, FunctionType ::unnamed_params(
-             vec![Type::Integer, Type::Integer],
-            Type::Integer,
+             vec![Type::Int, Type::Int],
+            Type::Int,
         )),
         (Op::UnarySub, FunctionType ::unnamed_params(
-             vec![Type::Integer],
-            Type::Integer,
+             vec![Type::Int],
+            Type::Int,
         )),
         (Op::Mul, FunctionType ::unnamed_params(
-             vec![Type::Integer, Type::Integer],
-            Type::Integer,
+             vec![Type::Int, Type::Int],
+            Type::Int,
         )),
         (Op::Div, FunctionType ::unnamed_params(
-             vec![Type::Integer, Type::Integer],
-            Type::Integer,
+             vec![Type::Int, Type::Int],
+            Type::Int,
         )),
         (Op::Mod, FunctionType ::unnamed_params(
-             vec![Type::Integer, Type::Integer],
-            Type::Integer,
+             vec![Type::Int, Type::Int],
+            Type::Int,
         )),
         (Op::Not, FunctionType ::unnamed_params(
-             vec![Type::Boolean],
-            Type::Boolean,
+             vec![Type::Bool],
+            Type::Bool,
         )),
         (Op::LT, FunctionType ::unnamed_params(
-             vec![Type::Integer, Type::Integer],
-            Type::Boolean,
+             vec![Type::Int, Type::Int],
+            Type::Bool,
         )),
         (Op::GT, FunctionType ::unnamed_params(
-             vec![Type::Integer, Type::Integer],
-            Type::Boolean,
+             vec![Type::Int, Type::Int],
+            Type::Bool,
         )),
         (Op::LTE, FunctionType ::unnamed_params(
-             vec![Type::Integer, Type::Integer],
-            Type::Boolean,
+             vec![Type::Int, Type::Int],
+            Type::Bool,
         )),
         (Op::GTE, FunctionType ::unnamed_params(
-             vec![Type::Integer, Type::Integer],
-            Type::Boolean,
+             vec![Type::Int, Type::Int],
+            Type::Bool,
         )),
         (Op::And, FunctionType ::unnamed_params(
-             vec![Type::Boolean, Type::Boolean],
-            Type::Boolean,
+             vec![Type::Bool, Type::Bool],
+            Type::Bool,
         )),
         (Op::Or, FunctionType ::unnamed_params(
-             vec![Type::Boolean, Type::Boolean],
-            Type::Boolean,
+             vec![Type::Bool, Type::Bool],
+            Type::Bool,
         )),
         (Op::Equals, FunctionType ::unnamed_params(
              vec![Type::generic("T"), Type::generic("T")],
-            Type::Boolean,
+            Type::Bool,
         )),
         (Op::NotEquals, FunctionType ::unnamed_params(
              vec![Type::generic("T"), Type::generic("T")],
-            Type::Boolean,
+            Type::Bool,
         )),
         (Op::AddressOf, FunctionType ::unnamed_params(
              vec![Type::generic("T")],
@@ -243,12 +243,12 @@ pub fn get_builtin_function_and_operator_types() -> Vec<(Symbol, Type)> {
 pub fn get_builtin_function_ir_vars() -> Vec<(String, IRVar)> {
     let ops = get_builtin_function_and_operator_types();
     ops.iter().map(|(symbol, var_type)| 
-        (symbol.to_string(), IRVar { name: symbol.to_string(), var_type: var_type.clone() })
+        (symbol.to_string(), IRVar::new(symbol.to_string(), var_type.clone()))
     ).collect()
 }
 
 pub fn get_builtin_type_constructor_ir_vars() -> Vec<(String, IRVar)> {
     get_builtin_referrable_types().iter().map(|(symbol, var_type)| 
-        (symbol.to_string(), IRVar { name: symbol.to_string(), var_type: Type::Function(Box::new(var_type.get_callable_type())) })
+        (symbol.to_string(), IRVar::new(symbol.to_string(), Type::Function(Box::new(var_type.get_callable_type()))))
     ).collect()
 }

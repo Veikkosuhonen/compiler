@@ -1,0 +1,4 @@
+struct Dog { size: Int, isHungry: Bool }
+var doggo = new Dog { size: 100, isHungry: false };
+doggo.size = 200;
+print_int(doggo.size);

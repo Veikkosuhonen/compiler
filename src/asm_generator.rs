@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::{ir_generator::{IREntry, IRVar, Instr}, sym_table::Symbol, tokenizer::Op};
+use crate::{ir_generator::{IREntry, IRVar, Instr}, sym_table::Symbol, tokenizer::Op, type_checker::Type};
 
 pub fn generate_asm(ir: HashMap<String, Vec<IREntry>>) -> String {
     let functions_code = ir.iter().map(|(fun_name, ir)| {
@@ -12,40 +12,78 @@ pub fn generate_asm(ir: HashMap<String, Vec<IREntry>>) -> String {
     add_stdlib_code(source)
 }
 
+enum Address {
+    Register(String),
+    Memory(i32),
+}
+
+impl Address {
+    fn to_string(&self) -> String {
+        match self {
+            Address::Register(reg) => reg.clone(),
+            Address::Memory(addr) => format!("{}(%rbp)", addr)
+        }
+    }
+}
+
 pub fn generate_function_asm(fun_name: &str, fun_ir: &Vec<IREntry>) -> String {
-    let mut locals_addresses: HashMap<String, String> = HashMap::new();
-    let mut next_stack_loc = -8;
+    let mut locals: HashMap<String, (Address, Type)> = HashMap::new();
+    let mut stack_size: usize = 0;
 
-    locals_addresses.insert(String::from("_return"), String::from("%rax"));
-
-    let mut add_var = |name: &String| {
-        if !locals_addresses.contains_key(name) {
-            let address = format!("{next_stack_loc}(%rbp)");
-            locals_addresses.insert(name.clone(), address.clone());
-            next_stack_loc -= 8;
+    let mut add_var = |var: &IRVar| {
+        // println!("IRVar = {:?}", var);
+        if locals.contains_key(&var.name) {
+        //if let Some((Address::Memory(base_addr), var_type)) = locals.get(&var.name) {
+            // This may be a member reference
+            // if let Some(member_name) = &var.field {
+            //     if let Type::Struct(struct_type) = var_type {
+            //         let (member_offset, member_type) = struct_type.get_member(&member_name);
+            //         let address = *base_addr + member_offset as i32 * 8;
+            //         locals.insert(format!("{}.{}", var.name, member_name), (Address::Memory(address), member_type));
+            //     } else if let Type::Pointer(inner_type) = var_type {
+            //         if let Type::Struct(struct_type) = inner_type.as_ref() {
+            //             let (member_offset, member_type) = struct_type.get_member(&member_name);
+            //             let address = *base_addr + member_offset as i32 * 8;
+            //             println!("{}.{member_name} is at {address}", var.name);
+            //             locals.insert(format!("{}.{}", var.name, member_name), (Address::Memory(address), member_type));
+            //         } else {
+            //             panic!("IR has a member access to non-struct")
+            //         }
+            //     } else {
+            //         panic!("IR has a member access to non-struct")
+            //     }
+            // }
+        } else if var.name == "_return" {
+            locals.insert(var.name.clone(), (Address::Register("%rax".to_string()), var.var_type.clone()));
+        } else {
+            stack_size += var.size();
+            let address = -(8 * (stack_size - 1) as i32);
+            locals.insert(var.name.clone(), (Address::Memory(address), var.var_type.clone()));
+            // println!("{} is at {address} with size {}", var.name, var.size())
         }
     };
 
     for entry in fun_ir {
         match &entry.instruction {
-            Instr::LoadIntConst { dest, .. } => add_var(&dest.name),
-            Instr::LoadBoolConst { dest,.. } => add_var(&dest.name),
+            Instr::LoadIntConst { dest, .. } => add_var(&dest),
+            Instr::LoadBoolConst { dest,.. } => add_var(&dest),
             Instr::Copy { source, dest, .. } => {
-                add_var(&source.name);
-                add_var(&dest.name);
+                add_var(&source);
+                add_var(&dest);
             },
             Instr::Call { args, dest,.. } => {
                 for ir_var in args {
-                    add_var(&ir_var.name);
+                    add_var(&ir_var);
                 }
-                add_var(&dest.name);
+                add_var(&dest);
             },
+            Instr::Declare { var } => add_var(&var),
             _ => { /* no vars */}
         }
     }
 
     // align to 16 bytes
-    let locals_size = 8 * (locals_addresses.len() + locals_addresses.len() % 2);
+    let locals_size = 8 * (stack_size + stack_size % 2);
 
     let function_body = fun_ir.iter().map(|entry| {
 
@@ -62,34 +100,34 @@ pub fn generate_function_asm(fun_name: &str, fun_ir: &Vec<IREntry>) -> String {
                 ];
                 for (idx, param) in params.iter().enumerate() {
                     let param_reg = get_argument_register(idx);
-                    let local_address = locals_addresses.get(&param.name).expect(format!("In {fun_name}, param {} is not defined", param.name).as_str());
-                    lines.push(format!("movq {param_reg}, {local_address}"));
+                    let (local_address,_) = locals.get(&param.name).expect(format!("In {fun_name}, param {} is not defined", param.name).as_str());
+                    lines.push(format!("movq {param_reg}, {}", local_address.to_string()));
                 }
                 lines
             },
             Instr::LoadIntConst { value, dest } => {
-                let dest_loc = get_var_address(&dest.name, &locals_addresses);
-                vec![
-                    format!("movq ${}, {}", value, dest_loc)
-                ]
+                let (dest_loc, mut lines) = get_var_address(&dest, &locals);
+                lines.push(format!("movq ${}, {}", value, dest_loc));
+                lines
             },
             Instr::LoadBoolConst { value, dest } => {
-                let dest_loc = get_var_address(&dest.name, &locals_addresses);
+                let (dest_loc, mut lines) = get_var_address(&dest, &locals);
                 let byte_val = if *value { 1 } else { 0 };
-                vec![
-                    format!("movq ${}, {}", byte_val, dest_loc)
-                ]
+                lines.push(format!("movq ${}, {}", byte_val, dest_loc));
+                lines
             },
             Instr::Call { fun, args, dest } => {
                 vec![
-                    generate_call(fun, args, dest, &locals_addresses)
+                    generate_call(fun, args, dest, &locals)
                 ]
             },
-            Instr::Copy { source, dest, pointer_nesting } => {
-                let src_loc = get_var_address(&source.name, &locals_addresses);
-                let dest_loc = get_var_address(&dest.name, &locals_addresses);
+            Instr::Copy { source, dest } => {
+                let (src_loc, mut lines) = get_var_address(&source, &locals);
+                let (dest_loc, arg_lines) = get_var_address(&dest, &locals);
+                lines.extend(arg_lines);
 
-                copy_to_addr(&src_loc, &dest_loc, pointer_nesting)
+                lines.extend(copy(&src_loc, &dest_loc));
+                lines
             },
             Instr::Label(name) => {
                 vec![
@@ -102,13 +140,14 @@ pub fn generate_function_asm(fun_name: &str, fun_ir: &Vec<IREntry>) -> String {
                 ]
             },
             Instr::CondJump { cond, then_label, else_label } => {
-                let cond_loc = get_var_address(&cond.name, &locals_addresses);
-                vec![
-                    format!("cmpq $0, {}", cond_loc),
-                    format!("jne {}", then_label), 
-                    format!("jmp {}", else_label)
-                ]
+                let (cond_loc, mut lines) = get_var_address(&cond, &locals);
+                
+                lines.push(format!("cmpq $0, {}", cond_loc));
+                lines.push(format!("jne {}", then_label));
+                lines.push(format!("jmp {}", else_label));
+                lines
             },
+            Instr::Declare { .. } => { vec![] },
         }.join("\n        ");
 
         format!("# {}\n        {}", entry.to_string(), asm)
@@ -125,8 +164,8 @@ pub fn generate_function_asm(fun_name: &str, fun_ir: &Vec<IREntry>) -> String {
     ", )
 }
 
-fn generate_call(fun: &Box<IRVar>, args: &Vec<Box<IRVar>>, dest: &Box<IRVar>, addresses: &HashMap<String, String>) -> String {
-    let dest_loc = get_var_address(&dest.name, addresses);
+fn generate_call(fun: &Box<IRVar>, args: &Vec<Box<IRVar>>, dest: &Box<IRVar>, addresses: &HashMap<String, (Address, Type)>) -> String {
+    let (dest_loc, mut lines) = get_var_address(&dest, addresses);
     let callee = match args.len() {
         1 => Op::unary_from_str(&fun.name).map(Symbol::Operator),
         2 => Op::binary_from_str(&fun.name).map(Symbol::Operator),
@@ -136,24 +175,27 @@ fn generate_call(fun: &Box<IRVar>, args: &Vec<Box<IRVar>>, dest: &Box<IRVar>, ad
     match callee {
         Symbol::Operator(op) => {
             let arg_1 = &args[0];
-            let arg_1_loc = get_var_address(&arg_1.name, addresses);
-            let arg_2_opt = &args.get(1).map(|ir_var| get_var_address(&ir_var.name, addresses));
+            let (arg_1_loc, arg_lines) = get_var_address(&arg_1, addresses);
+            lines.extend(arg_lines);
+            let arg_2_opt = args.get(1).map(|ir_var| get_var_address(&ir_var, addresses));
 
-            if let Some(arg_2_loc) = arg_2_opt {
-                match op {
+            if let Some((arg_2_loc, arg_lines)) = arg_2_opt {
+                lines.extend(arg_lines);
+    
+                lines.extend(match op {
                     Op::Add => {
                         vec![
-                            bin_op(&arg_1_loc, arg_2_loc, &dest_loc, "addq")
+                            bin_op(&arg_1_loc, &arg_2_loc, &dest_loc, "addq")
                         ]
                     },
                     Op::Sub => {
                         vec![
-                            bin_op(&arg_1_loc, arg_2_loc, &dest_loc, "subq")
+                            bin_op(&arg_1_loc, &arg_2_loc, &dest_loc, "subq")
                         ]
                     },
                     Op::Mul => {
                         vec![
-                            bin_op(&arg_1_loc, arg_2_loc, &dest_loc, "imulq")
+                            bin_op(&arg_1_loc, &arg_2_loc, &dest_loc, "imulq")
                         ]
                     },
                     Op::Div => {
@@ -174,38 +216,38 @@ fn generate_call(fun: &Box<IRVar>, args: &Vec<Box<IRVar>>, dest: &Box<IRVar>, ad
                     },
                     Op::Equals => {
                         vec![
-                            comparison(&arg_1_loc, arg_2_loc, &dest_loc, "sete"),
+                            comparison(&arg_1_loc, &arg_2_loc, &dest_loc, "sete"),
                         ]
                     },
                     Op::NotEquals => {
                         vec![
-                            comparison(&arg_1_loc, arg_2_loc, &dest_loc, "setne"),
+                            comparison(&arg_1_loc, &arg_2_loc, &dest_loc, "setne"),
                         ]
                     },
                     Op::GT => {
                         vec![
-                            comparison(&arg_1_loc, arg_2_loc, &dest_loc, "setg"),
+                            comparison(&arg_1_loc, &arg_2_loc, &dest_loc, "setg"),
                         ]
                     },
                     Op::GTE => {
                         vec![
-                            comparison(&arg_1_loc, arg_2_loc, &dest_loc, "setge"),
+                            comparison(&arg_1_loc, &arg_2_loc, &dest_loc, "setge"),
                         ]
                     },
                     Op::LT => {
                         vec![
-                            comparison(&arg_1_loc, arg_2_loc, &dest_loc, "setl"),
+                            comparison(&arg_1_loc, &arg_2_loc, &dest_loc, "setl"),
                         ]
                     },
                     Op::LTE => {
                         vec![
-                            comparison(&arg_1_loc, arg_2_loc, &dest_loc, "setle"),
+                            comparison(&arg_1_loc, &arg_2_loc, &dest_loc, "setle"),
                         ]
                     },
                     _ => panic!("{:?} does not have an intrinsic definition", op)
-                }
+                });
             } else {
-                match op {
+                lines.extend(match op {
                     Op::Not => {
                         vec![
                             mov(&arg_1_loc, "%rax"),
@@ -234,13 +276,23 @@ fn generate_call(fun: &Box<IRVar>, args: &Vec<Box<IRVar>>, dest: &Box<IRVar>, ad
                         ]
                     },
                     Op::New => {
-                        let mut mm = [vec![
-                            mov(format!("${}", arg_1.size()).as_str(), "%rdi"),
+                        let base_addr = match addresses.get(&arg_1.name).expect(format!("Address of var {} to be defined", arg_1.name).as_str()).0 {
+                            Address::Memory(addr) => addr,
+                            Address::Register(_) => panic!("Called new on a value in register")
+                        };
+                        let mut mm = vec![
+                            mov(format!("${}", arg_1.size() * 8).as_str(), "%rdi"),
                             format!("call malloc"),
                             format!("test %rax, %rax"),
                             format!("jz .Lend"),
-                        ], copy_to_addr(&arg_1_loc, "%rax", &1)].concat();
-                        mm.push(mov("%rax", &dest_loc));
+                        ];
+                        for offset in 0..arg_1.size() {
+                            mm.append(&mut copy(
+                                &format!("{}(%rbp)", base_addr + offset as i32 * 8),
+                                "%rax",
+                            ));
+                        }
+                        mm.push(format!("{} # Move address of {} to {}", mov("%rax", &dest_loc), arg_1.name, dest.name));
                         mm
                     },
                     Op::Delete => {
@@ -250,29 +302,27 @@ fn generate_call(fun: &Box<IRVar>, args: &Vec<Box<IRVar>>, dest: &Box<IRVar>, ad
                         ]
                     },
                     _ => todo!("{:?}", op)
-                }
+                });
             }
         },
         Symbol::Identifier(name) => {
-            match name.as_str() {
+            lines.extend(match name.as_str() {
                 "print_int" => {
-                    let arg_loc = get_var_address(&args[0].name, addresses);
+                    let (arg_loc, mut lines) = get_var_address(&args[0], addresses);
 
-                    vec![
-                        mov(&arg_loc, "%rsi"),
-                        format!("movq $print_format, %rdi"),
-                        format!("call printf"),
-                    ]
+                    lines.push(mov(&arg_loc, "%rsi"));
+                    lines.push(format!("movq $print_format, %rdi"));
+                    lines.push(format!("call printf"));
+                    lines                    
                 },
                 "print_bool" => {
-                    let arg_loc = get_var_address(&args[0].name, addresses);
+                    let (arg_loc, mut lines) = get_var_address(&args[0], addresses);
 
-                    vec![
-                        mov(&arg_loc, "%rsi"),
-                        format!("andq $0x1, %rsi"),
-                        format!("movq $print_format, %rdi"),
-                        format!("call printf"),
-                    ]
+                    lines.push(mov(&arg_loc, "%rsi"));
+                    lines.push(format!("andq $0x1, %rsi"));
+                    lines.push(format!("movq $print_format, %rdi"));
+                    lines.push(format!("call printf"));
+                    lines
                 },
                 "read_int" => {
                     vec![
@@ -284,29 +334,67 @@ fn generate_call(fun: &Box<IRVar>, args: &Vec<Box<IRVar>>, dest: &Box<IRVar>, ad
                     ]
                 },
                 _ => generate_function_call(&name, args, dest, addresses)
-            }
+            })
         }
-    }.join("\n        ")
+    };
+    
+    lines.join("\n        ")
 }
 
-fn generate_function_call(fun_name: &String, args: &Vec<Box<IRVar>>, dest: &Box<IRVar>, addresses: &HashMap<String, String>) -> Vec<String> {
-    let dest = get_var_address(&dest.name, addresses);
-    let mut asm: Vec<String> = vec![];
+fn generate_function_call(fun_name: &String, args: &Vec<Box<IRVar>>, dest: &Box<IRVar>, addresses: &HashMap<String, (Address, Type)>) -> Vec<String> {
+    let (dest, mut lines) = get_var_address(&dest, addresses);
     for (idx, arg) in args.iter().enumerate() {
         let register = get_argument_register(idx);
-        let arg_loc = get_var_address(&arg.name, addresses);
-        asm.push(mov(&arg_loc,&register));
+        let (arg_loc, arg_lines) = get_var_address(&arg, addresses);
+        lines.extend(arg_lines);
+        lines.push(mov(&arg_loc,&register));
     }
-    asm.push(format!("call {}", fun_name));
-    asm.push(mov("%rax", &dest));
-    asm
+    lines.push(format!("call {}", fun_name));
+    lines.push(mov("%rax", &dest));
+    lines
 }
 
-fn get_var_address(name: &String, addresses: &HashMap<String, String>) -> String {
-    if name == "U" {
-        String::from("$0")
+fn get_var_address(var: &IRVar, addresses: &HashMap<String, (Address, Type)>) -> (String, Vec<String>) {
+    if var.name == "U" {
+        (String::from("$0"), vec![])
     } else {
-        addresses.get(name).expect(format!("Address of var {name} to be defined").as_str()).clone()
+        let (address, var_type) = addresses.get(&var.name).expect(format!("Address of var {} to be defined", var.name).as_str());
+        match address {
+            Address::Register(reg) => (reg.clone(), vec![]),
+            Address::Memory(addr) => {
+                // Special case if were referring to a field of a struct
+                match var_type {
+                    // Pointer to struct
+                    Type::Pointer(pointer_type) => {
+                        if let Type::Struct(struct_type) = pointer_type.as_ref() {
+                            if let Some(field) = &var.field {
+                                let mut lines = vec![];
+                                let address_reg = String::from("%rdx");
+                                // Put struct base pointer in %rdx
+                                lines.push(mov(&format!("{addr}(%rbp)"), &address_reg));
+                                // Get offset (multiplied by 8) and add it to the base pointer
+                                let (offset,_) = struct_type.get_member(&field);
+                                if offset != 0 {
+                                    lines.push(format!("addq ${}, {address_reg}", offset * 8));
+                                }
+
+                                return (format!("({address_reg})"), lines)
+                            }
+                        }
+                    },
+                    // Direct struct
+                    Type::Struct(struct_type) => {
+                        if let Some(field) = &var.field {
+                            let (offset,_) = struct_type.get_member(&field);
+                            let addr = *addr + offset as i32 * 8;
+                            return (format!("{addr}(%rbp)"), vec![])
+                        }
+                    },
+                    _ => {},
+                }
+                (format!("{}(%rbp)", addr), vec![])
+            }
+        }
     }
 }
 
@@ -330,23 +418,6 @@ fn copy(arg1: &str, arg2: &str) -> Vec<String> {
     let tmp = String::from("%rax");
     lines.push(mov(arg1, &tmp));
     lines.push(mov(&tmp, arg2));
-    lines
-}
-
-fn copy_to_addr(source: &str, addr: &str, pointer_nesting: &usize) -> Vec<String> {
-    if *pointer_nesting == 0 {
-        return copy(source, addr);
-    }
-    let mut lines = vec![];
-    let address_reg = String::from("%rax");
-    let source_reg = String::from("%rdx");
-    lines.push(mov(addr, &address_reg));
-    // If pointer is nested more than once, dereference it until its depth is one.
-    for _i in 1..*pointer_nesting {
-        lines.push(mov(&address_reg, format!("({address_reg})").as_str()));
-    }
-    lines.push(mov(source, &source_reg));
-    lines.push(mov(&source_reg, format!("({address_reg})").as_str()));
     lines
 }
 
@@ -431,5 +502,22 @@ mod tests {
         );
 
         generate_asm(ir);
+    }
+
+    #[test]
+    fn structs() {
+        let ir = generate_ir(
+            typecheck_program(
+                parse_source(String::from("
+                struct Dog { size: Int, isHungry: Bool }
+                var doggo = new Dog { isHungry: false, size: 100 };
+                doggo.isHungry = true;
+                "))
+            )
+        );
+
+        println!("{}", ir.get("main").unwrap().iter().map(|i| i.to_string()).collect::<Vec<String>>().join("\n"));
+
+        println!("{}", generate_asm(ir));
     }
 }

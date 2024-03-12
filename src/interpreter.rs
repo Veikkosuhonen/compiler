@@ -347,23 +347,27 @@ fn eval_assignment_left_side(node: &TypedASTNode, memory: &mut Memory) -> Addres
 }
 
 fn eval_member_expr(parent: &TypedASTNode, name: &String, memory: &mut Memory) -> EvalRes {
-    let pointer_value = interpret(parent, memory).0;
-    if let Value::Pointer(addr) = pointer_value {
-        let member_idx = match &parent.node_type {
-            Type::Pointer(pointer_type) => match pointer_type.as_ref() {
-                Type::Struct(struct_type) => struct_type.fields.iter().enumerate().find(|(_, param)| param.name == *name).unwrap().0,
-                _ => unreachable!()
-            },
+    let (parent_value, address) = interpret(parent, memory);
+    let addr = match parent_value {
+        Value::Pointer(addr) => addr,
+        _ => match &parent.node_type {
+            Type::Struct(_) => address.unwrap(),
+            _ => unreachable!(),
+        },
+    };
+    let (member_idx,_) = match &parent.node_type {
+        Type::Pointer(pointer_type) => match pointer_type.as_ref() {
+            Type::Struct(struct_type) => struct_type.get_member(name),
             _ => unreachable!()
-        };
-        let mut member_addr = addr.clone();
-        member_addr.addr += member_idx;
-        memory.debug();
-        println!("{} {}", member_addr.addr, member_idx);
-        (memory.get_addr(&member_addr).clone(), Some(member_addr))
-    } else {
-        unreachable!()
-    }
+        },
+        Type::Struct(struct_type) => struct_type.get_member(name),
+        _ => unreachable!()
+    };
+    let mut member_addr = addr.clone();
+    member_addr.addr += member_idx;
+    memory.debug();
+    (memory.get_addr(&member_addr).clone(), Some(member_addr))
+    
 }
 
 fn interpret(node: &TypedASTNode, memory: &mut Memory) -> EvalRes {

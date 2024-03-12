@@ -96,10 +96,10 @@ impl FunctionType {
     }
 }
 
-#[derive(Debug, Clone, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq)]
 pub enum Type {
-    Integer,
-    Boolean,
+    Int,
+    Bool,
     Function(Box<FunctionType>),
     Struct(TypedStruct),
     Pointer(Box<Type>),
@@ -118,6 +118,34 @@ impl Type {
             _ => vec![TypedParam { name: "val".to_string(), param_type: self.clone() }],
         };
         FunctionType { param_types, return_type }
+    }
+
+    pub fn size(&self) -> usize {
+        match self {
+            Type::Int => 1,
+            Type::Bool => 1,
+            Type::Struct(stype) => stype.fields.len(),
+            Type::Pointer(_) => 1,
+            Type::Unit => 1,
+            _ => todo!("Size of {:?}", self)
+        }
+    }
+}
+
+impl fmt::Debug for Type {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Type::Int =>            f.debug_tuple("Int").finish(),
+            Type::Bool =>           f.debug_tuple("Bool").finish(),
+            Type::Function(func) =>    f.write_fmt(format_args!("{:?} -> {:?}", func.param_types, func.return_type)),
+            Type::Struct(s) =>      f.write_fmt(format_args!("{} {:?}", s.id, s.fields)),
+            Type::Pointer(p) =>     f.write_fmt(format_args!("Pointer<{:?}>", p)),
+            Type::Generic(g) =>     f.write_str(g),
+            Type::Typeref(t) =>     f.write_fmt(format_args!("Typeref<{:?}>", t)),
+            Type::Constructor(c) => f.write_fmt(format_args!("Constructor<{:?}>", c)),
+            Type::Unknown =>        f.debug_tuple("Unknown").finish(),
+            Type::Unit =>           f.debug_tuple("Unit").finish(),
+        }
     }
 }
 
@@ -214,10 +242,16 @@ impl TypedASTNode {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub struct TypedParam {
     pub name: String,
     pub param_type: Type,
+}
+
+impl fmt::Debug for TypedParam {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_fmt(format_args!("{}: {:?}", self.name, self.param_type))
+    }
 }
 
 #[derive(Clone)]
@@ -240,6 +274,13 @@ impl fmt::Debug for TypedUserDefinedFunction {
 pub struct TypedStruct {
     pub id: String,
     pub fields: Vec<TypedParam>,
+}
+
+impl TypedStruct {
+    pub fn get_member(&self, value: &String) -> (usize, Type) {
+        let (offset, param) = self.fields.iter().enumerate().find(|(_, param)| param.name == *value).unwrap();
+        (offset, param.param_type.clone())
+    }
 }
 
 impl Module<TypedUserDefinedFunction, TypedStruct> {
@@ -326,8 +367,8 @@ fn get_toplevel_sym_table() -> Box<SymTable<Type>> {
 fn typecheck(node: ASTNode, sym_table: &mut Box<SymTable<Type>>) -> TypedASTNode {
     match node.expr {
         Expr::Unit => TypedASTNode { expr: Expr::Unit, node_type: Type::Unit },
-        Expr::IntegerLiteral { value } => TypedASTNode { expr: Expr::IntegerLiteral { value }, node_type: Type::Integer },
-        Expr::BooleanLiteral { value } => TypedASTNode { expr: Expr::BooleanLiteral { value }, node_type: Type::Boolean },
+        Expr::IntegerLiteral { value } => TypedASTNode { expr: Expr::IntegerLiteral { value }, node_type: Type::Int },
+        Expr::BooleanLiteral { value } => TypedASTNode { expr: Expr::BooleanLiteral { value }, node_type: Type::Bool },
         Expr::Identifier { value } => typecheck_identifier(value, sym_table),
         Expr::Logical { left, operator, right } => {
             typecheck_logical_op(left, right, operator, sym_table)
@@ -510,8 +551,8 @@ fn typecheck_if_expression(
     sym_table: &mut Box<SymTable<Type>>
 ) -> TypedASTNode {
     let condition = Box::new(typecheck(*condition, sym_table));
-    if condition.node_type != Type::Boolean {
-        panic!("If expression condition must be a {:?}, got {:?}", Type::Boolean, condition.node_type)
+    if condition.node_type != Type::Bool {
+        panic!("If expression condition must be a {:?}, got {:?}", Type::Bool, condition.node_type)
     }
     let then_branch = Box::new(typecheck(*then_branch, sym_table));
     let mut node_type = Type::Unit;
@@ -538,8 +579,8 @@ fn typecheck_while_expression(
     sym_table: &mut Box<SymTable<Type>>
 ) -> TypedASTNode {
     let condition = Box::new(typecheck(*condition, sym_table));
-    if condition.node_type != Type::Boolean {
-        panic!("If expression condition must be a {:?}, got {:?}", Type::Boolean, condition.node_type)
+    if condition.node_type != Type::Bool {
+        panic!("If expression condition must be a {:?}, got {:?}", Type::Bool, condition.node_type)
     }
     let body = Box::new(typecheck(*body, sym_table));
     let node_type = body.node_type.clone();
@@ -729,7 +770,7 @@ mod tests {
     #[test]
     fn typecheck_integers() {
         let res = t("7 + 3 * 2;");
-        assert_eq!(Type::Integer, res.last().node_type);
+        assert_eq!(Type::Int, res.last().node_type);
     }
 
     #[test]
@@ -742,8 +783,8 @@ mod tests {
         if let Expr::Block { result,.. } = &res.expr {
             if let Expr::Block { result,.. } = &result.expr {
                 if let Expr::VariableDeclaration { id, init,.. } = &result.expr {
-                    assert_eq!(id.node_type, Type::Integer);
-                    assert_eq!(init.node_type, Type::Integer);
+                    assert_eq!(id.node_type, Type::Int);
+                    assert_eq!(init.node_type, Type::Int);
                 } else {
                     panic!("Expected VariableDec, got {:?}", result.expr)
                 }
@@ -756,13 +797,13 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected="Invalid argument type at index 0, expected Integer but got Boolean")]
+    #[should_panic(expected="Invalid argument type at index 0, expected Int but got Bool")]
     fn simple_type_error() {
         t("false + 3 * 2");
     }
 
     #[test]
-    #[should_panic(expected="Then and else branch return types differ: Unit != Boolean")]
+    #[should_panic(expected="Then and else branch return types differ: Unit != Bool")]
     fn if_expr_type_error() {
         t("
             if (1 > 2) then {
@@ -792,7 +833,7 @@ mod tests {
                 2
             };
         ");
-        assert_eq!(module.last().node_type, Type::Integer)
+        assert_eq!(module.last().node_type, Type::Int)
     }
 
     #[test]
@@ -806,12 +847,12 @@ mod tests {
         ");
         let node = &node.last();
 
-        assert_eq!(node.node_type, Type::Boolean);
+        assert_eq!(node.node_type, Type::Bool);
         if let Expr::If { condition, .. } = &node.expr {
-            assert_eq!(condition.node_type, Type::Boolean);
+            assert_eq!(condition.node_type, Type::Bool);
             if let Expr::Binary { left, right, .. } = &condition.expr {
-                assert_eq!(left.node_type, Type::Integer);
-                assert_eq!(right.node_type, Type::Integer);
+                assert_eq!(left.node_type, Type::Int);
+                assert_eq!(right.node_type, Type::Int);
             } else {
                 panic!("Fakd")
             }
@@ -829,7 +870,7 @@ mod tests {
         ");
         let node = &node.main().body;
 
-        assert_eq!(node.node_type, Type::Integer);
+        assert_eq!(node.node_type, Type::Int);
     }
 
     #[test]
@@ -839,18 +880,18 @@ mod tests {
         ");
         let node = &node.main().body;
 
-        assert_eq!(node.node_type, Type::Integer);
+        assert_eq!(node.node_type, Type::Int);
     }
 
     #[test]
     fn compare_eq_booleans() {
         let node = t("false == true");
         let node = &node.main().body;
-        assert_eq!(node.node_type, Type::Boolean);
+        assert_eq!(node.node_type, Type::Bool);
     }
 
     #[test]
-    #[should_panic(expected="Invalid argument type at index 1, expected Integer but got Boolean")]
+    #[should_panic(expected="Invalid argument type at index 1, expected Int but got Bool")]
     fn compare_eq_invalid_types() {
         t("1 == true");
     }
@@ -859,7 +900,7 @@ mod tests {
     fn compare_eq_integer() {
         let node = t("123 == 123");
         let node = &node.main().body;
-        assert_eq!(node.node_type, Type::Boolean);
+        assert_eq!(node.node_type, Type::Bool);
     }
 
     #[test]
@@ -870,7 +911,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected="Type annotation and init expression types differ: Integer != Boolean")]
+    #[should_panic(expected="Type annotation and init expression types differ: Int != Bool")]
     fn type_annotation_int_error() {
         t("var x: Int = false");
     }
@@ -878,11 +919,11 @@ mod tests {
     #[test]
     fn typed_variable_assignment() {
         let node = t("var x: Int = 123; x = 456");
-        assert_eq!(node.main().body.node_type, Type::Integer);
+        assert_eq!(node.main().body.node_type, Type::Int);
     }
 
     #[test]
-    #[should_panic(expected="Variable type and assignment value types differ: Integer != Boolean")]
+    #[should_panic(expected="Variable type and assignment value types differ: Int != Bool")]
     fn typed_variable_assignment_error() {
         t("var x: Int = 123; x = false");
     }
@@ -895,7 +936,7 @@ mod tests {
             }
             add(1, 2)
         ");
-        assert_eq!(node.main().body.node_type, Type::Integer);
+        assert_eq!(node.main().body.node_type, Type::Int);
     }
 
     #[test]
@@ -910,7 +951,7 @@ mod tests {
         }
         recurse(2, 10)
         ");
-        assert_eq!(node.main().body.node_type, Type::Integer);
+        assert_eq!(node.main().body.node_type, Type::Int);
     }
 
     #[test]
@@ -967,7 +1008,7 @@ mod tests {
         ");
         if let Expr::Block { result,.. } = &module.main().body.expr {
             if let Type::Pointer(ptype) = &result.node_type {
-                assert_eq!(**ptype, Type::Integer);
+                assert_eq!(**ptype, Type::Int);
             }
         }
 
@@ -977,7 +1018,7 @@ mod tests {
         ");
         if let Expr::Block { result,.. } = &module.main().body.expr {
             if let Type::Pointer(ptype) = &result.node_type {
-                assert_eq!(**ptype, Type::Boolean);
+                assert_eq!(**ptype, Type::Bool);
             }
         }
     }
@@ -989,7 +1030,7 @@ mod tests {
             ***pointer
         ");
         if let Expr::Block { result,.. } = &module.main().body.expr {
-            assert!(matches!(result.node_type, Type::Integer))
+            assert!(matches!(result.node_type, Type::Int))
         }
     }
 
@@ -1003,7 +1044,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Type annotation and init expression types differ: Pointer(Pointer(Pointer(Integer))) != Pointer(Pointer(Pointer(Pointer(Integer))))")]
+    #[should_panic(expected = "Type annotation and init expression types differ: Pointer<Pointer<Pointer<Int>>> != Pointer<Pointer<Pointer<Pointer<Int>>>>")]
     fn nested_pointer_typecheck_fail() {
         t("
             var pointer: Int*** = &&&&1;
@@ -1044,7 +1085,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Invalid argument type at index 0, expected Constructor(Generic(\"T\")) but got Integer")]
+    #[should_panic(expected = "Invalid argument type at index 0, expected Constructor<T> but got Int")]
     fn new_only_accepts_constructor() {
         t("new 1");
     }
@@ -1075,7 +1116,7 @@ mod tests {
         assert_eq!(s.id, "Point");
         assert_eq!(s.fields.len(), 2);
         assert_eq!(s.fields.first().unwrap().name, "x");
-        assert_eq!(s.fields.first().unwrap().param_type, Type::Integer);
+        assert_eq!(s.fields.first().unwrap().param_type, Type::Int);
     }
 
     #[test]
@@ -1128,7 +1169,7 @@ mod tests {
             p.pos.z
         ");
         if let Expr::Block { result,.. } = &m.main().body.expr {
-            assert!(matches!(result.node_type, Type::Integer))
+            assert!(matches!(result.node_type, Type::Int))
         } else {
             panic!("Wrong!")
         }

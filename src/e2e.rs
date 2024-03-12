@@ -67,30 +67,24 @@ fn run_test(source: &str, id: String, compile_only: bool) -> Vec<String> {
 
     let mut expected_time: Option<u128> = None;
 
-    let program_source = source.split("\n").enumerate().filter(|(line_number, line)| {
+    source.split("\n").enumerate().for_each(|(line_number, line)| {
         if line.trim_start().starts_with("// input") {
             inputs.push(line.split_whitespace().last().unwrap().parse().expect("Should've been able to parse i32 after 'input'"));
-            false
         } else if line.trim_start().starts_with("// expect") {
             expects.push((
-                *line_number,
+                line_number,
                 line.split_whitespace().last().unwrap().parse().expect("Should've been able to parse i32 after 'expect'")
             ));
-            false
         } else if line.trim_start().starts_with("// name") {
             name = Some(line.split_whitespace()
                 .collect::<Vec<&str>>()
                 .get(1..)
                 .expect("Test name to follow 'name'")
                 .join(" "));
-            false
         } else if line.trim_start().starts_with("// time") {
             expected_time = Some(line.split_whitespace().last().unwrap().parse().expect("Should've been able to parse i32 after 'time'"));
-            false
-        } else {
-            true
         }
-    }).map(|(_, line)| { line }).collect::<Vec<&str>>().join("\n");
+    });
 
     if let Some(name) = name {
         out(format!("- {name} "));
@@ -98,14 +92,14 @@ fn run_test(source: &str, id: String, compile_only: bool) -> Vec<String> {
 
     let compilation_start = Instant::now();
 
-    let node = parse_source(program_source.clone());
+    let node = parse_source(source.to_string());
     let typed_ast = typecheck_program(node);
     let ir = generate_ir(typed_ast);
     let asm = generate_asm(ir);
 
     out(format!(" - compile in {} ms\n", compilation_start.elapsed().as_millis()));
 
-    if fs::write(format!("./target/{id}.hycs"), program_source).is_err() {
+    if fs::write(format!("./target/{id}.hycs"), source.to_string()).is_err() {
         panic!("Failed to write to temp file ./target/{id}.hycs")
     }
 

@@ -1,6 +1,5 @@
 use std::fs::File;
 use std::os::unix::fs::PermissionsExt;
-use std::thread::JoinHandle;
 use std::time::Instant;
 use std::{fs, io::Write};
 use std::process::{Child, Command, Stdio};
@@ -23,7 +22,7 @@ pub fn run_tests(compile_only: bool, benchmark: bool) {
             let p = file.path();
             let path = p.to_str().unwrap();
 
-            let tmp = path.clone();
+            let tmp = path;
             let test_id = tmp.split("/").last().unwrap();
 
             println!("{}", format!("\n*** Running test suite {} ***\n", test_id));

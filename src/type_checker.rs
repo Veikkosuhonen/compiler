@@ -244,7 +244,7 @@ pub struct TypedASTNode {
 }
 
 impl TypedASTNode {
-    pub fn new(expr: Expr<TypedASTNode>, node_type: Type, start: SourceLocation, end: SourceLocation) -> TypedASTNode {
+    pub fn new(expr: Expr<TypedASTNode>, node_type: Type, _start: SourceLocation, _end: SourceLocation) -> TypedASTNode {
         TypedASTNode { expr, node_type }
     }
 }

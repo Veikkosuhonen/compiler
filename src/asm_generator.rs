@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fmt::format};
+use std::collections::HashMap;
 
 use crate::{ir_generator::{IREntry, IRVar, Instr}, sym_table::Symbol, tokenizer::Op, type_checker::Type};
 

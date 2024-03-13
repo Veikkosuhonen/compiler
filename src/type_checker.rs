@@ -130,6 +130,13 @@ impl Type {
             _ => todo!("Size of {:?}", self)
         }
     }
+
+    pub fn get_fields(&self) -> Vec<TypedParam> {
+        match self {
+            Type::Struct(struct_type) => struct_type.fields.clone(),
+            _ => vec![TypedParam { name: String::from("value"), param_type: self.clone() }]
+        }
+    }
 }
 
 impl fmt::Debug for Type {

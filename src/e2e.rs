@@ -15,40 +15,27 @@ pub fn run_tests(compile_only: bool, benchmark: bool) {
     } else {
         "./test_programs/e2e"
     };
-    let mut handles = fs::read_dir(dir).unwrap()
+    fs::read_dir(dir).unwrap()
         .filter_map(|res| {
             res.ok()
         })
-        .map(|file| {
-            (file.file_name().into_string().unwrap(), run_test_file(file.path().to_str().unwrap().to_string(), compile_only))
-        })
-        .collect::<Vec<(String, JoinHandle<_>)>>();
+        .for_each(|file| {
+            let p = file.path();
+            let path = p.to_str().unwrap();
 
-    handles.reverse();
+            let tmp = path.clone();
+            let test_id = tmp.split("/").last().unwrap();
 
-    for (filename, handle) in handles {
-        println!("{}", handle.join().expect(format!("{}: Test job failed", filename).as_str()).join(""));
-    }
+            println!("{}", format!("\n*** Running test suite {} ***\n", test_id));
+            let source = fs::read_to_string(path).expect("Should've been able to read the file");
+            let tests = source.split("//===").collect::<Vec<&str>>();
+            for (i, test_source) in tests.iter().enumerate() {
+                println!("{}", format!("\n{}/{} ", i + 1, tests.len()));
+                println!("{}", run_test(test_source, format!("{test_id}_{i}"), compile_only).join(""));
+            }
+        });
 
     println!("Done in {} s", start.elapsed().as_secs());
-}
-
-fn run_test_file(path: String, compile_only: bool) -> JoinHandle<Vec<String>> {
-    std::thread::spawn(move || {
-        let mut lines = vec![];
-
-        let tmp = path.clone();
-        let test_id = tmp.split("/").last().unwrap();
-
-        lines.push(format!("\n*** Running test suite {} ***\n", test_id));
-        let source = fs::read_to_string(path).expect("Should've been able to read the file");
-        let tests = source.split("//===").collect::<Vec<&str>>();
-        for (i, test_source) in tests.iter().enumerate() {
-            lines.push(format!("\n{}/{} ", i + 1, tests.len()));
-            lines.append(&mut run_test(test_source, format!("{test_id}_{i}"), compile_only));
-        }
-        lines
-    })
 }
 
 fn run_test(source: &str, id: String, compile_only: bool) -> Vec<String> {

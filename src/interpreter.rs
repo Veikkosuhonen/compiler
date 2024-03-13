@@ -513,7 +513,7 @@ pub fn interpret_program(module: &Module<TypedUserDefinedFunction, TypedStruct>)
 
     let return_value = eval_call_expression(&Box::new(main_ref), &vec![], &mut memory);
 
-    eprintln!("memory len = {}", memory.stack.len());
+    // eprintln!("memory len = {}", memory.stack.len());
 
     return_value.0
 }

@@ -1,0 +1,10 @@
+// fun square(p: Int*): Unit {
+//   *p = *p * *p;
+// }
+
+var x: Int* = &3;
+var y: Int* = &4;
+
+*x = *x * *y;
+// square(&x);
+print_int(*x); // Prints 12

@@ -1,4 +1,4 @@
-fun recurse(x: Int, i: Int) {
+fun recurse(x: Int, i: Int): Int {
     if i > 10 then {
         x
     } else {
@@ -6,7 +6,7 @@ fun recurse(x: Int, i: Int) {
     }
 }
 
-fun recurse2(x: Int, i: Int) {
+fun recurse2(x: Int, i: Int): Int {
     if i > 10 then {
         x
     } else {

@@ -1,0 +1,25 @@
+
+struct Tail { length: Int }
+struct Dog { size: Int, isHungry: Bool, tail: Tail* }
+
+fun create_dog(size: Int, isHungry: Bool, tail_length: Int): Dog* {
+    new Dog { size: size, isHungry: isHungry, tail: new Tail { length: tail_length } }
+}
+
+fun print_dog(dog: Dog*) {
+    print_int(dog.size);
+    print_bool(dog.isHungry);
+    print_int(dog.tail.length);
+}
+
+var doggo = create_dog(10, true, 5);
+print_dog(doggo);
+
+// Change doggo
+doggo.size = 20;
+doggo.isHungry = false;
+doggo.tail.length = 10;
+
+print_dog(doggo);
+
+// delete doggo

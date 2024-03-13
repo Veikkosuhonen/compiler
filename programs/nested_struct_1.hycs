@@ -1,0 +1,15 @@
+
+struct Tail { length: Int }
+struct Dog { size: Int, tail: Tail* }
+var doggo = new Dog { size: 100, tail: new Tail { length: 5 } };
+
+print_int(doggo.tail.length);
+
+doggo.tail.length = 6;
+
+print_int(doggo.tail.length);
+
+doggo.tail.length = 7;
+
+print_int(doggo.tail.length);
+

@@ -34,9 +34,9 @@ fn parse_source(contents: String) -> Module<UserDefinedFunction, Struct> {
 
 pub fn parse_file(path: &String) -> Module<UserDefinedFunction, Struct> {
     let contents = read_file(path);
-    let start = Instant::now();
+    let _start = Instant::now();
     let module = parse_source(contents);
-    eprintln!("Tokenize & parse in {} ms", start.elapsed().as_millis());
+    // eprintln!("Tokenize & parse in {} ms", _start.elapsed().as_millis());
     module
 }
 
@@ -49,9 +49,9 @@ pub fn typecheck_file(path: &String) -> Module<TypedUserDefinedFunction, TypedSt
 
 pub fn interpret_file(path: &String) -> interpreter::Value {
     let module = typecheck_file(path);
-    let start = Instant::now();
+    let _start = Instant::now();
     let result = interpreter::interpret_program(&module);
-    eprintln!("Interpret in {} ms", start.elapsed().as_millis());
+    // eprintln!("Interpret in {} ms", _start.elapsed().as_millis());
 
     result
 }

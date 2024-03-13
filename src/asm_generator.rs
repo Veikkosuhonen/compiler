@@ -475,7 +475,6 @@ mod tests {
 
         println!("{}", ir.get("identity").unwrap().iter().map(|i| i.to_string()).collect::<Vec<String>>().join("\n"));
 
-
         generate_asm(ir);
     }
 
@@ -513,7 +512,7 @@ mod tests {
 
         println!("{}", _ir.get("main").unwrap().iter().map(|i| i.to_string()).collect::<Vec<String>>().join("\n"));
 
-        // println!("{}", generate_asm(ir));
+        println!("{}", generate_asm(_ir));
     }
 
     #[test]

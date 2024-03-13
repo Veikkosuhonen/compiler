@@ -1,8 +1,39 @@
 // name "Simple struct"
 
 struct Dog { iq: Int }
-
 var dog = new Dog { iq: 0 };
+
+//===
+
+// name "Assign to struct member and read struct member"
+
+struct Dog { iq: Int }
+var dog = new Dog { iq: 0 };
+dog.iq = 10;
+print_int(dog.iq);
+// expect 10
+
+//===
+
+// name "Address of struct member"
+
+struct Dog { iq: Int }
+var dog = new Dog { iq: 0 };
+var iq: Int* = &dog.iq;
+*iq = 10;
+print_int(dog.iq);
+// expect 10
+
+//===
+
+// name "Nested struct"
+
+struct Tail { length: Int }
+struct Dog { size: Int, tail: Tail* }
+var doggo = new Dog { size: 100, tail: new Tail { length: 5 } };
+doggo.tail.length = 6;
+print_int(doggo.tail.length);
+// expect 6
 
 //===
 
@@ -23,3 +54,52 @@ print_int(doggo.size);
 // expect 10
 print_int(doggo.tail.length);
 // expect 5
+
+//===
+
+// name "Struct as arg to function
+
+struct Tail { length: Int }
+struct Dog { size: Int, isHungry: Bool, tail: Tail* }
+
+fun create_dog(size: Int, isHungry: Bool, tail_length: Int): Dog* {
+    new Dog { size: size, isHungry: isHungry, tail: new Tail { length: tail_length } }
+}
+
+fun print_dog(dog: Dog*) {
+    print_int(dog.size);
+    print_bool(dog.isHungry);
+    print_int(dog.tail.length);
+}
+
+var doggo = create_dog(10, true, 5);
+print_dog(doggo);
+// expect 10
+// expect 1
+// expect 5
+
+//===
+
+// name "Assign to nested struct fields"
+
+struct Tail { length: Int }
+struct Dog { size: Int, isHungry: Bool, tail: Tail* }
+
+fun create_dog(size: Int, isHungry: Bool, tail_length: Int): Dog* {
+    new Dog { size: size, isHungry: isHungry, tail: new Tail { length: tail_length } }
+}
+
+fun print_dog(dog: Dog*) {
+    print_int(dog.size);
+    print_bool(dog.isHungry);
+    print_int(dog.tail.length);
+}
+
+var doggo = create_dog(10, true, 5);
+doggo.size = 20;
+doggo.isHungry = false;
+doggo.tail.length = 10;
+print_dog(doggo);
+// expect 20
+// expect 0
+// expect 10

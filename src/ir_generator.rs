@@ -210,9 +210,6 @@ fn generate(node: &TypedASTNode, instructions: &mut Vec<IREntry>, var_table: &mu
         },
         Expr::Identifier { value } => {
             let src = var_table.get(value);
-            if src != dest {
-                instructions.push(IREntry::copy(src.clone(), dest));
-            }
             src
         },
         Expr::VariableDeclaration { id, init,.. } => {
@@ -380,8 +377,8 @@ fn generate(node: &TypedASTNode, instructions: &mut Vec<IREntry>, var_table: &mu
             };
 
             let source = var_table.create_with_parent(name.clone(), parent_var, node.node_type.clone());
-            instructions.push(IREntry::copy(source, dest.clone()));
-            dest.clone()
+            // instructions.push(IREntry::copy(source, dest.clone()));
+            source // dest.clone()
         }
     }
 }
@@ -439,9 +436,10 @@ fn generate_named_params_constructor_call(constructor_type: Type, arguments: &Ve
         // Generate args
         for param in func_type.param_types {
             let (_, arg_node) = arguments.iter().find(|(name, _)| *name == param.name).unwrap();
-            let arg_var = var_table.create_with_parent(param.name.clone(), struct_var.clone(), param.param_type.clone());
 
-            generate(arg_node, instructions, var_table, Some(arg_var));
+            let field_var = var_table.create_with_parent(param.name.clone(), struct_var.clone(), param.param_type.clone());
+            let arg_var = generate(arg_node, instructions, var_table, Some(field_var.clone()));
+            instructions.push(IREntry::copy(arg_var, field_var));
         }
         
         struct_var
@@ -627,5 +625,16 @@ mod tests {
             print_int(*x); // Prints 12
         ");
         // println!("{}", _ir.get("main").unwrap().iter().map(|i| i.to_string()).collect::<Vec<String>>().join("\n"))
+    }
+
+    #[test]
+    fn struct_member_addr() {
+        let _ir = i("
+            struct Dog { iq: Int }
+            var dog = new Dog { iq: 0 };
+            var iq: Int* = &dog.iq;
+            *iq = 10;
+        ");
+        println!("{}", _ir.get("main").unwrap().iter().map(|i| i.to_string()).collect::<Vec<String>>().join("\n"))
     }
 }

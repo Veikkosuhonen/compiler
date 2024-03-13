@@ -13,11 +13,11 @@ I also made a [vscode plugin](https://github.com/Veikkosuhonen/hy-compilers-lang
 - Compile to x86_64 assembly
 - Pointers
 - Heap allocation
+- Heap allocated structs
 - Lots of unit- and E2E tests, run in Github Actions CI
 
 ## Todo
 
-- Structs
 - Arrays
 - First-class functions
 - Analysis?

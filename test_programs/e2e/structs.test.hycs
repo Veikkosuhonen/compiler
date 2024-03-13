@@ -103,3 +103,29 @@ print_dog(doggo);
 // expect 20
 // expect 0
 // expect 10
+
+//===
+
+// name "Struct example program"
+
+struct Point { x: Int, y: Int }
+struct Line { start: Point*, end: Point* }
+
+fun manhattan_len(line: Line*): Int {
+    return abs(line.start.x - line.end.x) + abs(line.start.y - line.end.y);
+}
+
+fun abs(x: Int): Int {
+    return if x >= 0 then x else -x;
+}
+
+var line1: Line* = new Line {
+    start: new Point { x: 1, y: 2 },
+    end: new Point { x: 5, y: 9 }
+};
+
+line1.end.y = 10;
+var end_x = &line1.end.x;
+*end_x = 7;
+print_int(manhattan_len(line1));
+// expect 14

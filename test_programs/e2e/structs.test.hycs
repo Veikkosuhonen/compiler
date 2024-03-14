@@ -108,8 +108,8 @@ print_dog(doggo);
 
 // name "Struct example program"
 
-struct Point { x: Int, y: Int }
-struct Line { start: Point*, end: Point* }
+struct Point { x: Int, y: Int };
+struct Line { start: Point*, end: Point* };
 
 fun manhattan_len(line: Line*): Int {
     return abs(line.start.x - line.end.x) + abs(line.start.y - line.end.y);

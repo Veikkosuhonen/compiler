@@ -718,8 +718,8 @@ impl Parser {
                     }, start, end));
                 }
                 statements.push(Box::new(statement));
-                self.consume_statement_end()?;
             }
+            self.consume_statement_end()?;
         }
     }
 
@@ -1423,6 +1423,17 @@ fn new_and_delete() {
         ");
 
         assert_eq!(module.structs.first().unwrap().id, "Point");
+    }
+
+    #[test]
+    fn struct_def_and_func_def_can_be_followed_by_semicolon() {
+        let module = parse_module("
+            struct Point { x: Int, y: Int };
+            fun point_sum(p: Point*) { p.x + p.y };
+        ");
+
+        assert_eq!(module.structs.first().unwrap().id, "Point");
+        assert_eq!(module.functions.first().unwrap().id, "point_sum");
     }
 
     #[test]

@@ -146,7 +146,7 @@ impl Memory {
         let mut result = f(self);
         let outer_symtab = mem::replace(&mut self.sym_table.parent, Default::default());
         let returns = self.sym_table.returns.clone();
-        let mut outer_symtab = outer_symtab.unwrap();
+        let outer_symtab = outer_symtab.unwrap();
         let _ = mem::replace(&mut self.sym_table, outer_symtab);
         // self.debug();
         if let Some((return_value_addr, return_type)) = returns {

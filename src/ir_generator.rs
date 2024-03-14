@@ -43,11 +43,13 @@ struct IRVarTable {
     var_idx: usize,
     label_idx: usize,
     fun_name: String,
+    loop_end_label: Option<String>,
+    loop_start_label: Option<String>,
 }
 
 impl IRVarTable {
     fn new(fun_name: String) -> IRVarTable {
-        IRVarTable { vars: SymTable::new(None), var_idx: 0, label_idx: 0, fun_name }
+        IRVarTable { vars: SymTable::new(None), var_idx: 0, label_idx: 0, fun_name, loop_end_label: None, loop_start_label: None }
     }
 
     fn unconflicting_name(&mut self, mut name: String) -> String {
@@ -89,7 +91,7 @@ impl IRVarTable {
     pub fn block_scope(&mut self, f: impl FnOnce(&mut Self) -> IRVar) -> IRVar {
         let outer_symtab: Box<SymTable<_, _>> = mem::replace(&mut self.vars, Default::default());
         let inner_symtab = SymTable::new(Some(outer_symtab));
-        let mut inner_var_table = IRVarTable { vars: inner_symtab, var_idx: self.var_idx, label_idx: self.label_idx, fun_name: self.fun_name.clone() };
+        let mut inner_var_table = IRVarTable { vars: inner_symtab, var_idx: self.var_idx, label_idx: self.label_idx, fun_name: self.fun_name.clone(), loop_end_label: self.loop_end_label.clone(), loop_start_label: self.loop_start_label.clone() };
         let result = f(&mut inner_var_table);
         let _ = mem::replace(&mut self.vars, inner_var_table.vars.parent.unwrap());
         result
@@ -358,8 +360,12 @@ fn generate(node: &TypedASTNode, instructions: &mut Vec<IREntry>, var_table: &mu
         },
         Expr::While { condition, body } => {
             let while_label = var_table.create_local_label();
+            let previous_loop_start_label = var_table.loop_start_label.clone();
+            var_table.loop_start_label = Some(while_label.clone());
             let do_label = var_table.create_local_label();
             let end_label = var_table.create_local_label();
+            let previous_loop_end_label = var_table.loop_end_label.clone();
+            var_table.loop_end_label = Some(end_label.clone());
 
             instructions.push(IREntry { instruction: Instr::Label(while_label.clone()) });
 
@@ -377,6 +383,9 @@ fn generate(node: &TypedASTNode, instructions: &mut Vec<IREntry>, var_table: &mu
 
             instructions.push(IREntry { instruction: Instr::Label(end_label) });
 
+            var_table.loop_start_label = previous_loop_start_label;
+            var_table.loop_end_label = previous_loop_end_label;
+
             dest.clone()
         },
         Expr::StructInstance { fields,.. } => {
@@ -393,8 +402,18 @@ fn generate(node: &TypedASTNode, instructions: &mut Vec<IREntry>, var_table: &mu
             // instructions.push(IREntry::copy(source, dest.clone()));
             source // dest.clone()
         },
-        Expr::Break => todo!(),
-        Expr::Continue => todo!(),
+        Expr::Break => {
+            // Jump to loop end
+            let loop_end_label = var_table.loop_end_label.clone().expect("Loop end label should exist when vising a break expr");
+            instructions.push(IREntry { instruction: Instr::Jump(loop_end_label) });
+            dest
+        },
+        Expr::Continue => {
+            // Jump to loop condition
+            let loop_start_label = var_table.loop_start_label.clone().expect("Loop start label should exist when vising a continue expr");
+            instructions.push(IREntry { instruction: Instr::Jump(loop_start_label) });
+            dest
+        },
     }
 }
 
@@ -665,5 +684,56 @@ mod tests {
             *iq = 10;
         ");
         // println!("{}", _ir.get("main").unwrap().iter().map(|i| i.to_string()).collect::<Vec<String>>().join("\n"))
+    }
+
+    #[test]
+    fn break_stmt() {
+        let _ir = i("
+            var i = 0;
+            while i < 10 do {
+                i = i + 1;
+                if i == 5 then {
+                    break;
+                }
+            }
+            i
+        ");
+        // println!("{}", _ir.get("main").unwrap().iter().map(|i| i.to_string()).collect::<Vec<String>>().join("\n"))
+    }
+
+    #[test]
+    fn break_inner_loop() {
+        let _ir = i("
+            var sum = 0;
+            var i = 0;
+            while i < 10 do {
+                i = i + 1;
+                var j = 0;
+                while j < 10 do {
+                    j = j + 1;
+                    sum = sum + 1;
+                    if j == 5 then {
+                        break;
+                    }
+                }
+            }
+            sum
+        ");
+    }
+
+    #[test]
+    fn continue_stmt() {
+        let _ir = i("
+            var sum = 0;
+            var i = 0;
+            while i < 10 do {
+                i = i + 1;
+                if i % 2 == 0 then {
+                    continue;
+                }
+                sum = sum + 1;
+            }
+            sum
+        ");
     }
 }

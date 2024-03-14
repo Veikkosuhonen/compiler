@@ -47,3 +47,53 @@ while once1 do {
 };
 
 // expect 42
+
+//===
+
+// name "Break from while"
+
+var i = 0;
+while i < 10 do {
+    i = i + 1;
+    if i == 5 then {
+        break;
+    }
+}
+print_int(i);
+// expect 5
+
+//===
+
+// name "Break from inner loop"
+
+var sum = 0;
+var i = 0;
+while i < 10 do {
+    i = i + 1;
+    var j = 0;
+    while j < 10 do {
+        j = j + 1;
+        sum = sum + 1;
+        if j == 5 then {
+            break;
+        }
+    }
+}
+print_int(sum);
+// expect 50
+
+//===
+
+// name "Continue"
+
+var sum = 0;
+var i = 0;
+while i < 10 do {
+    i = i + 1;
+    if i % 2 == 0 then {
+        continue;
+    }
+    sum = sum + 1;
+}
+print_int(sum);
+// expect 5

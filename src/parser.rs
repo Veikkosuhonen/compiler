@@ -408,21 +408,24 @@ impl Parser {
         let struct_id = self.consume(TokenType::Identifier)?.value;
         self.consume_left_curly()?;
         let mut fields: Vec<(String, Box<ASTNode>)> = vec![];
-        if !self.current_is("}") {
-            loop {
-                let field_name = self.consume(TokenType::Identifier)?.value;
-                self.consume_with_value(TokenType::Punctuation, ":")?;
-                let field_value = self.parse_expression()?;
-                fields.push((field_name, Box::new(field_value)));
-                if self.current_is("}") {
-                    break;
-                }
-                self.consume_comma()?;
+        loop {
+            if self.current_is("}") {
+                self.consume_block_end()?;
+                break;
+            }
+            let field_name = self.consume(TokenType::Identifier)?.value;
+            self.consume_with_value(TokenType::Punctuation, ":")?;
+            let field_value = self.parse_expression()?;
+            fields.push((field_name, Box::new(field_value)));
+
+            if self.consume_comma().is_err() { // No comma? Then it must end.
+                self.consume_block_end()?;
+                break;
             }
         }
 
         let end = self.current_end().clone();
-        self.consume_block_end()?;
+        
         Ok(ASTNode::new(Expr::StructInstance {
             struct_name: struct_id,
             fields,
@@ -670,19 +673,22 @@ impl Parser {
         let id = self.consume(TokenType::Identifier)?.value;
         self.consume_left_curly()?;
         let mut fields: Vec<Param> = vec![];
-        if !self.current_is("}") {
-            loop {
-                let field_name = self.consume(TokenType::Identifier)?.value;
-                self.consume_with_value(TokenType::Punctuation, ":")?;
-                let type_annotation = self.parse_type_annotation()?;
-                fields.push(Param { name: field_name, param_type: Box::new(type_annotation) });
-                if self.current_is("}") {
-                    break;
-                }
-                self.consume_comma()?;
+        loop {
+            if self.current_is("}") {
+                self.consume_block_end()?;
+                break;
+            }
+            let field_name = self.consume(TokenType::Identifier)?.value;
+            self.consume_with_value(TokenType::Punctuation, ":")?;
+            let type_annotation = self.parse_type_annotation()?;
+            fields.push(Param { name: field_name, param_type: Box::new(type_annotation) });
+
+            if self.consume_comma().is_err() { // No comma? Then it must end.
+                self.consume_block_end()?;
+                break;
             }
         }
-        self.consume_block_end()?;
+        
         Ok(Struct { id, fields })
     }
 
@@ -1451,6 +1457,18 @@ fn new_and_delete() {
         } else {
             panic!("Wrong")
         }
+    }
+
+    #[test]
+    fn struct_def_and_literal_trailing_comma() {
+        let _module = parse_module("
+            struct Point {
+                x: Int,
+                y: Int,
+            }
+
+            var p = new Point { x: 1, y: 2, };
+        ");
     }
 
     #[test]

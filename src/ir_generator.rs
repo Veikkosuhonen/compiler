@@ -392,7 +392,9 @@ fn generate(node: &TypedASTNode, instructions: &mut Vec<IREntry>, var_table: &mu
             let source = var_table.create_with_parent(name.clone(), parent_var, node.node_type.clone());
             // instructions.push(IREntry::copy(source, dest.clone()));
             source // dest.clone()
-        }
+        },
+        Expr::Break => todo!(),
+        Expr::Continue => todo!(),
     }
 }
 

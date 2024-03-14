@@ -436,6 +436,8 @@ fn typecheck(node: ASTNode, sym_table: &mut Box<SymTable<Symbol,Type>>) -> Typed
                 node_type: member_type,
             }
         },
+        Expr::Break => TypedASTNode { expr: Expr::Break, node_type: Type::Unit },
+        Expr::Continue => TypedASTNode { expr: Expr::Continue, node_type: Type::Unit }
     }
 }
 
@@ -590,11 +592,11 @@ fn typecheck_while_expression(
         panic!("If expression condition must be a {:?}, got {:?}", Type::Bool, condition.node_type)
     }
     let body = Box::new(typecheck(*body, sym_table));
-    let node_type = body.node_type.clone();
+    // let node_type = body.node_type.clone();
 
     TypedASTNode {
         expr: Expr::While { condition, body },
-        node_type,
+        node_type: Type::Unit,
     }
 }
 
@@ -877,7 +879,7 @@ mod tests {
         ");
         let node = &node.main().body;
 
-        assert_eq!(node.node_type, Type::Int);
+        assert_eq!(node.node_type, Type::Unit);
     }
 
     #[test]
@@ -1180,5 +1182,19 @@ mod tests {
         } else {
             panic!("Wrong!")
         }
+    }
+
+    #[test]
+    fn break_continue() {
+        let _m = t("
+            while true do {
+                break;
+                continue;
+                if true then {
+                    break;
+                    continue;
+                }
+            }
+        ");
     }
 }

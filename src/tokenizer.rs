@@ -149,7 +149,7 @@ lazy_static! {
     static ref BOOLEAN_LITERAL_REGEX: Regex = Regex::new(r"^(true|false)").unwrap();
     static ref OPERATOR_REGEX: Regex = Regex::new(r"^(==|!=|<=|>=|\+|-|\*|/|%|=|<|>|and\b|or\b|not\b|&|new\b|delete\b|\.)").unwrap();
     static ref PUNCTUATION_REGEX: Regex = Regex::new(r"^(\(|\)|\{|\}|,|;|:)").unwrap();
-    static ref KEYWORD_REGEX: Regex = Regex::new(r"^(while\b|do\b|if\b|then\b|else\b|var\b|fun\b|return\b|struct\b)").unwrap();
+    static ref KEYWORD_REGEX: Regex = Regex::new(r"^(while\b|do\b|break\b|continue\b|if\b|then\b|else\b|var\b|fun\b|return\b|struct\b)").unwrap();
 
     // Order is significant here. The first match is the one that will be used.
     static ref TOKEN_REGEX_TO_TYPE: Vec<(Regex, TokenType)> = vec![
@@ -323,8 +323,10 @@ mod tests {
             nothing
             newcastle
             deleted
+            breaked
+            continued
         ").expect("Shoulve tokenized");
-        for t in tokens[1..6].iter() {
+        for t in tokens[1..13].iter() {
             assert!(matches!(t.token_type, TokenType::Identifier));
         }
     }
@@ -367,5 +369,16 @@ mod tests {
         ").expect("Shoulve tokenized");
 
         assert_eq!(tokens.len(), 3); // 3 = "{", "1", "}"   
+    }
+
+    #[test]
+    fn break_continue() {
+        let tokens = tokenize("
+            break continue
+        ").expect("Shoulve tokenized");
+
+        assert_eq!(tokens.len(), 4); // 3 = "{", "1", "}"
+        assert_eq!(tokens[1].token_type, TokenType::Keyword);
+        assert_eq!(tokens[2].token_type, TokenType::Keyword);   
     }
 }

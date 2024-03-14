@@ -134,6 +134,8 @@ pub enum Expr<T> {
     Return {
         result: Box<T>,
     },
+    Break,
+    Continue,
     StructInstance {
         struct_name: String,
         fields: Vec<(String, Box<T>)>,
@@ -155,6 +157,7 @@ impl Module<UserDefinedFunction, Struct> {
 struct Parser {
     tokens: Vec<Token>,
     current_index: usize,
+    is_loop: bool,
 }
 
 impl Parser {
@@ -162,6 +165,7 @@ impl Parser {
         Parser {
             tokens,
             current_index: 0,
+            is_loop: false,
         }
     }
 
@@ -377,7 +381,12 @@ impl Parser {
         self.consume_keyword("while")?;
         let condition = self.parse_expression()?;
         self.consume_keyword("do")?;
+
+        let is_outer_loop = self.is_loop;
+        self.is_loop = true;
         let body = self.parse_expression()?;
+        self.is_loop = is_outer_loop;
+
         let end = body.end.clone();
 
         Ok(ASTNode::new(Expr::While {
@@ -620,11 +629,35 @@ impl Parser {
         Ok(ASTNode::new(Expr::Return { result: Box::new(result) }, start, end))
     }
 
+    fn parse_break_expression(&mut self) -> Result<ASTNode, SyntaxError> {
+        let start = self.current_start().clone();
+        self.consume_with_value(TokenType::Keyword, "break")?;
+        let end = self.current_end().clone();
+        Ok(ASTNode::new(Expr::Break, start, end))
+    }
+
+    fn parse_continue_expression(&mut self) -> Result<ASTNode, SyntaxError> {
+        let start = self.current_start().clone();
+        self.consume_with_value(TokenType::Keyword, "continue")?;
+        let end = self.current_end().clone();
+        Ok(ASTNode::new(Expr::Continue, start, end))
+    }
+
     fn parse_statement(&mut self) -> Result<ASTNode, SyntaxError> {
         if self.current_is("var") {
             self.parse_variable_declaration()
         } else if self.current_is("return") {
             self.parse_return_expression()
+        } else if self.current_is("break") {
+            if !self.is_loop {
+                return Err(self.error_here("Break is allowed only inside a loop"))
+            }
+            self.parse_break_expression()
+        } else if self.current_is("continue") {
+            if !self.is_loop {
+                return Err(self.error_here("Continue is allowed only inside a loop"))
+            }
+            self.parse_continue_expression()
         } else {
             self.parse_expression()
         }
@@ -1490,5 +1523,37 @@ fn new_and_delete() {
             panic!("Wrong")
         }
     }
+
+    #[test]
+    fn break_continue_allowed_inside_loop() {
+        let _n = p("
+            while true do {
+                break;
+                continue;
+                if true then {
+                    break;
+                    continue;
+                }
+            }
+        ");
+    }
+
+    #[test]
+    fn break_continue_not_allowed_outside_loop() {
+        let r = parse(tokenize("
+            while true do {
+                break;
+                continue;
+                if true then {
+                    break;
+                    continue;
+                }
+            }
+            break;
+            continue;
+        ").unwrap());
+        assert!(r.is_err());
+    }
+
 
 }

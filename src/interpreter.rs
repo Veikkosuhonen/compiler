@@ -88,11 +88,13 @@ pub struct Memory {
     pub sym_table: Box<SymTable<Symbol,(Address, Type)>>,
     pub stack: Vec<Value>,
     pub heap: Vec<Value>,
+    breaks: bool,
+    continues: bool,
 }
 
 impl Memory {
     pub fn new(sym_table: Box<SymTable<Symbol,(Address, Type)>>) -> Memory {
-        Memory { sym_table, stack: vec![], heap: vec![] }
+        Memory { sym_table, stack: vec![], heap: vec![], breaks: false, continues: false }
     }
 
     pub fn assign(&mut self, addr: &Address, val: Value) {
@@ -144,7 +146,8 @@ impl Memory {
         let mut result = f(self);
         let outer_symtab = mem::replace(&mut self.sym_table.parent, Default::default());
         let returns = self.sym_table.returns.clone();
-        let _ = mem::replace(&mut self.sym_table, outer_symtab.unwrap());
+        let mut outer_symtab = outer_symtab.unwrap();
+        let _ = mem::replace(&mut self.sym_table, outer_symtab);
         // self.debug();
         if let Some((return_value_addr, return_type)) = returns {
             // Copy return value from block's local memory to the return value position
@@ -406,7 +409,12 @@ fn interpret(node: &TypedASTNode, memory: &mut Memory) -> EvalRes {
         Expr::While { condition, body } => {
             while interpret(&condition, memory).0.into() {
                 interpret(&body, memory);
-                if memory.sym_table.returns.is_some() {
+                if memory.continues {
+                    memory.continues = false;
+                    continue;
+                }
+                if memory.breaks || memory.sym_table.returns.is_some() {
+                    memory.breaks = false;
                     break;
                 }
             }
@@ -416,7 +424,7 @@ fn interpret(node: &TypedASTNode, memory: &mut Memory) -> EvalRes {
             memory.block_scope(|inner| {
                 for node in statements {
                     interpret(&node, inner);
-                    if inner.sym_table.returns.is_some() {
+                    if inner.continues || inner.breaks || inner.sym_table.returns.is_some() {
                         return (Value::Unit, None);
                     }
                 }
@@ -470,6 +478,14 @@ fn interpret(node: &TypedASTNode, memory: &mut Memory) -> EvalRes {
         },
         Expr::Unit => (Value::Unit, None),
         Expr::Member { parent, name } => eval_member_expr(parent, name, memory),
+        Expr::Continue => { 
+            memory.continues = true;
+            (Value::Unit, None)
+        },
+        Expr::Break => {
+            memory.breaks = true;
+            (Value::Unit, None)
+        },
     }
 }
 
@@ -634,7 +650,6 @@ mod tests {
                 }
             }
         ");
-        println!("{:?}", res);
         assert_eq!(50001, res.try_into().expect("Not an integer!"));
     }
 
@@ -674,7 +689,6 @@ mod tests {
                 minttu
             }
         ");
-        println!("{:?}", res);
         assert_eq!(90000, res.try_into().expect("Not an integer!"));
     }
 
@@ -928,6 +942,71 @@ mod tests {
         ");
         if let Value::Integer(i) = res {
             assert_eq!(i, 1000);
+        } else {
+            panic!("Wrong, got {:?}", res)
+        }
+    }
+
+    #[test]
+    fn break_stmt() {
+        let res = i("
+            var i = 0;
+            while i < 10 do {
+                i = i + 1;
+                if i == 5 then {
+                    break;
+                }
+            }
+            i
+        ");
+        if let Value::Integer(i) = res {
+            assert_eq!(i, 5);
+        } else {
+            panic!("Wrong, got {:?}", res)
+        }
+    }
+
+    #[test]
+    fn break_inner_loop() {
+        let res = i("
+            var sum = 0;
+            var i = 0;
+            while i < 10 do {
+                i = i + 1;
+                var j = 0;
+                while j < 10 do {
+                    j = j + 1;
+                    sum = sum + 1;
+                    if j == 5 then {
+                        break;
+                    }
+                }
+            }
+            sum
+        ");
+        if let Value::Integer(i) = res {
+            assert_eq!(i, 50);
+        } else {
+            panic!("Wrong, got {:?}", res)
+        }
+    }
+
+    #[test]
+    fn continue_stmt() {
+        let res = i("
+            var sum = 0;
+            var i = 0;
+            while i < 10 do {
+                i = i + 1;
+                if i % 2 == 0 then {
+                    continue;
+                }
+                sum = sum + 1;
+            }
+            sum
+        ");
+        if let Value::Integer(i) = res {
+            assert_eq!(i, 5);
         } else {
             panic!("Wrong, got {:?}", res)
         }

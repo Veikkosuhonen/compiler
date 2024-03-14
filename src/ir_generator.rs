@@ -1,8 +1,9 @@
 use std::collections::HashMap;
+use std::mem;
 
-use crate::{builtin_functions::{get_builtin_function_ir_vars, get_builtin_type_constructor_ir_vars}, parser::{Expr, Module}, tokenizer::Op, type_checker::{Type, TypedASTNode, TypedStruct, TypedUserDefinedFunction}};
+use crate::{builtin_functions::{get_builtin_function_ir_vars, get_builtin_type_constructor_ir_vars}, parser::{Expr, Module}, sym_table::SymTable, tokenizer::Op, type_checker::{Type, TypedASTNode, TypedStruct, TypedUserDefinedFunction}};
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Default)]
 pub struct IRVar {
     pub parent: Option<Box<IRVar>>,
     pub name: String,
@@ -38,7 +39,7 @@ impl IRVar {
 }
 
 struct IRVarTable {
-    vars: HashMap<String, IRVar>,
+    vars: Box<SymTable<String, IRVar>>,
     var_idx: usize,
     label_idx: usize,
     fun_name: String,
@@ -46,11 +47,11 @@ struct IRVarTable {
 
 impl IRVarTable {
     fn new(fun_name: String) -> IRVarTable {
-        IRVarTable { vars: HashMap::new(), var_idx: 0, label_idx: 0, fun_name }
+        IRVarTable { vars: SymTable::new(None), var_idx: 0, label_idx: 0, fun_name }
     }
 
     fn unconflicting_name(&mut self, mut name: String) -> String {
-        while self.vars.contains_key(&name) {
+        while self.vars.symbols.contains_key(&name) {
             self.var_idx += 1;
             name = format!("var_{}", self.var_idx);
         }
@@ -60,7 +61,7 @@ impl IRVarTable {
     fn create(&mut self, name: String, var_type: Type) -> IRVar {
         let name = self.unconflicting_name(name);
         let var = IRVar::new(name.clone(), var_type);
-        self.vars.insert(name, var.clone());
+        self.vars.declare(name, var.clone());
         var
     }
 
@@ -75,13 +76,23 @@ impl IRVarTable {
     }
 
     fn get(&self, name: &String) -> IRVar {
-        self.vars.get(name).expect(&format!("IRVar '{}' should be defined", name.to_string())).clone()
+        self.vars.get(name).clone()
     }
 
     fn create_local_label(&mut self) -> String {
         let label = format!(".L{}_{}", self.fun_name, self.label_idx);
         self.label_idx += 1;
         label
+    }
+
+    /// Some copypasta from interpreter/Memory::block_scope
+    pub fn block_scope(&mut self, f: impl FnOnce(&mut Self) -> IRVar) -> IRVar {
+        let outer_symtab: Box<SymTable<_, _>> = mem::replace(&mut self.vars, Default::default());
+        let inner_symtab = SymTable::new(Some(outer_symtab));
+        let mut inner_var_table = IRVarTable { vars: inner_symtab, var_idx: self.var_idx, label_idx: self.label_idx, fun_name: self.fun_name.clone() };
+        let result = f(&mut inner_var_table);
+        mem::replace(&mut self.vars, inner_var_table.vars.parent.unwrap());
+        result
     }
 }
 
@@ -166,15 +177,15 @@ fn create_top_level_var_table(global_functions: &Vec<TypedUserDefinedFunction>, 
     let mut var_table = IRVarTable::new(fun_name.clone());
 
     for (name, var) in get_builtin_function_ir_vars() {
-        var_table.vars.insert(name, var);
+        var_table.vars.declare(name, var);
     }
     for (name, var) in get_builtin_type_constructor_ir_vars() {
-        var_table.vars.insert(name, var);
+        var_table.vars.declare(name, var);
     }
 
     for function in global_functions {
         let sym = function.id.clone();
-        var_table.vars.insert(
+        var_table.vars.declare(
             sym.clone(), 
             IRVar::new(sym, Type::Function(Box::new(function.func_type.clone())))
         );
@@ -215,7 +226,7 @@ fn generate(node: &TypedASTNode, instructions: &mut Vec<IREntry>, var_table: &mu
         Expr::VariableDeclaration { id, init,.. } => {
             if let Expr::Identifier { value } = &id.expr {
                 let init = generate(&init, instructions, var_table, None);
-                var_table.vars.insert(value.clone(), init.clone());
+                var_table.vars.declare(value.clone(), init.clone());
                 init
             } else {
                 panic!("Id of a variable declaration must be an Identifier")
@@ -309,10 +320,12 @@ fn generate(node: &TypedASTNode, instructions: &mut Vec<IREntry>, var_table: &mu
             right
         },
         Expr::Block { statements, result } => {
-            for stmnt in statements {
-                generate(&stmnt, instructions, var_table, None);
-            }
-            let result = generate(&result, instructions, var_table, Some(dest.clone()));
+            let result = var_table.block_scope(|inner_var_table| {
+                for stmnt in statements {
+                    generate(&stmnt, instructions, inner_var_table, None);
+                }
+                generate(&result, instructions, inner_var_table, Some(dest.clone()))
+            });
             instructions.push(IREntry::copy(result, dest.clone()));
             dest
         },
@@ -530,6 +543,20 @@ mod tests {
             **y = 2;
             x
         ");
+    }
+
+    #[test]
+    fn shadowing() {
+        let _ir = i("
+        var x = 0;
+        {
+            var x = 1;
+            print_int(x);
+        }
+        print_int(x);
+        ");
+
+        println!("{}", _ir.get("main").unwrap().iter().map(|i| i.to_string()).collect::<Vec<String>>().join("\n"))
     }
 
     #[test]

@@ -85,13 +85,13 @@ impl Address {
 }
 
 pub struct Memory {
-    pub sym_table: Box<SymTable<(Address, Type)>>,
+    pub sym_table: Box<SymTable<Symbol,(Address, Type)>>,
     pub stack: Vec<Value>,
     pub heap: Vec<Value>,
 }
 
 impl Memory {
-    pub fn new(sym_table: Box<SymTable<(Address, Type)>>) -> Memory {
+    pub fn new(sym_table: Box<SymTable<Symbol,(Address, Type)>>) -> Memory {
         Memory { sym_table, stack: vec![], heap: vec![] }
     }
 

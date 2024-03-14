@@ -121,7 +121,7 @@ fun abs(x: Int): Int {
 
 var line1: Line* = new Line {
     start: new Point { x: 1, y: 2 },
-    end: new Point { x: 5, y: 9 }
+    end: new Point { x: 5, y: 9 }, // Notice the trailing comma
 };
 
 line1.end.y = 10;

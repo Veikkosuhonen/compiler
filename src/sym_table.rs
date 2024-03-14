@@ -1,4 +1,4 @@
-use std::{collections::HashMap, mem};
+use std::{collections::HashMap, fmt::Debug, hash::Hash, mem};
 
 use crate::tokenizer::Op;
 
@@ -17,16 +17,25 @@ impl Symbol {
     }
 }
 
+impl Default for Symbol {
+    fn default() -> Self {
+        Symbol::Identifier(String::from(""))
+    }
+}
+
 #[derive(Default)]
-pub struct SymTable<T> {
-    pub symbols: HashMap<Symbol, T>,
-    pub parent: Option<Box<SymTable<T>>>,
+pub struct SymTable<S,T> {
+    pub symbols: HashMap<S, T>,
+    pub parent: Option<Box<SymTable<S,T>>>,
     pub returns: Option<T>,
     pub expected_returns: T,
 }
 
-impl<T:Clone + Default> SymTable<T> {
-    pub fn new<'a>(parent: Option<Box<SymTable<T>>>) -> Box<SymTable<T>> {
+impl<
+    S:PartialEq + Hash + Eq + Debug + Default + Clone, 
+    T:Clone + Default
+> SymTable<S,T> {
+    pub fn new<'a>(parent: Option<Box<SymTable<S,T>>>) -> Box<SymTable<S,T>> {
         Box::new(SymTable {
             symbols: HashMap::new(),
             parent,
@@ -35,7 +44,7 @@ impl<T:Clone + Default> SymTable<T> {
         })
     }
 
-    pub fn get(&self, k: &Symbol) -> T {
+    pub fn get(&self, k: &S) -> T {
         if let Some(val) = self.symbols.get(k) {
             val.clone()
         } else if let Some(parent) = &self.parent {
@@ -45,7 +54,7 @@ impl<T:Clone + Default> SymTable<T> {
         }
     }
 
-    pub fn get_ref(&self, k: &Symbol) -> &T {
+    pub fn get_ref(&self, k: &S) -> &T {
         if let Some(val) = self.symbols.get(k) {
             val
         } else if let Some(parent) = &self.parent {
@@ -55,7 +64,12 @@ impl<T:Clone + Default> SymTable<T> {
         }
     }
 
-    pub fn assign(&mut self, k: Symbol, val: T) -> T {
+    pub fn declare(&mut self, k: S, val: T) -> T {
+        self.symbols.insert(k, val.clone());
+        val
+    }
+
+    pub fn assign(&mut self, k: S, val: T) -> T {
         if self.symbols.contains_key(&k) {
             self.symbols.insert(k, val.clone());
             val
@@ -66,7 +80,7 @@ impl<T:Clone + Default> SymTable<T> {
         }
     }
 
-    pub fn block_scope<Y>(self: &mut Box<SymTable<T>>, f: impl FnOnce(&mut Box<SymTable<T>>) -> Y) -> Y {
+    pub fn block_scope<Y>(self: &mut Box<SymTable<S,T>>, f: impl FnOnce(&mut Box<SymTable<S,T>>) -> Y) -> Y {
         let expected_returns = self.expected_returns.clone();
         let symtab = mem::replace(self, Default::default());
         let mut inner_symtab = SymTable::new(Some(symtab));
@@ -79,7 +93,7 @@ impl<T:Clone + Default> SymTable<T> {
         result
     }
 
-    pub fn function_scope<Y>(self: &mut Box<SymTable<T>>, args: &Vec<(Symbol, T)>, f: impl FnOnce(&mut Box<SymTable<T>>) -> Y) -> Y {
+    pub fn function_scope<Y>(self: &mut Box<SymTable<S,T>>, args: &Vec<(S, T)>, f: impl FnOnce(&mut Box<SymTable<S,T>>) -> Y) -> Y {
         let symtab = mem::replace(self, Default::default());
         let mut inner_symtab = SymTable::new(Some(symtab));
         for (arg_symbol, arg_val) in args {

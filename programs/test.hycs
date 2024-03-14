@@ -1,11 +1,8 @@
-fun f(): Int* {
-  var x: Int* = new Int(123);
-  return x;
+var x = 0;
+
+{
+  var x = 1;
+  print_int(x);
 }
 
-var p = f();
-
-print_int(*p);
-// expect 123
-
-delete p;
+print_int(x);

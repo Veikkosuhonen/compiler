@@ -29,12 +29,12 @@ pub fn run_tests(compile_only: bool, benchmark: bool) {
             let source = fs::read_to_string(path).expect("Should've been able to read the file");
             let tests = source.split("//===").collect::<Vec<&str>>();
             for (i, test_source) in tests.iter().enumerate() {
-                println!("{}", format!("\n{}/{} ", i + 1, tests.len()));
+                println!("{}", format!("{}/{} ", i + 1, tests.len()));
                 println!("{}", run_test(test_source, format!("{test_id}_{i}"), compile_only).join(""));
             }
         });
 
-    println!("Done in {} s", start.elapsed().as_secs());
+    println!("Done in {} ms", start.elapsed().as_millis());
 }
 
 fn run_test(source: &str, id: String, compile_only: bool) -> Vec<String> {

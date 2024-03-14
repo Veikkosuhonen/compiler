@@ -143,7 +143,7 @@ pub struct Token {
 lazy_static! {
     static ref WHITESPACE_REGEX: Regex = Regex::new(r"^\s+").unwrap();
     static ref MULTILINE_COMMENT_REGEX: Regex = Regex::new(r"^/\*[\s\S]*?\*/").unwrap();
-    static ref LINE_COMMENT_REGEX: Regex = Regex::new(r"^//.*(\n|$)").unwrap();
+    static ref LINE_COMMENT_REGEX: Regex = Regex::new(r"^(//|#).*(\n|$)").unwrap();
     static ref IDENTIFIER_REGEX: Regex = Regex::new(r"^[a-zA-Z_][a-zA-Z0-9_]*").unwrap();
     static ref INTEGER_LITERAL_REGEX: Regex = Regex::new(r"^[0-9]+").unwrap();
     static ref BOOLEAN_LITERAL_REGEX: Regex = Regex::new(r"^(true|false)").unwrap();
@@ -356,5 +356,16 @@ mod tests {
         ").expect("Shoulve tokenized");
 
         assert_eq!(tokens[2].token_type, TokenType::Operator);   
+    }
+
+    #[test]
+    fn single_line_comment() {
+        let tokens = tokenize("
+            # Hello!
+            1
+            // Hello
+        ").expect("Shoulve tokenized");
+
+        assert_eq!(tokens.len(), 3); // 3 = "{", "1", "}"   
     }
 }

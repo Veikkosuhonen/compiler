@@ -22,3 +22,25 @@ var i = new Int(123);
 
 print_int(*i);
 // expect 321
+
+//===
+
+// name "Example heap alloc program"
+
+fun make_an_int(n: Int): Int* {
+    return new Int(n);
+}
+
+var p1 = make_an_int(123);
+var p2 = make_an_int(456);
+print_int(*p1);
+// expect 123
+print_int(*p2);
+// expect 456
+*p1 = 789;
+print_int(*p1); # Prints 345
+// expect 789
+print_int(*p2); # Prints 234
+// expect 456
+delete p1;
+delete p2;

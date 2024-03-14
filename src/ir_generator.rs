@@ -91,7 +91,7 @@ impl IRVarTable {
         let inner_symtab = SymTable::new(Some(outer_symtab));
         let mut inner_var_table = IRVarTable { vars: inner_symtab, var_idx: self.var_idx, label_idx: self.label_idx, fun_name: self.fun_name.clone() };
         let result = f(&mut inner_var_table);
-        mem::replace(&mut self.vars, inner_var_table.vars.parent.unwrap());
+        let _ = mem::replace(&mut self.vars, inner_var_table.vars.parent.unwrap());
         result
     }
 }
@@ -556,7 +556,7 @@ mod tests {
         print_int(x);
         ");
 
-        println!("{}", _ir.get("main").unwrap().iter().map(|i| i.to_string()).collect::<Vec<String>>().join("\n"))
+        // println!("{}", _ir.get("main").unwrap().iter().map(|i| i.to_string()).collect::<Vec<String>>().join("\n"))
     }
 
     #[test]
@@ -662,6 +662,6 @@ mod tests {
             var iq: Int* = &dog.iq;
             *iq = 10;
         ");
-        println!("{}", _ir.get("main").unwrap().iter().map(|i| i.to_string()).collect::<Vec<String>>().join("\n"))
+        // println!("{}", _ir.get("main").unwrap().iter().map(|i| i.to_string()).collect::<Vec<String>>().join("\n"))
     }
 }

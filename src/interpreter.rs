@@ -2,11 +2,12 @@ use std::mem;
 use std::rc::Rc;
 use std::vec;
 
+use crate::lang_type::{FunctionType, Type};
 use crate::sym_table::{SymTable, Symbol};
 use crate::parser::{Expr, Module};
 use crate::tokenizer::{Op, SourceLocation};
 use crate::builtin_functions::*;
-use crate::type_checker::{FunctionType, Type, TypedASTNode, TypedStruct, TypedUserDefinedFunction};
+use crate::type_checker::{TypedASTNode, TypedStruct, TypedUserDefinedFunction};
 
 #[derive(Debug, Clone)]
 pub enum Function {

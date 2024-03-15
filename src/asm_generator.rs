@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::{ir_generator::{IREntry, IRVar, Instr}, sym_table::Symbol, tokenizer::Op, type_checker::Type};
+use crate::{ir_generator::{IREntry, IRVar, Instr}, lang_type::Type, sym_table::Symbol, tokenizer::Op};
 
 pub fn generate_asm(ir: HashMap<String, Vec<IREntry>>) -> String {
     let functions_code = ir.iter().map(|(fun_name, ir)| {
@@ -17,6 +17,7 @@ enum Address {
     Register(String),
     RegisterPointer((String, i32)),
     Memory(i32),
+    Literal(String),
 }
 
 impl Address {
@@ -24,7 +25,8 @@ impl Address {
         match self {
             Address::Register(reg) => reg.clone(),
             Address::RegisterPointer((reg, offset)) => format!("{}({})", offset, reg),
-            Address::Memory(addr) => format!("{}(%rbp)", addr)
+            Address::Memory(addr) => format!("{}(%rbp)", addr),
+            Address::Literal(literal) => format!("${literal}")
         }
     }
 }
@@ -340,8 +342,8 @@ fn get_var_address_using_register(var: &IRVar, addresses: &HashMap<String, (Addr
             Type::Struct(struct_type) => {
                 let addr = match base_address {
                     Address::Memory(addr) => addr,
-                    Address::RegisterPointer(_) => todo!(),
-                    Address::Register(_) => panic!("Direct struct cannot be in a register")
+                    // Address::RegisterPointer(_) => todo!(),
+                    _ => panic!("Direct struct should only be in memory")
                 };
 
                 let (offset,_) = struct_type.get_member(&var.name);
@@ -358,7 +360,11 @@ fn get_var_address_using_register(var: &IRVar, addresses: &HashMap<String, (Addr
         }
         
     } else {
-        let (address,_) = addresses.get(&var.name).expect(format!("Address of var {} to be defined", var.name).as_str());
+        let (address,var_type) = addresses.get(&var.name).expect(format!("Address of var {} to be defined", var.name).as_str());
+        if let Type::Function(_) = var_type {
+            // Return the function label literal
+            return (Address::Literal(var.name.clone()), vec![])
+        }
         (address.clone(), vec![])
     }
 }

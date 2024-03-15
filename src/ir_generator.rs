@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::mem;
 
-use crate::{builtin_functions::{get_builtin_function_ir_vars, get_builtin_type_constructor_ir_vars}, parser::{Expr, Module}, sym_table::SymTable, tokenizer::Op, type_checker::{Type, TypedASTNode, TypedStruct, TypedUserDefinedFunction}};
+use crate::{builtin_functions::{get_builtin_function_ir_vars, get_builtin_type_constructor_ir_vars}, lang_type::Type, parser::{Expr, Module}, sym_table::SymTable, tokenizer::Op, type_checker::{TypedASTNode, TypedStruct, TypedUserDefinedFunction}};
 
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct IRVar {

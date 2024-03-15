@@ -2,7 +2,7 @@ use std::io;
 
 use lazy_static::lazy_static;
 
-use crate::{interpreter::{EvalRes, Memory, Value}, ir_generator::IRVar, sym_table::Symbol, tokenizer::Op, type_checker::{FunctionType, Type}};
+use crate::{interpreter::{EvalRes, Memory, Value}, ir_generator::IRVar, lang_type::{FunctionType, Type}, sym_table::Symbol, tokenizer::Op};
 
 fn print_int(args: Vec<Value>) -> Value {
     let arg = args.get(0).expect("Number of arguments to print_int should be 1");

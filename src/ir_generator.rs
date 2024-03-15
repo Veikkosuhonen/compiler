@@ -98,7 +98,7 @@ impl IRVarTable {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Instr {
     LoadIntConst { value: i32, dest: Box<IRVar> },
     LoadBoolConst { value: bool, dest: Box<IRVar> },
@@ -111,7 +111,7 @@ pub enum Instr {
     Label(String),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct IREntry {
     // location: SourceLocation,
     pub instruction: Instr

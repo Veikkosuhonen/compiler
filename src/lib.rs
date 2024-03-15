@@ -13,6 +13,7 @@ pub mod type_checker;
 pub mod builtin_functions;
 pub mod asm_generator;
 pub mod e2e;
+pub mod analyzer;
 
 fn read_file(path: &String) -> String {
     let contents = fs::read_to_string(path)

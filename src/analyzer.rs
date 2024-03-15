@@ -11,6 +11,15 @@ struct BasicBlock {
     out: Vec<String>
 }
 
+type State = HashMap<String, i32>;
+
+fn reaching_definitions(blocks: Vec<BasicBlock>) {
+    let ins: HashMap<usize, State> = HashMap::new();
+    let outs: HashMap<usize, State> = HashMap::new();
+
+    // Find all variables 
+}
+
 pub fn ir_to_flowgraph(ir: HashMap<String, Vec<IREntry>>) -> String {
     format!(
         "digraph {}\n{}\n{}",
@@ -76,6 +85,8 @@ fn find_basic_blocks(ir: &Vec<IREntry>) -> Vec<BasicBlock> {
 
     blocks
 }
+
+
 
 fn create_dot_flowgraph(blocks: Vec<BasicBlock>) -> String {
     blocks.iter()

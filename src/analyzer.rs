@@ -6,7 +6,7 @@ pub fn analyze(_ir: HashMap<String, Vec<IREntry>>) {}
 
 #[derive(Clone)]
 struct BasicBlock {
-    entries: Vec<IREntry>,
+    entries: Vec<(usize, IREntry)>,
     label: String,
     out: Vec<String>
 }
@@ -15,11 +15,11 @@ fn find_basic_blocks(ir: &Vec<IREntry>) -> Vec<BasicBlock> {
     let mut blocks = vec![];
     let mut current_entries = vec![];
     let mut current_label = String::from("");
-    for entry in ir {
+    for (idx, entry) in ir.iter().enumerate() {
         
         match &entry.instruction {
             Instr::CondJump { else_label, then_label,.. } => {
-                current_entries.push(entry.clone());
+                current_entries.push((idx, entry.clone()));
                 blocks.push(BasicBlock {
                     entries: current_entries,
                     label: current_label.clone(),
@@ -28,7 +28,7 @@ fn find_basic_blocks(ir: &Vec<IREntry>) -> Vec<BasicBlock> {
                 current_entries = vec![];
             },
             Instr::Jump(label) => {
-                current_entries.push(entry.clone());
+                current_entries.push((idx, entry.clone()));
                 blocks.push(BasicBlock {
                     entries: current_entries,
                     label: current_label.clone(),
@@ -46,10 +46,10 @@ fn find_basic_blocks(ir: &Vec<IREntry>) -> Vec<BasicBlock> {
                 }
                 current_label = name.to_string();
                 current_entries = vec![];
-                current_entries.push(entry.clone());
+                current_entries.push((idx, entry.clone()));
             },
             _ => {
-                current_entries.push(entry.clone());
+                current_entries.push((idx, entry.clone()));
             },
         }
     }
@@ -93,7 +93,7 @@ mod tests {
             bb
                 .iter()
                 .map(|i| format!("Block {:?} --> {:?}\n{}", i.label, i.out, i.entries.iter()
-                    .map(|i| i.to_string())
+                    .map(|i| i.1.to_string())
                     .collect::<Vec<String>>()
                     .join("\n")
                 ))

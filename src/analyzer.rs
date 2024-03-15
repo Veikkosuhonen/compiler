@@ -11,6 +11,18 @@ struct BasicBlock {
     out: Vec<String>
 }
 
+pub fn ir_to_flowgraph(ir: HashMap<String, Vec<IREntry>>) -> String {
+    format!(
+        "digraph {}\n{}\n{}",
+        "{",
+        ir.iter().map(|(_, ir)| {
+            let blocks = find_basic_blocks(ir);
+            create_dot_flowgraph(blocks)
+        }).collect::<Vec<String>>().join("\n"),
+        "}"
+    )
+}
+
 fn find_basic_blocks(ir: &Vec<IREntry>) -> Vec<BasicBlock> {
     let mut blocks = vec![];
     let mut current_entries = vec![];
@@ -63,6 +75,17 @@ fn find_basic_blocks(ir: &Vec<IREntry>) -> Vec<BasicBlock> {
     }
 
     blocks
+}
+
+fn create_dot_flowgraph(blocks: Vec<BasicBlock>) -> String {
+    blocks.iter()
+        .map(|b| 
+            b.out.iter()
+            .map(|o| format!("\"{}\" -> \"{}\";", b.label, o))
+            .collect::<Vec<String>>()
+            .join("\n")
+        )
+        .collect::<Vec<String>>().join("\n")
 }
 
 mod tests {

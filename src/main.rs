@@ -18,6 +18,7 @@ enum Commands {
     T { path: String },
     Ir { path: String },
     Asm { path: String },
+    Dot { path: String },
     E2e(E2EArgs),
 }
 
@@ -62,6 +63,12 @@ fn main() {
             let ir = generate_ir(typed_ast);
             let asm = generate_asm(ir);
             println!("{}", asm);
+        },
+        Commands::Dot { path } => {
+            let typed_ast = typecheck_file(&path);
+            let ir = generate_ir(typed_ast);
+            let dot = analyzer::ir_to_flowgraph(ir);
+            println!("{}", dot);
         },
         Commands::E2e(args) => {
             run_tests(args.compiled_only, args.benchmark)

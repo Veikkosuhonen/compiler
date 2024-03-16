@@ -137,7 +137,7 @@ pub fn get_builtin_function_types() -> Vec<(Symbol, Type)> {
     ];
 
     functions.iter().map(|(id, ftype)| {
-        (Symbol::Identifier(id.to_string()),  Type::function(Box::new(ftype.clone())))
+        (Symbol::Identifier(id.to_string()),  Type::Function { func_type: Box::new(ftype.clone()), id: Some(id.to_string()) })
     }).collect()
 }
 

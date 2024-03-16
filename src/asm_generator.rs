@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::{ir_generator::{IREntry, IRVar, Instr}, lang_type::Type, sym_table::Symbol, tokenizer::Op};
+use crate::{ir_generator::{IREntry, IRVar, Instr}, lang_type::{FunctionType, Type}, sym_table::Symbol, tokenizer::Op};
 
 pub fn generate_asm(ir: HashMap<String, Vec<IREntry>>) -> String {
     let functions_code = ir.iter().map(|(fun_name, ir)| {
@@ -284,32 +284,6 @@ fn generate_call(fun: &Box<IRVar>, args: &Vec<Box<IRVar>>, addresses: &HashMap<S
         },
         Symbol::Identifier(name) => {
             match name.as_str() {
-                "print_int" => {
-                    let (arg_loc, mut lines) = get_var_address(&args[0], addresses);
-
-                    lines.push(mov(&arg_loc.to_string(), "%rsi"));
-                    lines.push(format!("movq $print_format, %rdi"));
-                    lines.push(format!("call printf"));
-                    lines                    
-                },
-                "print_bool" => {
-                    let (arg_loc, mut lines) = get_var_address(&args[0], addresses);
-
-                    lines.push(mov(&arg_loc.to_string(), "%rsi"));
-                    lines.push(format!("andq $0x1, %rsi"));
-                    lines.push(format!("movq $print_format, %rdi"));
-                    lines.push(format!("call printf"));
-                    lines
-                },
-                "read_int" => {
-                    vec![
-                        format!("movq $scan_format, %rdi"),
-                        format!("call scanf"),
-                        format!("cmpq $1, %rax"),
-                        format!("jne .Lerr"),
-                        format!("movq %rsi, %rax")
-                    ]
-                },
                 _ => generate_function_call(fun.clone(), args, addresses)
             }
         }
@@ -323,10 +297,17 @@ fn generate_function_call(fun: Box<IRVar>, args: &Vec<Box<IRVar>>, addresses: &H
         lines.extend(arg_lines);
         lines.push(mov(&arg_loc.to_string(),&get_argument_register(idx)));
     }
-    let (func_addr, func_addr_lines) = get_var_address(&fun, addresses);
-    lines.extend(func_addr_lines);
-    lines.extend(copy(&func_addr, &Address::Register(String::from("%rax"))));
-    lines.push(format!("call *%rax"));
+    // Slightly different calling whether the function has an id or not.
+    if let Type::Function { id: Some(id),.. } = &fun.var_type {
+        // Call it by name
+        lines.push(format!("call {id}"));
+    } else {
+        // Call it by address
+        let (func_addr, func_addr_lines) = get_var_address(&fun, addresses);
+        lines.extend(func_addr_lines);
+        lines.extend(copy(&func_addr, &Address::Register(String::from("%rax"))));
+        lines.push(format!("call *%rax"));
+    }
     lines
 }
 
@@ -462,6 +443,39 @@ fn add_stdlib_code(source: String) -> String {
         movq %rbp, %rsp
         popq %rbp
         ret
+
+print_int:
+    pushq %rbp
+    movq %rsp, %rbp
+        movq %rdi, %rsi
+        movq $print_format, %rdi
+        call printf
+    movq %rbp, %rsp
+    popq %rbp
+    ret
+
+print_bool:
+    pushq %rbp
+    movq %rsp, %rbp
+        movq %rdi, %rsi
+        movq $print_format, %rdi
+        andq $0x1, %rsi
+        call printf
+    movq %rbp, %rsp
+    popq %rbp
+    ret
+
+read_int:
+    pushq %rbp
+    movq %rsp, %rbp
+        movq $scan_format, %rdi
+        call scanf
+        cmpq $1, %rax
+        jne .Lerr
+        movq %rsi, %rax
+    movq %rbp, %rsp
+    popq %rbp
+    ret
 
 # String data that we pass to functions 'scanf' and 'printf'
 scan_format:

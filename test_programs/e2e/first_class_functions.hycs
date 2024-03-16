@@ -14,3 +14,13 @@ fun call(f: (Int) => Unit, x: Int) {
 }
 call(consume, binary(constant(), constant()));
 // expect 10
+
+//===
+
+// name "Can pass builtin functions as values"
+
+fun call(f: (Bool) => Unit, x: Bool) {
+  f(x);
+}
+call(print_bool, true);
+// expect 1

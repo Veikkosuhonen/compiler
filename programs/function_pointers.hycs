@@ -4,10 +4,10 @@ var binary: (Int, Int) => Int = add;
 fun get_five(): Int { 5 };
 var constant: () => Int = get_five;
 
-fun print(x: Int) { print_int(x); };
-var consume: (Int) => Unit = print;
+// fun print(x: Int) { print_int(x); };
+var consume: (Int) => Unit = print_int;
 
 fun call(f: (Int) => Unit, x: Int) {
     f(x);
 }
-call(consume, binary(constant(), constant()));
+call(print_int, binary(constant(), constant()));

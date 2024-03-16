@@ -272,6 +272,13 @@ fn typecheck(node: ASTNode, sym_table: &mut Box<SymTable<Symbol,Type>>) -> Typed
                 node_type: member_type,
             }
         },
+        Expr::FunctionType { ref params, ref return_type } => TypedASTNode { 
+            expr: Expr::FunctionType { 
+                params: params.iter().map(|p| Box::new(typecheck(*p.clone(), sym_table))).collect::<Vec<Box<TypedASTNode>>>(),
+                return_type: Box::new(typecheck(*return_type.clone(), sym_table))
+            }, 
+            node_type: typecheck_type_annotation_referred_type(&Box::new(node.clone()), sym_table),
+        },
         Expr::Break => TypedASTNode { expr: Expr::Break, node_type: Type::Unit },
         Expr::Continue => TypedASTNode { expr: Expr::Continue, node_type: Type::Unit }
     }
@@ -470,6 +477,15 @@ fn typecheck_type_annotation_referred_type(type_annotation: &Box<ASTNode>, sym_t
             // refers to, so the type of this annotation is a Typeref to the type Pointer<T>
             Type::Typeref(Box::new(Type::Pointer(Box::new(inner_type))))
         },
+        Expr::FunctionType { params, return_type } => {
+            let param_types = params.iter().map(|p| typecheck_type_annotation_referred_type(p, sym_table)).collect::<Vec<Type>>();
+            let return_type = typecheck_type_annotation_referred_type(return_type, sym_table);
+            Type::Typeref(Box::new(Type::Function { 
+                func_type: Box::new(FunctionType::unnamed_params(param_types, return_type)),
+                id: None,
+                pointer: false,
+            }))
+        },
         _ => panic!("Type annotation must be an identifier or a deref expression, found {:?}", type_annotation.expr),
     };
 
@@ -489,7 +505,7 @@ fn typecheck_variable_declaration(
         let init = typecheck(*init, sym_table);
         if let Some(type_annotation) = type_annotation {
             let annotated_type = typecheck_type_annotation_referred_type(&type_annotation, sym_table);
-            if init.node_type != annotated_type {
+            if !init.node_type.satisfy(&annotated_type).is_resolved() {
                 panic!("Type annotation and init expression types differ: {:?} != {:?}", annotated_type, init.node_type)
             }
         }
@@ -1031,6 +1047,25 @@ mod tests {
                     continue;
                 }
             }
+        ");
+    }
+
+    #[test]
+    fn function_type_annot() {
+        let _r = t("
+            fun add(x: Int, y: Int): Int { x + y };
+            var binary: (Int, Int) => Int = add;
+
+            fun get_five(): Int { 5 };
+            var constant: () => Int = get_five;
+
+            fun print(x: Int) { print_int(x); };
+            var consume: (Int) => Unit = print;
+
+            fun call(f: (Int) => Unit, x: Int) {
+                f(x);
+            }
+            call(consume, binary(constant(), constant()));
         ");
     }
 }

@@ -418,6 +418,7 @@ fn generate(node: &TypedASTNode, instructions: &mut Vec<IREntry>, var_table: &mu
             instructions.push(IREntry { instruction: Instr::Jump(loop_start_label) });
             dest
         },
+        Expr::FunctionType { .. } => unreachable!(),
     }
 }
 
@@ -739,5 +740,26 @@ mod tests {
             }
             sum
         ");
+    }
+
+    #[test]
+    fn function_type_annot() {
+        let _ir = i("
+            fun add(x: Int, y: Int): Int { x + y };
+            var binary: (Int, Int) => Int = add;
+
+            fun get_five(): Int { 5 };
+            var constant: () => Int = get_five;
+
+            fun print(x: Int) { print_int(x); };
+            var consume: (Int) => Unit = print;
+
+            fun call(f: (Int) => Unit, x: Int) {
+                f(x);
+            }
+            call(consume, binary(constant(), constant()));
+        ");
+
+        println!("{}", _ir.get("call").unwrap().iter().map(|i| i.to_string()).collect::<Vec<String>>().join("\n"))
     }
 }

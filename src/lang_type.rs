@@ -56,7 +56,7 @@ impl Type {
             Type::Struct(stype) => stype.fields.len(),
             Type::Pointer(_) => 1,
             Type::Unit => 1,
-            Type::Function { id: points_to,.. } => if points_to.is_some() { 1 } else { 0 },
+            Type::Function { .. } => 1,
             _ => todo!("Size of {:?}", self)
         }
     }
@@ -126,17 +126,18 @@ impl Type {
                 Type::Constructor(self_constructor_type) => self_constructor_type.satisfy(&other_constructor_type),
                 _ => TypeResolution::failed(),
             },
-            Type::Function { func_type, id, pointer } => {
-                if !pointer { return TypeResolution::failed(); };
+            Type::Function { func_type,.. } => {
                 match self {
                     Type::Function { func_type: other_func_type,.. } => {
                         if func_type.param_types.len() != other_func_type.param_types.len() {
+                            eprintln!("Different number of params");
                             return TypeResolution::failed();
                         }
                         let mut constraints = vec![];
                         for (idx, param_type) in other_func_type.param_types.iter().enumerate() {
                             let mut res = func_type.param_types.get(idx).unwrap().param_type.satisfy(&param_type.param_type);
                             if !res.satisfied {
+                                eprintln!("Param type not satisfied");
                                 return TypeResolution::failed();
                             }
                             constraints.append(&mut res.constraint);
@@ -144,6 +145,7 @@ impl Type {
                         
                         let mut res = func_type.return_type.satisfy(&other_func_type.return_type);
                         if !res.satisfied {
+                            eprintln!("Return type not satisfied");
                             return TypeResolution::failed();
                         }
                         constraints.append(&mut res.constraint);

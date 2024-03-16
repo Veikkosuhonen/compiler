@@ -140,6 +140,10 @@ pub enum Expr<T> {
         struct_name: String,
         fields: Vec<(String, Box<T>)>,
     },
+    FunctionType {
+        params: Vec<Box<T>>,
+        return_type: Box<T>,
+    },
 }
 
 #[derive(Debug)]
@@ -314,7 +318,27 @@ impl Parser {
         Ok(ASTNode::new(Expr::Identifier { value: token.value }, token.start, token.end))
     }
 
-    fn parse_type_annotation(&mut self) -> Result<ASTNode, SyntaxError> {
+    fn parse_function_type(&mut self) -> Result<ASTNode, SyntaxError> {
+        let start = self.current_start();
+        self.consume_left_paren()?;
+        let mut params = vec![];
+        if !self.current_is(")") {
+            loop {
+                params.push(Box::new(self.parse_type_annotation()?));
+                if self.current_is(")") {
+                    break;
+                }
+                self.consume_comma()?;
+            }
+        }
+        self.consume_right_paren()?;
+        self.consume_with_value(TokenType::Operator, "=>")?;
+        let return_type = Box::new(self.parse_type_annotation()?);
+        let end = return_type.end.clone();
+        Ok(ASTNode::new(Expr::FunctionType { params, return_type }, start, end))
+    }
+
+    fn parse_type_variable(&mut self) -> Result<ASTNode, SyntaxError> {
         let mut identifer = self.parse_identifier()?;
         let start = identifer.start.clone();
         while let Ok(operator) = Op::unary_from_str(&self.peek()?.value) {
@@ -324,6 +348,14 @@ impl Parser {
         }
 
         Ok(identifer)
+    }
+
+    fn parse_type_annotation(&mut self) -> Result<ASTNode, SyntaxError> {
+        if self.current_is("(") {
+            self.parse_function_type()
+        } else {
+            self.parse_type_variable()
+        }
     }
 
     fn parse_call_expression(&mut self) -> Result<ASTNode, SyntaxError> {
@@ -1553,6 +1585,14 @@ fn new_and_delete() {
             continue;
         ").unwrap());
         assert!(r.is_err());
+    }
+
+    #[test]
+    fn function_type_annot() {
+        let r = parse(tokenize("
+            var addition: (Int, Int) => Int = 0;
+        ").unwrap());
+        assert!(r.is_ok())
     }
 
 

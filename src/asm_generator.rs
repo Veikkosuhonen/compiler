@@ -331,7 +331,7 @@ fn generate_function_call(fun: Box<IRVar>, args: &Vec<Box<IRVar>>, addresses: &H
 }
 
 fn get_var_address_using_register(var: &IRVar, addresses: &HashMap<String, (Address, Type)>, address_reg: String) -> (Address, Vec<String>) {
-    eprintln!("Getting address of {}", var.to_string());
+    // eprintln!("Getting address of {}", var.to_string());
     if let Some(parent) = &var.parent {
         // Get base address
         // eprintln!("Getting address of parent {}", parent.to_string());
@@ -379,7 +379,7 @@ fn get_var_address_using_register(var: &IRVar, addresses: &HashMap<String, (Addr
         
     } else {
         let (address,var_type) = addresses.get(&var.name).expect(format!("Address of var {} to be defined", var.name).as_str());
-        eprintln!("{}", address.to_string());
+        // eprintln!("{}", address.to_string());
         if let Type::Function {..} = var_type {
             if let Address::Literal(lit) = address {
                 // Copy the function address to address_reg

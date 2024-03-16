@@ -487,6 +487,7 @@ fn interpret(node: &TypedASTNode, memory: &mut Memory) -> EvalRes {
             memory.breaks = true;
             (Value::Unit, None)
         },
+        Expr::FunctionType { .. } => unreachable!(),
     }
 }
 
@@ -1011,5 +1012,24 @@ mod tests {
         } else {
             panic!("Wrong, got {:?}", res)
         }
+    }
+
+    #[test]
+    fn function_type_annot() {
+        let _r = i("
+            fun add(x: Int, y: Int): Int { x + y };
+            var binary: (Int, Int) => Int = add;
+
+            fun get_five(): Int { 5 };
+            var constant: () => Int = get_five;
+
+            fun print(x: Int) { print_int(x); };
+            var consume: (Int) => Unit = print;
+
+            fun call(f: (Int) => Unit, x: Int) {
+                f(x);
+            }
+            call(consume, binary(constant(), constant()));
+        ");
     }
 }

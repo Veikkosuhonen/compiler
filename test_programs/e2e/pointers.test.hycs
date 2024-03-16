@@ -28,3 +28,19 @@ var x: Int = 3;
 square(&x);
 print_int(x); // Prints 9
 // expect 9
+
+//===
+
+// name "Function pointers"
+
+fun double(x: Int): Int { 2 * x };
+
+var fp = &double;
+
+var f = *fp;
+
+print_int(double(2));
+// expect 4
+
+print_int(f(2));
+// expect 4

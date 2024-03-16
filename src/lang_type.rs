@@ -25,7 +25,7 @@ impl fmt::Debug for FunctionType {
 pub enum Type {
     Int,
     Bool,
-    Function { func_type: Box<FunctionType>, id: Option<String>, pointer: bool },
+    Function { func_type: Box<FunctionType>, id: Option<String> },
     Struct(TypedStruct),
     Pointer(Box<Type>),
     Generic(String),
@@ -37,7 +37,7 @@ pub enum Type {
 
 impl Type {
     pub fn function(func_type: Box<FunctionType>) -> Type {
-        Type::Function { func_type, id: None, pointer: false }
+        Type::Function { func_type, id: None }
     }
 
     pub fn get_constructor_type(&self) -> FunctionType {
@@ -74,7 +74,7 @@ impl fmt::Debug for Type {
         match self {
             Type::Int =>            f.debug_tuple("Int").finish(),
             Type::Bool =>           f.debug_tuple("Bool").finish(),
-            Type::Function { func_type, id, pointer } =>    f.write_fmt(format_args!("{}{:?} -> {:?}", id.clone().unwrap_or_default(), func_type.param_types, func_type.return_type)),
+            Type::Function { func_type, id } =>    f.write_fmt(format_args!("{}{:?} -> {:?}", id.clone().unwrap_or_default(), func_type.param_types, func_type.return_type)),
             Type::Struct(s) =>      f.write_fmt(format_args!("{} {:?}", s.id, s.fields)),
             Type::Pointer(p) =>     f.write_fmt(format_args!("Pointer<{:?}>", p)),
             Type::Generic(g) =>     f.write_str(g),

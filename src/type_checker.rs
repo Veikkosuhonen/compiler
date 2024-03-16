@@ -157,8 +157,7 @@ pub fn typecheck_program(module: Module<UserDefinedFunction, Struct>) -> Module<
         let function_type = get_function_type(&func, &mut sym_table);
         sym_table.symbols.insert(id, Type::Function { 
             func_type: Box::new(function_type.clone()), 
-            id: Some(func.id.clone()), 
-            pointer: false 
+            id: Some(func.id.clone()),
         });
     }
 
@@ -181,7 +180,7 @@ pub fn typecheck_program(module: Module<UserDefinedFunction, Struct>) -> Module<
 
     for func in module.functions {
         let function_type = sym_table.get(&Symbol::Identifier(func.id.clone()));
-        if let Type::Function { func_type, pointer: false,.. }  = function_type {
+        if let Type::Function { func_type,.. }  = function_type {
             let typed_function = typecheck_function(func, *func_type, &mut sym_table);
             functions.push(typed_function);
         } else {
@@ -359,7 +358,7 @@ fn typecheck_assignable(
     match dest.expr {
         Expr::Identifier { value } => typecheck_identifier(value, sym_table),
         Expr::Unary { operand, operator: Op::Deref } => {
-            if let Type::Function { func_type, id: None, pointer: false } = sym_table.get(&mut Symbol::Operator(Op::Deref)) {
+            if let Type::Function { func_type, id: None } = sym_table.get(&mut Symbol::Operator(Op::Deref)) {
                 let operand = Box::new(typecheck_assignable(operand, sym_table));
                 let node_type = func_type.typecheck_unnamed_args_call(&vec![&operand]);
                 TypedASTNode {
@@ -483,7 +482,6 @@ fn typecheck_type_annotation_referred_type(type_annotation: &Box<ASTNode>, sym_t
             Type::Typeref(Box::new(Type::Function { 
                 func_type: Box::new(FunctionType::unnamed_params(param_types, return_type)),
                 id: None,
-                pointer: false,
             }))
         },
         _ => panic!("Type annotation must be an identifier or a deref expression, found {:?}", type_annotation.expr),
@@ -529,7 +527,7 @@ fn typecheck_logical_op(
     operator: Op, 
     sym_table: &mut Box<SymTable<Symbol,Type>>
 ) -> TypedASTNode {
-    if let Type::Function { func_type, id: None, pointer: false }  = sym_table.get(&mut Symbol::Operator(operator)) {
+    if let Type::Function { func_type, id: None }  = sym_table.get(&mut Symbol::Operator(operator)) {
         let left  = Box::new(typecheck(*left_expr, sym_table));
         let right = Box::new(typecheck(*right_expr, sym_table));
         let node_type = func_type.typecheck_unnamed_args_call(&vec![&left, &right]);
@@ -546,7 +544,7 @@ fn typecheck_binary_op(
     operator: Op, 
     sym_table: &mut Box<SymTable<Symbol,Type>>
 ) -> TypedASTNode {
-    if let Type::Function { func_type, id: None, pointer: false }  = sym_table.get(&mut Symbol::Operator(operator)) {
+    if let Type::Function { func_type, id: None }  = sym_table.get(&mut Symbol::Operator(operator)) {
         let left  = Box::new(typecheck(*left_expr, sym_table));
         let right = Box::new(typecheck(*right_expr, sym_table));
         let node_type = func_type.typecheck_unnamed_args_call(&vec![&left, &right]);
@@ -561,7 +559,7 @@ fn typecheck_unary_op(
     operator: Op,
     sym_table: &mut Box<SymTable<Symbol,Type>>
 ) -> TypedASTNode {
-    if let Type::Function { func_type, id: None, pointer: false } = sym_table.get(&mut Symbol::Operator(operator)) {
+    if let Type::Function { func_type, id: None } = sym_table.get(&mut Symbol::Operator(operator)) {
         let operand = Box::new(typecheck(*operand, sym_table));
         let node_type = func_type.typecheck_unnamed_args_call(&vec![&operand]);
         TypedASTNode { expr: Expr::Unary { operand, operator }, node_type }

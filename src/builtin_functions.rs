@@ -137,7 +137,7 @@ pub fn get_builtin_function_types() -> Vec<(Symbol, Type)> {
     ];
 
     functions.iter().map(|(id, ftype)| {
-        (Symbol::Identifier(id.to_string()),  Type::Function(Box::new(ftype.clone())))
+        (Symbol::Identifier(id.to_string()),  Type::function(Box::new(ftype.clone())))
     }).collect()
 }
 
@@ -232,7 +232,7 @@ pub fn get_builtin_function_and_operator_types() -> Vec<(Symbol, Type)> {
     ];
 
     let mut mapped_ops: Vec<(Symbol, Type)> = ops.iter().map(|(op, ftype)| {
-        (Symbol::Operator(*op), Type::Function(Box::new(ftype.clone())))
+        (Symbol::Operator(*op), Type::function(Box::new(ftype.clone())))
     }).collect();
 
     mapped_ops.extend(get_builtin_function_types());
@@ -249,6 +249,6 @@ pub fn get_builtin_function_ir_vars() -> Vec<(String, IRVar)> {
 
 pub fn get_builtin_type_constructor_ir_vars() -> Vec<(String, IRVar)> {
     get_builtin_referrable_types().iter().map(|(symbol, var_type)| 
-        (symbol.to_string(), IRVar::new(symbol.to_string(), Type::Function(Box::new(var_type.get_callable_type()))))
+        (symbol.to_string(), IRVar::new(symbol.to_string(), Type::function(Box::new(var_type.get_callable_type()))))
     ).collect()
 }

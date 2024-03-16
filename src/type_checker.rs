@@ -23,7 +23,7 @@ impl FunctionType {
             let arg = &argument_expr[idx];
 
             let mut resolution = arg.node_type.satisfy(&param.param_type);
-            if let Some((type_id, type_arg)) = resolution.constraint {
+            for (type_id, type_arg) in resolution.constraint {
                 if let Some(required_type) = constraints.get(&type_id) {
                     // The following resolution will either be resolved or a fail, it wont have constraints because we dont allow generic arg to satisfy generic type param.
                     if !type_arg.satisfy(required_type).is_resolved() {
@@ -34,7 +34,7 @@ impl FunctionType {
                 }
             }
 
-            resolution.constraint = None;
+            resolution.constraint = vec![];
             if !resolution.is_resolved() {
                 panic!("Invalid argument type at index {}, expected {:?} but got {:?}", idx, param.param_type, arg.node_type)
             }
@@ -53,7 +53,7 @@ impl FunctionType {
             let arg = &arg.1;
         
             let mut resolution = arg.node_type.satisfy(&param.param_type);
-            if let Some((type_id, type_arg)) = resolution.constraint {
+            for (type_id, type_arg) in resolution.constraint {
                 if let Some(required_type) = constraints.get(&type_id) {
                     // The following resolution will either be resolved or a fail, it wont have constraints because we dont allow generic arg to satisfy generic type param.
                     if !type_arg.satisfy(required_type).is_resolved() {
@@ -64,7 +64,7 @@ impl FunctionType {
                 }
             }
 
-            resolution.constraint = None;
+            resolution.constraint = vec![];
             if !resolution.is_resolved() {
                 panic!("Invalid argument type for param {}, expected {:?} but got {:?}", arg_name, param.param_type, arg.node_type)
             }
@@ -155,7 +155,11 @@ pub fn typecheck_program(module: Module<UserDefinedFunction, Struct>) -> Module<
     for func in &module.functions {
         let id = Symbol::Identifier(func.id.clone());
         let function_type = get_function_type(&func, &mut sym_table);
-        sym_table.symbols.insert(id, Type::Function(Box::new(function_type.clone())));
+        sym_table.symbols.insert(id, Type::Function { 
+            func_type: Box::new(function_type.clone()), 
+            id: Some(func.id.clone()), 
+            pointer: false 
+        });
     }
 
     for struct_def in module.structs {
@@ -177,8 +181,8 @@ pub fn typecheck_program(module: Module<UserDefinedFunction, Struct>) -> Module<
 
     for func in module.functions {
         let function_type = sym_table.get(&Symbol::Identifier(func.id.clone()));
-        if let Type::Function(function_type) = function_type {
-            let typed_function = typecheck_function(func, *function_type, &mut sym_table);
+        if let Type::Function { func_type, pointer: false,.. }  = function_type {
+            let typed_function = typecheck_function(func, *func_type, &mut sym_table);
             functions.push(typed_function);
         } else {
             panic!("{}'s declared type is not a function", func.id)
@@ -348,9 +352,9 @@ fn typecheck_assignable(
     match dest.expr {
         Expr::Identifier { value } => typecheck_identifier(value, sym_table),
         Expr::Unary { operand, operator: Op::Deref } => {
-            if let Type::Function(deref_func) = sym_table.get(&mut Symbol::Operator(Op::Deref)) {
+            if let Type::Function { func_type, id: None, pointer: false } = sym_table.get(&mut Symbol::Operator(Op::Deref)) {
                 let operand = Box::new(typecheck_assignable(operand, sym_table));
-                let node_type = deref_func.typecheck_unnamed_args_call(&vec![&operand]);
+                let node_type = func_type.typecheck_unnamed_args_call(&vec![&operand]);
                 TypedASTNode {
                     expr: Expr::Unary { operand, operator: Op::Deref },
                     node_type,
@@ -509,10 +513,10 @@ fn typecheck_logical_op(
     operator: Op, 
     sym_table: &mut Box<SymTable<Symbol,Type>>
 ) -> TypedASTNode {
-    if let Type::Function(op_function) = sym_table.get(&mut Symbol::Operator(operator)) {
+    if let Type::Function { func_type, id: None, pointer: false }  = sym_table.get(&mut Symbol::Operator(operator)) {
         let left  = Box::new(typecheck(*left_expr, sym_table));
         let right = Box::new(typecheck(*right_expr, sym_table));
-        let node_type = op_function.typecheck_unnamed_args_call(&vec![&left, &right]);
+        let node_type = func_type.typecheck_unnamed_args_call(&vec![&left, &right]);
         TypedASTNode { expr: Expr::Logical { left, operator, right }, node_type }
     } else {
         panic!("Undefined operator {:?}", operator)
@@ -526,10 +530,10 @@ fn typecheck_binary_op(
     operator: Op, 
     sym_table: &mut Box<SymTable<Symbol,Type>>
 ) -> TypedASTNode {
-    if let Type::Function(op_function) = sym_table.get(&mut Symbol::Operator(operator)) {
+    if let Type::Function { func_type, id: None, pointer: false }  = sym_table.get(&mut Symbol::Operator(operator)) {
         let left  = Box::new(typecheck(*left_expr, sym_table));
         let right = Box::new(typecheck(*right_expr, sym_table));
-        let node_type = op_function.typecheck_unnamed_args_call(&vec![&left, &right]);
+        let node_type = func_type.typecheck_unnamed_args_call(&vec![&left, &right]);
         TypedASTNode { expr: Expr::Binary { left, operator, right }, node_type }
     } else {
         panic!("Undefined operator {:?}", operator)
@@ -541,9 +545,9 @@ fn typecheck_unary_op(
     operator: Op,
     sym_table: &mut Box<SymTable<Symbol,Type>>
 ) -> TypedASTNode {
-    if let Type::Function(op_function) = sym_table.get(&mut Symbol::Operator(operator)) {
+    if let Type::Function { func_type, id: None, pointer: false } = sym_table.get(&mut Symbol::Operator(operator)) {
         let operand = Box::new(typecheck(*operand, sym_table));
-        let node_type = op_function.typecheck_unnamed_args_call(&vec![&operand]);
+        let node_type = func_type.typecheck_unnamed_args_call(&vec![&operand]);
         TypedASTNode { expr: Expr::Unary { operand, operator }, node_type }
     } else {
         panic!("Undefined operator {:?}", operator)

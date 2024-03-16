@@ -31,19 +31,30 @@ impl Address {
     }
 }
 
-fn add_var(var: &IRVar, locals: &mut HashMap<String, (Address, Type)>, stack_size: &mut usize) {
+fn add_var(var: &IRVar, locals: &mut HashMap<String, (Address, Type)>, stack_size: &mut usize, lines: &mut Vec<String>) {
     // eprintln!("Defining {}", var.to_string());
     if let Some(parent) = &var.parent {
-        add_var(parent.as_ref(), locals, stack_size);
+        add_var(parent.as_ref(), locals, stack_size, lines);
+        return;
     }
 
     if locals.contains_key(&var.name) {
-    } else if var.name == "_return" {
+        return
+    }
+    
+    if var.name == "_return" {
         locals.insert(var.name.clone(), (Address::Register("%rax".to_string()), var.var_type.clone()));
     } else {
         *stack_size += var.size();
-        let address = -(8 * *stack_size as i32);
-        locals.insert(var.name.clone(), (Address::Memory(address), var.var_type.clone()));
+        let address = Address::Memory(-(8 * *stack_size as i32));
+
+        // Is this a named function? If so, we need to now put its address into the stack so we can use it as a value.
+        // (in contrast, if it is an anon function, its address is already on the stack or in arg register)
+        if let Type::Function { id: Some(id),.. } = &var.var_type {
+            lines.push(format!("movq ${id}, {} # Save address of module function '{id}' to var '{}'", address.to_string(), var.name))
+        }
+
+        locals.insert(var.name.clone(), (address, var.var_type.clone()));
     }
 }
 
@@ -59,26 +70,29 @@ fn get_address_of_var<'a>(irvar: &'a IRVar, locals: &'a mut HashMap<String, (Add
 fn generate_function_asm(fun_name: &str, fun_ir: &Vec<IREntry>) -> String {
     let mut locals: HashMap<String, (Address, Type)> = HashMap::new();
     let mut stack_size: usize = 0;
-    
+    let mut init_lines = vec![];
+
+    let mut add = |var| add_var(var, &mut locals, &mut stack_size, &mut init_lines);
 
     for entry in fun_ir {
         match &entry.instruction {
-            Instr::LoadIntConst { dest, .. } => { add_var(&dest, &mut locals, &mut stack_size) },
-            Instr::LoadBoolConst { dest,.. } => { add_var(&dest, &mut locals, &mut stack_size) },
+            Instr::LoadIntConst { dest, .. } => add(&dest),
+            Instr::LoadBoolConst { dest,.. } =>  add(&dest),
             Instr::Copy { source, dest, .. } => {
-                add_var(&source, &mut locals, &mut stack_size);
-                add_var(&dest, &mut locals, &mut stack_size);
+                add(&source);
+                add(&dest);
             },
-            Instr::Call { args, dest,.. } => {
+            Instr::Call { args, dest, fun } => {
+                add(&fun);
                 for ir_var in args {
-                    add_var(&ir_var, &mut locals, &mut stack_size);
+                    add(&ir_var);
                 }
-                add_var(&dest, &mut locals, &mut stack_size);
+                add(&dest);
             },
-            Instr::Declare { var } => {
-                add_var(&var, &mut locals, &mut stack_size)
+            Instr::Declare { var } => add(&var),
+            Instr::FunctionLabel { name: _, params } => {
+                for p in params { add(&p) };
             },
-            Instr::FunctionLabel { name: _, params } => params.iter().for_each(|p| add_var(p, &mut locals, &mut stack_size)),
             _ => {},
         }
     }
@@ -90,6 +104,7 @@ fn generate_function_asm(fun_name: &str, fun_ir: &Vec<IREntry>) -> String {
 
         let asm = match &entry.instruction {
             Instr::FunctionLabel { name, params } => {
+                // Function prelude and whatnot
                 let mut lines = vec![
                     format!(".global {name}"),
                     format!(".type {name}, @function"),
@@ -104,6 +119,8 @@ fn generate_function_asm(fun_name: &str, fun_ir: &Vec<IREntry>) -> String {
                     let (local_address,_) = get_address_of_var(param, &mut locals).expect(format!("In {fun_name}, param {} is not defined", param.to_string()).as_str());
                     lines.push(mov(&param_reg, &local_address.to_string()));
                 }
+                // Add some variable inits
+                lines.extend(init_lines.iter().map(|l| l.to_string()));
                 lines
             },
             Instr::LoadIntConst { value, dest } => {
@@ -125,8 +142,8 @@ fn generate_function_asm(fun_name: &str, fun_ir: &Vec<IREntry>) -> String {
                 lines
             },
             Instr::Copy { source, dest } => {
-                let (src_loc, mut lines) = get_var_address(&source, &locals);
-                let (dest_loc, arg_lines) = get_var_address(&dest, &locals);
+                let (src_loc, mut lines) = get_var_address_using_argument_reg(&source, &locals, 0);
+                let (dest_loc, arg_lines) = get_var_address_using_argument_reg(&dest, &locals, 1);
                 lines.extend(arg_lines);
 
                 lines.extend(copy(&src_loc, &dest_loc));
@@ -171,7 +188,7 @@ fn generate_call(fun: &Box<IRVar>, args: &Vec<Box<IRVar>>, addresses: &HashMap<S
         Symbol::Operator(op) => {
             let arg_1 = &args[0];
             let (arg_1_loc, mut lines) = get_var_address(&arg_1, addresses);
-            let arg_2_opt = args.get(1).map(|ir_var| get_var_address_using_register(&ir_var, addresses, 1));
+            let arg_2_opt = args.get(1).map(|ir_var| get_var_address_using_argument_reg(&ir_var, addresses, 1));
 
             if let Some((arg_2_loc, arg_lines)) = arg_2_opt {
                 lines.extend(arg_lines);
@@ -293,36 +310,38 @@ fn generate_call(fun: &Box<IRVar>, args: &Vec<Box<IRVar>>, addresses: &HashMap<S
                         format!("movq %rsi, %rax")
                     ]
                 },
-                _ => generate_function_call(&name, args, addresses)
+                _ => generate_function_call(fun.clone(), args, addresses)
             }
         }
     }
 }
 
-fn generate_function_call(fun_name: &String, args: &Vec<Box<IRVar>>, addresses: &HashMap<String, (Address, Type)>) -> Vec<String> {
+fn generate_function_call(fun: Box<IRVar>, args: &Vec<Box<IRVar>>, addresses: &HashMap<String, (Address, Type)>) -> Vec<String> {
     let mut lines = vec![];
     for (idx, arg) in args.iter().enumerate() {
-        let (arg_loc, arg_lines) = get_var_address_using_register(&arg, addresses, idx);
+        let (arg_loc, arg_lines) = get_var_address_using_argument_reg(&arg, addresses, idx);
         lines.extend(arg_lines);
         lines.push(mov(&arg_loc.to_string(),&get_argument_register(idx)));
     }
-    lines.push(format!("call {}", fun_name));
+    let (func_addr, func_addr_lines) = get_var_address(&fun, addresses);
+    lines.extend(func_addr_lines);
+    lines.extend(copy(&func_addr, &Address::Register(String::from("%rax"))));
+    lines.push(format!("call *%rax"));
     lines
 }
 
-fn get_var_address_using_register(var: &IRVar, addresses: &HashMap<String, (Address, Type)>, idx: usize) -> (Address, Vec<String>) {
-    // eprintln!("Getting address of {}", var.to_string());
+fn get_var_address_using_register(var: &IRVar, addresses: &HashMap<String, (Address, Type)>, address_reg: String) -> (Address, Vec<String>) {
+    eprintln!("Getting address of {}", var.to_string());
     if let Some(parent) = &var.parent {
         // Get base address
         // eprintln!("Getting address of parent {}", parent.to_string());
-        let (base_address, mut lines) = get_var_address_using_register(parent, addresses, idx);
+        let (base_address, mut lines) = get_var_address_using_register(parent, addresses, address_reg.clone());
         // Special case if were referring to a field of a struct
         match &parent.var_type {
             // Value of pointer?
             Type::Pointer(pointer_type) => {
                 // Member value of pointer?
                 if let Type::Struct(struct_type) = pointer_type.as_ref() {
-                    let address_reg = get_argument_register(idx);
                     // Put struct base pointer in %rdx
                     lines.push(format!("{} # Put struct '{}' base pointer in {}", mov(&base_address.to_string(), &address_reg), parent.name, address_reg));
                     // Get offset (multiplied by 8) and add it to the base pointer
@@ -331,7 +350,6 @@ fn get_var_address_using_register(var: &IRVar, addresses: &HashMap<String, (Addr
 
                     return (Address::RegisterPointer((address_reg, offset as i32 * 8)), lines)
                 } else if var.name == "value" { // Just the base address
-                    let address_reg = get_argument_register(idx);
                     lines.push(format!("{} # Put pointer address '{}' in {}", mov(&base_address.to_string(), &address_reg), parent.name, address_reg));
                     return (Address::RegisterPointer((address_reg, 0)), lines)
                 } else {
@@ -361,17 +379,26 @@ fn get_var_address_using_register(var: &IRVar, addresses: &HashMap<String, (Addr
         
     } else {
         let (address,var_type) = addresses.get(&var.name).expect(format!("Address of var {} to be defined", var.name).as_str());
-        if let Type::Function(_) = var_type {
-            // Return the function label literal
-            return (Address::Literal(var.name.clone()), vec![])
+        eprintln!("{}", address.to_string());
+        if let Type::Function {..} = var_type {
+            if let Address::Literal(lit) = address {
+                // Copy the function address to address_reg
+                return (Address::RegisterPointer((address_reg.clone(), 0)), vec![
+                    format!("movq ${lit}, {address_reg}")
+                ])
+            }
         }
         (address.clone(), vec![])
     }
 }
 
 fn get_var_address(var: &IRVar, addresses: &HashMap<String, (Address, Type)>) -> (Address, Vec<String>) {
-    let (addr, lines) = get_var_address_using_register(var, addresses, 0);
+    let (addr, lines) = get_var_address_using_register(var, addresses, String::from("%rax"));
     (addr, lines)
+}
+
+fn get_var_address_using_argument_reg(var: &IRVar, addresses: &HashMap<String, (Address, Type)>, idx: usize) -> (Address, Vec<String>) {
+    get_var_address_using_register(var, addresses, get_argument_register(idx))
 }
 
 fn get_argument_register(idx: usize) -> String {
@@ -543,7 +570,7 @@ mod tests {
             )
         );
 
-        println!("{}", ir.get("create_dog").unwrap().iter().map(|i| i.to_string()).collect::<Vec<String>>().join("\n"));
+        println!("{}", ir.get("main").unwrap().iter().map(|i| i.to_string()).collect::<Vec<String>>().join("\n"));
 
         println!("{}", generate_asm(ir));
     }

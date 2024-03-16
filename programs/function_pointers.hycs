@@ -2,6 +2,16 @@ fun quadratic(x: Int): Int {
   2 * x * x - 2
 }
 
-var fp = &quadratic;
+fun call(f: Unknown) {
+  f();
+}
 
-print_int(fp(2));
+var fp = quadratic;
+
+call(fp);
+
+// var x = &fp;
+
+// var y = *x;
+
+// print_int(fp(2));

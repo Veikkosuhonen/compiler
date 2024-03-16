@@ -25,7 +25,7 @@ impl fmt::Debug for FunctionType {
 pub enum Type {
     Int,
     Bool,
-    Function(Box<FunctionType>),
+    Function { func_type: Box<FunctionType>, id: Option<String>, pointer: bool },
     Struct(TypedStruct),
     Pointer(Box<Type>),
     Generic(String),
@@ -36,6 +36,10 @@ pub enum Type {
 }
 
 impl Type {
+    pub fn function(func_type: Box<FunctionType>) -> Type {
+        Type::Function { func_type, id: None, pointer: false }
+    }
+
     pub fn get_constructor_type(&self) -> FunctionType {
         let return_type = Type::Typeref(Box::new(self.clone()));
         let param_types = match self {
@@ -52,7 +56,7 @@ impl Type {
             Type::Struct(stype) => stype.fields.len(),
             Type::Pointer(_) => 1,
             Type::Unit => 1,
-            Type::Function(_) => 0, // What? We never actually come to allocate functions, but they still can appear as an IR variable when creating function pointers.
+            Type::Function { id: points_to,.. } => if points_to.is_some() { 1 } else { 0 },
             _ => todo!("Size of {:?}", self)
         }
     }
@@ -70,7 +74,7 @@ impl fmt::Debug for Type {
         match self {
             Type::Int =>            f.debug_tuple("Int").finish(),
             Type::Bool =>           f.debug_tuple("Bool").finish(),
-            Type::Function(func) =>    f.write_fmt(format_args!("{:?} -> {:?}", func.param_types, func.return_type)),
+            Type::Function { func_type, id, pointer } =>    f.write_fmt(format_args!("{}{:?} -> {:?}", id.clone().unwrap_or_default(), func_type.param_types, func_type.return_type)),
             Type::Struct(s) =>      f.write_fmt(format_args!("{} {:?}", s.id, s.fields)),
             Type::Pointer(p) =>     f.write_fmt(format_args!("Pointer<{:?}>", p)),
             Type::Generic(g) =>     f.write_str(g),
@@ -85,21 +89,21 @@ impl fmt::Debug for Type {
 #[derive(Debug)]
 pub struct TypeResolution {
     pub satisfied: bool,
-    pub constraint: Option<(String, Type)>,
+    pub constraint: Vec<(String, Type)>,
 }
 
 impl TypeResolution {
     pub fn failed() -> TypeResolution {
-        TypeResolution { satisfied: false, constraint: None }
+        TypeResolution { satisfied: false, constraint: vec![] }
     }
     pub fn satisfied() -> TypeResolution {
-        TypeResolution { satisfied: true, constraint: None }
+        TypeResolution { satisfied: true, constraint: vec![] }
     }
-    pub fn constrained(constraint: Option<(String, Type)>) -> TypeResolution {
+    pub fn constrained(constraint: Vec<(String, Type)>) -> TypeResolution {
         TypeResolution { satisfied: true, constraint, }
     }
     pub fn is_resolved(&self) -> bool {
-        self.satisfied && self.constraint.is_none()
+        self.satisfied && self.constraint.is_empty()
     }
 }
 
@@ -110,7 +114,7 @@ impl Type {
             // Any non-generic type satisfies a generic type, but it produces a constraint
             Type::Generic(type_id) => match self {
                 Type::Generic(_) => TypeResolution::failed(),
-                _ => TypeResolution::constrained(Some((type_id.clone(), self.clone()))),
+                _ => TypeResolution::constrained(vec![(type_id.clone(), self.clone())]),
             }
             // Pointer value type must be satisfied
             Type::Pointer(other_pointer_type) => match self {
@@ -121,6 +125,32 @@ impl Type {
             Type::Constructor(other_constructor_type) => match self {
                 Type::Constructor(self_constructor_type) => self_constructor_type.satisfy(&other_constructor_type),
                 _ => TypeResolution::failed(),
+            },
+            Type::Function { func_type, id, pointer } => {
+                if !pointer { return TypeResolution::failed(); };
+                match self {
+                    Type::Function { func_type: other_func_type,.. } => {
+                        if func_type.param_types.len() != other_func_type.param_types.len() {
+                            return TypeResolution::failed();
+                        }
+                        let mut constraints = vec![];
+                        for (idx, param_type) in other_func_type.param_types.iter().enumerate() {
+                            let mut res = func_type.param_types.get(idx).unwrap().param_type.satisfy(&param_type.param_type);
+                            if !res.satisfied {
+                                return TypeResolution::failed();
+                            }
+                            constraints.append(&mut res.constraint);
+                        }
+                        
+                        let mut res = func_type.return_type.satisfy(&other_func_type.return_type);
+                        if !res.satisfied {
+                            return TypeResolution::failed();
+                        }
+                        constraints.append(&mut res.constraint);
+                        TypeResolution::constrained(constraints)
+                    },
+                    _ => TypeResolution::failed(),
+                }
             },
             // Everything satisfies the Unknown type
             Type::Unknown => TypeResolution::satisfied(),
@@ -147,7 +177,7 @@ impl Type {
 
     pub fn get_callable_type(&self) -> FunctionType {
         match self {
-            Type::Function(ftype) => *ftype.clone(),
+            Type::Function { func_type,.. } => *func_type.clone(),
             Type::Typeref(referred_type) => match referred_type.as_ref() {
                 Type::Struct(struct_type) => FunctionType {
                     param_types: struct_type.fields.clone(),
@@ -157,13 +187,6 @@ impl Type {
                     vec![*referred_type.clone()],
                     Type::Constructor(Box::new(*referred_type.clone()))
                 ),
-            },
-            Type::Pointer(pointer_type) => {
-                // A function pointer can be called.
-                if let Type::Function(_) = pointer_type.as_ref() {
-                    return pointer_type.get_callable_type()
-                }
-                panic!("Pointer to {:?} is not callable", pointer_type)
             },
             _ => panic!("{:?} is not callable", self)
         }

@@ -189,7 +189,11 @@ fn create_top_level_var_table(global_functions: &Vec<TypedUserDefinedFunction>, 
         let sym = function.id.clone();
         var_table.vars.declare(
             sym.clone(), 
-            IRVar::new(sym, Type::Function(Box::new(function.func_type.clone())))
+            IRVar::new(sym.clone(), Type::Function {
+                func_type: Box::new(function.func_type.clone()),
+                id: Some(sym),
+                pointer: false,
+            })
         );
     }
 

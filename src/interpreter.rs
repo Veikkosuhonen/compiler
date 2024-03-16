@@ -508,7 +508,7 @@ pub fn interpret_program(module: &Module<TypedUserDefinedFunction, TypedStruct>)
         memory.create(
             Symbol::Identifier(func.id.clone()), 
             Value::Function(Function::UserDefined(Rc::new(func.clone()))), 
-            Type::Function(Box::new(func.func_type.clone()))
+            Type::function(Box::new(func.func_type.clone()))
         );
     }
 
@@ -517,7 +517,7 @@ pub fn interpret_program(module: &Module<TypedUserDefinedFunction, TypedStruct>)
         memory.create(
             Symbol::Identifier(s.id.clone()), 
             Value::Function(Function::Constructor(constructor.clone())),
-            Type::Function(Box::new(constructor)),
+            Type::function(Box::new(constructor)),
         );
     }
 

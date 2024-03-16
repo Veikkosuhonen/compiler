@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::{ir_generator::{IREntry, IRVar, Instr}, lang_type::{FunctionType, Type}, sym_table::Symbol, tokenizer::Op};
+use crate::{ir_generator::{IREntry, IRVar, Instr}, lang_type::Type, sym_table::Symbol, tokenizer::Op};
 
 pub fn generate_asm(ir: HashMap<String, Vec<IREntry>>) -> String {
     let functions_code = ir.iter().map(|(fun_name, ir)| {
@@ -17,7 +17,6 @@ enum Address {
     Register(String),
     RegisterPointer((String, i32)),
     Memory(i32),
-    Literal(String),
 }
 
 impl Address {
@@ -26,7 +25,6 @@ impl Address {
             Address::Register(reg) => reg.clone(),
             Address::RegisterPointer((reg, offset)) => format!("{}({})", offset, reg),
             Address::Memory(addr) => format!("{}(%rbp)", addr),
-            Address::Literal(literal) => format!("${literal}")
         }
     }
 }
@@ -359,16 +357,7 @@ fn get_var_address_using_register(var: &IRVar, addresses: &HashMap<String, (Addr
         }
         
     } else {
-        let (address,var_type) = addresses.get(&var.name).expect(format!("Address of var {} to be defined", var.name).as_str());
-        // eprintln!("{}", address.to_string());
-        if let Type::Function {..} = var_type {
-            if let Address::Literal(lit) = address {
-                // Copy the function address to address_reg
-                return (Address::RegisterPointer((address_reg.clone(), 0)), vec![
-                    format!("movq ${lit}, {address_reg}")
-                ])
-            }
-        }
+        let (address,_) = addresses.get(&var.name).expect(format!("Address of var {} to be defined", var.name).as_str());
         (address.clone(), vec![])
     }
 }

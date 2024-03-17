@@ -19,6 +19,7 @@ I also made a [vscode plugin](https://github.com/Veikkosuhonen/hy-compilers-lang
   - Control flow: if-else and while with break and continue statements
 
 - Functions with return statements
+- First-class functions
 - Pointers
 - Heap allocation
 - Heap allocated structs
@@ -27,7 +28,6 @@ I also made a [vscode plugin](https://github.com/Veikkosuhonen/hy-compilers-lang
 ## Todo
 
 - Arrays
-- First-class functions
 - Analysis?
 
 ## Miscellanous notes on implementation

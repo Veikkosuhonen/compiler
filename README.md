@@ -6,26 +6,26 @@ I also made a [vscode plugin](https://github.com/Veikkosuhonen/hy-compilers-lang
 
 ## Usage
 
-Requirements:
+**Requirements:**
 - latest stable version of cargo
 - gcc
 - x86_64 machine or suitable emulator/vm
 
-Optional:
+**Optional:**
 - graphviz (`dot`)
 
-Build dev build:
+**Build dev build:**
 
 `cargo build`
 
 output is `./target/debug/compiler`
 
-Run unit tests:
+**Run unit tests:**
 
 `cargo test`
 
 
-Commands:
+**Commands:**
 
 - `help`: show available commands
 - `p <path-to-source>`: Parse the source and output the module definition (output is only for debugging).
@@ -40,13 +40,13 @@ Commands:
   - `-c`: only run native, no interpreter (useful for benchmarks)
   - `-b`: run benchmarks defined in `./test_programs/benchmarks`. Don't run with the interpreter, its too slow.
 
-Compiling code:
+**Compiling code:**
 
 - Compile to assembly using `asm`, example: `./target/debug/compiler asm programs/test.hycs > asm.s`
 - Link to binary using gcc: `gcc -g -no-pie -o out asm.s`
 - Run: `./out`
 
-Development helper script:
+**Development helper script:**
 
 ```bash
 # Runs cargo run -- asm <path>, gcc's and runs the output.

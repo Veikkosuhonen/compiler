@@ -378,8 +378,7 @@ impl Parser {
         }
     }
 
-    fn parse_call_expression(&mut self) -> Result<ASTNode, SyntaxError> {
-        let callee = self.parse_identifier()?;
+    fn parse_call_expression(&mut self, callee: ASTNode) -> Result<ASTNode, SyntaxError> {
         let start = callee.span.start.clone();
         self.consume_left_paren()?;
 
@@ -496,14 +495,12 @@ impl Parser {
     fn parse_factor(&mut self) -> Result<ASTNode, SyntaxError> {
         let token = self.peek()?;
 
-        match token.token_type {
+        let res = match token.token_type {
             TokenType::IntegerLiteral => self.parse_int_literal(),
             TokenType::BooleanLiteral => self.parse_boolean_literal(),
             TokenType::Keyword => self.parse_keywordy_factor(),
             TokenType::Identifier => {
-                if self.next_is("(") {
-                    self.parse_call_expression()
-                } else if self.next_is("{") {
+                if self.next_is("{") {
                     self.parse_struct()
                 } else {
                     self.parse_identifier()
@@ -516,7 +513,15 @@ impl Parser {
             },
             TokenType::None => Err(self.error_here("Unexpected end of file")),
             _ => Err(self.error_here(format!("Unexpected token {:?}, expected a factor", token).as_str())),
+        };
+
+        if self.current_is("(") {
+            if let Ok(callee) = res {
+                return self.parse_call_expression(callee);
+            }
         }
+
+        res
     }
 
     fn parse_member_expression(&mut self) -> Result<ASTNode, SyntaxError> {

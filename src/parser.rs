@@ -495,7 +495,7 @@ impl Parser {
     fn parse_factor(&mut self) -> Result<ASTNode, SyntaxError> {
         let token = self.peek()?;
 
-        let res = match token.token_type {
+        let mut res = match token.token_type {
             TokenType::IntegerLiteral => self.parse_int_literal(),
             TokenType::BooleanLiteral => self.parse_boolean_literal(),
             TokenType::Keyword => self.parse_keywordy_factor(),
@@ -515,9 +515,9 @@ impl Parser {
             _ => Err(self.error_here(format!("Unexpected token {:?}, expected a factor", token).as_str())),
         };
 
-        if self.current_is("(") {
+        while self.current_is("(") {
             if let Ok(callee) = res {
-                return self.parse_call_expression(callee);
+                res = self.parse_call_expression(callee);
             }
         }
 
@@ -1625,6 +1625,15 @@ fn new_and_delete() {
         let r = parse(tokenize("
             var addition: ((Int, Int) => Int)* = 0;
         ").unwrap());
+        assert!(r.is_ok());
+    }
+
+    #[test]
+    fn call_result_of_func_call() {
+        let r = parse(tokenize("
+            get_action()()
+        ").unwrap());
+        println!("{:?}", r);
         assert!(r.is_ok());
     }
 

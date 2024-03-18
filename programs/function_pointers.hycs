@@ -1,3 +1,4 @@
+
 fun add(x: Int, y: Int): Int { x + y };
 var binary: (Int, Int) => Int = add;
 
@@ -15,3 +16,35 @@ call(print_int, binary(constant(), constant()));
 var x = &call;
 
 (*x)(print_int, binary(constant() + 1, constant() + 1));
+
+
+fun action_1() {
+  print_int(789);
+}
+
+fun action_2() {
+  print_bool(true);
+}
+
+fun default_action() {
+  action_1();
+}
+
+fun get_action(action_idx: Int): () => Unit {
+  if action_idx == 1 then {
+    return action_1;
+  }
+  if action_idx == 2 then {
+    return action_2;
+  }
+  default_action
+}
+
+get_action(2)();
+// expect 1
+
+get_action(3)();
+// expect 789
+
+get_action(1)();
+// expect 789

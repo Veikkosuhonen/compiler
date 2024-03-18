@@ -55,6 +55,7 @@ Commands:
   - Control flow: if-else and while with break and continue statements
 
 - Functions with return statements
+- First-class functions
 - Pointers
 - Heap allocation
 - Heap allocated structs
@@ -63,7 +64,6 @@ Commands:
 ## Todo
 
 - Arrays
-- First-class functions
 - Analysis?
 
 ## Miscellanous notes on implementation
@@ -90,8 +90,7 @@ In addition to the basic types Int, Bool and Unit, there are some more complex t
 
 - _Pointer\<T>_ where T is any type.
   - A pointer type annotation is a unary expression T*
-- _Function_ types, consist of an ordered list of (field_name, Type) pairs and a return type.
-  - There is no type annotation for function types.
+- _Function_ types, consist of an ordered list of (field_name, Type) pairs, a return type and an optional name.
 - _Unknown_: a special type which accepts any other type.
 - _Struct_: consists of a name and an ordered list of (field_name, Type) pairs. The ordering defines the memory layout.
   - There is no full type annotation for struct types, they must be referred to by name.

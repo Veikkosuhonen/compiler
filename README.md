@@ -144,3 +144,5 @@ IR variables are quite different from normal variables, instead they should be s
 Call expression parsing is incorrect, only `<identifier>(<arg list>)` is parsed as a call expression. Expressions such as `get_function()()` are not parsed correctly.
 
 When reporting useless writes, an unused function return is reported as a useless write, which is not accurate. But I'll anyways call it a feature.
+
+The return value of the top level block is not written to the program output. Its not a bug per se, I simply forgot to implement that.

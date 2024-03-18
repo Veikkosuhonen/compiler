@@ -11,12 +11,11 @@ pub fn report_useless_writes(_ir: &HashMap<String, Vec<IREntry>>) -> Vec<Warning
     let mut warnings = vec![];
 
     let predefined = get_predefined_vars(&_ir);
+    let empty = vec![];
 
-    eprintln!(">>> Reaching definitions analysis on IR <<<");
-    eprintln!("How to read: <variable> <- [idx's where it was last written to]\n");
-
-    for (f, ir) in _ir.iter() {
+    for (_f, ir) in _ir.iter() {
         let (ins, _) = get_forward_dataflow(ir, predefined.clone(), rd_transfer, merge);
+        /*
         eprintln!("\n*** {f} ***");
         eprintln!("{}", ir.iter().enumerate().map(|(idx, i)| 
             format!("{idx} {}     {}", 
@@ -25,11 +24,13 @@ pub fn report_useless_writes(_ir: &HashMap<String, Vec<IREntry>>) -> Vec<Warning
                     format!("{} <- {:?}", 
                         r.to_short_string(), 
                         ins[idx].get(&r.to_short_string())
-                        .unwrap_or_else(|| ins[idx].get(&r.parent.clone().unwrap().to_short_string()).unwrap())
+                        // Forgive me :D
+                        .unwrap_or_else(|| r.parent.clone().map(|p| ins[idx].get(&p.to_short_string()).unwrap_or(&empty)).unwrap_or(&empty))
                     )
                 ).collect::<Vec<String>>().join(", ")
             )
         ).collect::<Vec<String>>().join("\n"));
+        */
 
         // Iterate all writes, and check whether they are read-
         for (idx, entry) in ir.iter().enumerate() {
@@ -44,7 +45,8 @@ pub fn report_useless_writes(_ir: &HashMap<String, Vec<IREntry>>) -> Vec<Warning
                 for (jdx, other_entry) in ir.iter().enumerate() {
                     for read in other_entry.get_reads() {
                         let written_to_at = ins[jdx].get(&read.to_short_string())
-                            .unwrap_or_else(|| ins[idx].get(&read.parent.clone().unwrap().to_short_string()).unwrap());
+                            // Oh god and again
+                            .unwrap_or_else(|| read.parent.clone().map(|p| ins[idx].get(&p.to_short_string()).unwrap_or(&empty)).unwrap_or(&empty));
 
                         if written_to_at.contains(&(idx as i32)) {
                             is_read = true;
@@ -53,7 +55,7 @@ pub fn report_useless_writes(_ir: &HashMap<String, Vec<IREntry>>) -> Vec<Warning
                 }
 
                 if !is_read {
-                    eprintln!("{:?}", entry);
+                    // eprintln!("{:?}", entry);
                     warnings.push(Warning { 
                         span: entry.span.clone(), 
                         message: format!("This write is never read."), 
@@ -68,6 +70,7 @@ pub fn report_useless_writes(_ir: &HashMap<String, Vec<IREntry>>) -> Vec<Warning
 
 pub fn print_reaching_definitions(_ir: HashMap<String, Vec<IREntry>>) {
     let predefined = get_predefined_vars(&_ir);
+    let empty = vec![];
 
     println!(">>> Reaching definitions analysis on IR <<<");
     println!("How to read: <variable> <- [idx's where it was last written to]\n");
@@ -82,7 +85,8 @@ pub fn print_reaching_definitions(_ir: HashMap<String, Vec<IREntry>>) {
                     format!("{} <- {:?}", 
                         r.to_short_string(), 
                         ins[idx].get(&r.to_short_string())
-                        .unwrap_or_else(|| ins[idx].get(&r.parent.clone().unwrap().to_short_string()).unwrap())
+                        // Forgive me :D
+                        .unwrap_or_else(|| r.parent.clone().map(|p| ins[idx].get(&p.to_short_string()).unwrap_or(&empty)).unwrap_or(&empty))
                     )
                 ).collect::<Vec<String>>().join(", ")
             )
@@ -133,6 +137,8 @@ impl IREntry {
             },
             Instr::CondJump { cond, .. } => vec![*cond.clone()],
             Instr::Copy { source, .. } => vec![*source.clone()],
+            // Hack: if a label ends in _end, it reads the special "_return" variable. This should not cause any trouble.
+            Instr::Label(name) => if name.ends_with("_end") { vec![IRVar::_return()] } else { vec![] }
             _ => vec![],
         }
     }
@@ -212,28 +218,27 @@ fn get_forward_dataflow(ir: &Vec<IREntry>, predefined: Vec<String>,
         successors.push(current_successors);
     }
 
-    let mut zero_out_state = State::new();
-
     // 3.
     for p in predefined {
-        zero_out_state.insert(p, vec![-2]);
+        outs[0].insert(p, vec![-2]);
     }
 
     for entry in ir {
         if let Instr::FunctionLabel { params,.. } = &entry.instruction {
             for param in params {
-                zero_out_state.insert(param.name.clone(), vec![-2]);
+                outs[0].insert(param.name.clone(), vec![-2]);
             }
         }
 
         for var in entry.variables() {
-            if !zero_out_state.contains_key(&var.name) {
-                zero_out_state.insert(var.name.clone(), vec![-1]);
+            if !outs[0].contains_key(&var.name) {
+                outs[0].insert(var.name.clone(), vec![-1]);
             }
         }
     };
-    
-    outs[0] = zero_out_state;
+
+    // The very last instruction of a function reads _return.
+    outs[ir.len() - 1].insert(String::from("_return"), vec![-1]);
 
     // 7.
     while let Some(idx) = work_queue.pop_front() {

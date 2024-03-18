@@ -24,6 +24,16 @@
         call print_int
         movq %rax, -24(%rbp)
 
+        # LoadIntConst(1, var_3: Unit)
+        movq $1, -32(%rbp)
+
+        # Copy(var_3: Unit, _return: Int)
+        movq -32(%rbp), %rax
+        # skip movq %rax, %rax
+
+        # Jump(.LXD_end)
+        jmp .LXD_end
+
         # LoadIntConst(5, _return: Int)
         movq $5, %rax
 

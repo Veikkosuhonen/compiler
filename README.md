@@ -9,7 +9,7 @@ I also made a [vscode plugin](https://github.com/Veikkosuhonen/hy-compilers-lang
 **Requirements:**
 - latest stable version of cargo
 - gcc
-- x86_64 machine or suitable emulator/vm
+- x86_64 machine or a suitable emulator/vm
 
 **Optional:**
 - graphviz (`dot`)
@@ -35,10 +35,18 @@ output is `./target/debug/compiler`
 - `asm <path-to-source>`: Output assembly code for the source. Can be then compiled using gcc.
 - `dot <path-to-source>`: Output a DOT graph source file for the source based on the IR. Can be visualized with `dot`
 - `rd <path-to-source>`: Perform reaching definitions analysis on the IR and print it.
-- `lv <path-to-source>`
+- `lv <path-to-source>`: Perform live variable analysis on the IR and print it.
 - `e2e`: Run end-to-end tests, defined in `./test_programs/e2e`
   - `-c`: only run native, no interpreter (useful for benchmarks)
   - `-b`: run benchmarks defined in `./test_programs/benchmarks`. Don't run with the interpreter, its too slow.
+
+**Compiler errors**
+
+The compiler reports tokenization or parsing errors in a readable format. Type-errors and others result in a panic (I didn't have time to implement nice error messages for those).
+
+**Compiler warnings**
+
+The compiler detects and warns about unused writes and unused function returns.
 
 **Compiling code:**
 
@@ -72,12 +80,13 @@ $ ./c.sh <path>
 - Pointers
 - Heap allocation
 - Heap allocated structs
+- Warn about unused writes
 - Lots of unit- and E2E tests, run in Github Actions CI
+  - Every feature is *quite* thoroughly tested, except analysis and error reporting
 
 ## Todo
 
 - Arrays
-- Analysis?
 
 ## Miscellanous notes on implementation
 
@@ -130,3 +139,6 @@ IR variables are also more complex: they have a name, a type and an optional par
 
 IR variables are quite different from normal variables, instead they should be seen as references to certain memory locations that the assembly generator can understand.
 
+## Bugs
+
+Call expression parsing is incorrect, only `<identifier>(<arg list>)` is parsed as a call expression. Expressions such as `get_function()()` are not parsed correctly.

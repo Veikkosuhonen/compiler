@@ -19,6 +19,10 @@ impl IRVar {
         IRVar { name: String::from("U"), parent: None, var_type: Type::Unit }
     }
 
+    pub fn _return() -> IRVar {
+        IRVar { name: String::from("_return"), parent: None, var_type: Type::Unknown }
+    }
+
     pub fn to_string(&self) -> String {
         match &self.parent {
             Some(parent) => format!("{}.{}: {:?}", parent.to_short_string(), self.name.to_string(), self.var_type),

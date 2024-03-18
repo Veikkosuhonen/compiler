@@ -20,5 +20,6 @@ XD(y);
 
 fun XD(p: Int): Int {
   print_int(p);
+  return 1;
   5
 }

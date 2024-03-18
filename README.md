@@ -40,6 +40,19 @@ Commands:
   - `-c`: only run native, no interpreter (useful for benchmarks)
   - `-b`: run benchmarks defined in `./test_programs/benchmarks`. Don't run with the interpreter, its too slow.
 
+Compiling code:
+
+- Compile to assembly using `asm`, example: `./target/debug/compiler asm programs/test.hycs > asm.s`
+- Link to binary using gcc: `gcc -g -no-pie -o out asm.s`
+- Run: `./out`
+
+Development helper script:
+
+```bash
+# Runs cargo run -- asm <path>, gcc's and runs the output.
+$ ./c.sh <path>
+```
+
 ## Current features
 
 - Handwritten parser

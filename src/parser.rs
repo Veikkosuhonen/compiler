@@ -89,7 +89,7 @@ pub struct Struct {
 pub enum Expr<T> {
     Unit,
     IntegerLiteral {
-        value: i32,
+        value: i64,
     },
     BooleanLiteral {
         value: bool,
@@ -204,8 +204,8 @@ impl Parser {
         self.peek_offset(0)
     }
 
-    fn peek_offset(&self, lookahead: i32) -> Result<Token, SyntaxError> {
-        let idx: i32 = self.current_index as i32 + lookahead;
+    fn peek_offset(&self, lookahead: i64) -> Result<Token, SyntaxError> {
+        let idx: i64 = self.current_index as i64 + lookahead;
         let idx: usize = idx.try_into().expect("Invalid index");
 
         if idx < self.tokens.len() {

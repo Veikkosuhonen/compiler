@@ -45,9 +45,9 @@ fn run_test(source: &str, id: String, compile_only: bool) -> Vec<String> {
         outputs.push(msg);
     };
 
-    let mut inputs: Vec<i32> = vec![];
+    let mut inputs: Vec<i64> = vec![];
 
-    let mut expects: Vec<(usize, i32)> = vec![];
+    let mut expects: Vec<(usize, i64)> = vec![];
 
     let mut name: Option<String> = None;
 
@@ -55,11 +55,11 @@ fn run_test(source: &str, id: String, compile_only: bool) -> Vec<String> {
 
     source.split("\n").enumerate().for_each(|(line_number, line)| {
         if line.trim_start().starts_with("// input") {
-            inputs.push(line.split_whitespace().last().unwrap().parse().expect("Should've been able to parse i32 after 'input'"));
+            inputs.push(line.split_whitespace().last().unwrap().parse().expect("Should've been able to parse i64 after 'input'"));
         } else if line.trim_start().starts_with("// expect") {
             expects.push((
                 line_number,
-                line.split_whitespace().last().unwrap().parse().expect("Should've been able to parse i32 after 'expect'")
+                line.split_whitespace().last().unwrap().parse().expect("Should've been able to parse i64 after 'expect'")
             ));
         } else if line.trim_start().starts_with("// name") {
             name = Some(line.split_whitespace()
@@ -68,7 +68,7 @@ fn run_test(source: &str, id: String, compile_only: bool) -> Vec<String> {
                 .expect("Test name to follow 'name'")
                 .join(" "));
         } else if line.trim_start().starts_with("// time") {
-            expected_time = Some(line.split_whitespace().last().unwrap().parse().expect("Should've been able to parse i32 after 'time'"));
+            expected_time = Some(line.split_whitespace().last().unwrap().parse().expect("Should've been able to parse i64 after 'time'"));
         }
     });
 
@@ -174,7 +174,7 @@ fn run_test(source: &str, id: String, compile_only: bool) -> Vec<String> {
     outputs
 }
 
-fn check_output(process: Child, expects: Vec<(usize, i32)>, source: &str) -> Result<(), String> {
+fn check_output(process: Child, expects: Vec<(usize, i64)>, source: &str) -> Result<(), String> {
     let output = process.wait_with_output().expect("Should've been able to read process output");
 
     if !output.status.success() {
@@ -183,12 +183,12 @@ fn check_output(process: Child, expects: Vec<(usize, i32)>, source: &str) -> Res
 
     let outputs = String::from_utf8_lossy(&output.stdout).split("\n").filter_map(|v| {
         // println!("{}", v);
-        if let Ok(v) = v.parse::<i32>() {
+        if let Ok(v) = v.parse::<i64>() {
             Some(v)
         } else {
             None
         }
-    }).collect::<Vec<i32>>();
+    }).collect::<Vec<i64>>();
 
     let mut err_lines: Vec<String> = vec![];
 

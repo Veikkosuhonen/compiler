@@ -15,8 +15,8 @@ pub fn generate_asm(ir: HashMap<String, Vec<IREntry>>) -> String {
 #[derive(Clone)]
 enum Address {
     Register(String),
-    RegisterPointer((String, i32)),
-    Memory(i32),
+    RegisterPointer((String, i64)),
+    Memory(i64),
 }
 
 impl Address {
@@ -44,7 +44,7 @@ fn add_var(var: &IRVar, locals: &mut HashMap<String, (Address, Type)>, stack_siz
         locals.insert(var.name.clone(), (Address::Register("%rax".to_string()), var.var_type.clone()));
     } else {
         *stack_size += var.size();
-        let address = Address::Memory(-(8 * *stack_size as i32));
+        let address = Address::Memory(-(8 * *stack_size as i64));
 
         // Is this a named function? If so, we need to now put its address into the stack so we can use it as a value.
         // (in contrast, if it is an anon function, its address is already on the stack or in arg register)
@@ -244,7 +244,7 @@ fn generate_call(fun: &Box<IRVar>, args: &Vec<Box<IRVar>>, addresses: &HashMap<S
                             // Copy from source_addr to the block base + offset
                             mm.append(&mut copy(
                                 &source_addr,
-                                &Address::RegisterPointer((String::from("%rdi"), offset as i32 * 8)),
+                                &Address::RegisterPointer((String::from("%rdi"), offset as i64 * 8)),
                             ));
                         }
                         mm.push(format!("{} # Move the pointer to variable", mov("%rdi", "%rax")));
@@ -308,7 +308,7 @@ fn get_var_address_using_register(var: &IRVar, addresses: &HashMap<String, (Addr
                     // eprintln!("{:?} -> {:?}", struct_type, var.to_short_string());
                     let (offset,_) = struct_type.get_member(&var.name);
 
-                    return (Address::RegisterPointer((address_reg, offset as i32 * 8)), lines)
+                    return (Address::RegisterPointer((address_reg, offset as i64 * 8)), lines)
                 } else if var.name == "value" { // Just the base address
                     lines.push(format!("{} # Put pointer address '{}' in {}", mov(&base_address.to_string(), &address_reg), parent.name, address_reg));
                     return (Address::RegisterPointer((address_reg, 0)), lines)
@@ -325,7 +325,7 @@ fn get_var_address_using_register(var: &IRVar, addresses: &HashMap<String, (Addr
                 };
 
                 let (offset,_) = struct_type.get_member(&var.name);
-                let addr = addr + offset as i32 * 8;
+                let addr = addr + offset as i64 * 8;
                 return (Address::Memory(addr), vec![])
             },
             _ => {

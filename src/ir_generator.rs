@@ -104,7 +104,7 @@ impl IRVarTable {
 
 #[derive(Debug, Clone)]
 pub enum Instr {
-    LoadIntConst { value: i32, dest: Box<IRVar> },
+    LoadIntConst { value: i64, dest: Box<IRVar> },
     LoadBoolConst { value: bool, dest: Box<IRVar> },
     Copy { source: Box<IRVar>, dest: Box<IRVar> },
     Call { fun: Box<IRVar>, args: Vec<Box<IRVar>>, dest: Box<IRVar> },

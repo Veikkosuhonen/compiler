@@ -48,7 +48,7 @@ pub fn report_useless_writes(_ir: &HashMap<String, Vec<IREntry>>) -> Vec<Warning
                             // Oh god and again
                             .unwrap_or_else(|| read.parent.clone().map(|p| ins[idx].get(&p.to_short_string()).unwrap_or(&empty)).unwrap_or(&empty));
 
-                        if written_to_at.contains(&(idx as i32)) {
+                        if written_to_at.contains(&(idx as i64)) {
                             is_read = true;
                         }
                     }
@@ -108,7 +108,7 @@ pub fn print_live_vars(_ir: HashMap<String, Vec<IREntry>>) {
                 i.to_string(), 
                 // "Which variables may still be read after this instruction?"
                 ins[idx].iter()
-                .filter(|(_, lines)| lines.iter().any(|l| *l > idx as i32))
+                .filter(|(_, lines)| lines.iter().any(|l| *l > idx as i64))
                 .map(|(var, lines)| 
                     format!("{} <- {:?}", 
                         var, 
@@ -160,7 +160,7 @@ struct BasicBlock {
 }
 
 // 1.
-type Set = Vec<i32>;
+type Set = Vec<i64>;
 type State = HashMap<String, Set>;
 
 fn get_forward_dataflow(ir: &Vec<IREntry>, predefined: Vec<String>, 
@@ -358,7 +358,7 @@ fn get_backward_dataflow(ir: &Vec<IREntry>, predefined: Vec<String>,
 fn rd_transfer(input: &State, i: usize, ir: &Vec<IREntry>) -> State {
     let mut output = input.clone();
     if let Some(var) = ir[i].get_write() {
-        output.insert(var.to_short_string(), vec![i as i32]);
+        output.insert(var.to_short_string(), vec![i as i64]);
     }
     output
 }
@@ -384,7 +384,7 @@ fn merge(states: &Vec<State>) -> State {
 fn lv_transfer(input: &State, i: usize, ir: &Vec<IREntry>) -> State {
     let mut output = input.clone();
     for var in ir[i].get_reads() {
-        output.insert(var.to_short_string(), vec![i as i32]);
+        output.insert(var.to_short_string(), vec![i as i64]);
     }
     output
 }

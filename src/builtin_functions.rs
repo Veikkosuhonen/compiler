@@ -34,7 +34,7 @@ fn read_int(args: Vec<Value>) -> Value {
         .read_line(&mut input)
         .expect("Failed to read input");
 
-    let ival: i32 = input.trim().parse().expect("Input is not an integer");
+    let ival: i64 = input.trim().parse().expect("Input is not an integer");
 
     Value::Integer(ival)
 }
@@ -53,7 +53,7 @@ pub fn eval_builtin_function(id: String, args: Vec<Value>) -> Value {
 pub fn eval_builtin_binary(op: Op, left: Value, right: Value) -> Value {
     match left {
         Value::Integer(ival1) => {
-            let ival2: i32 = right.into();
+            let ival2: i64 = right.into();
             match op {
                 Op::Add =>       Value::Integer(ival1 + ival2),
                 Op::Sub =>       Value::Integer(ival1 - ival2),

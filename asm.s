@@ -8,44 +8,6 @@
 .section .text  # Begins code and data
 
 
-        # Function(XD(p))
-        .global XD
-        .type XD, @function
-        XD:
-        pushq %rbp
-        movq %rsp, %rbp
-        subq $32, %rsp
-        # param backups (1)
-        movq %rdi, -8(%rbp)
-        movq $print_int, -16(%rbp) # Save address of module function 'print_int' to var 'print_int'
-
-        # Call(print_int: print_int[: Int] -> Unit, [p: Int], var_1: Unit)
-        movq -8(%rbp), %rdi
-        call print_int
-        movq %rax, -24(%rbp)
-
-        # LoadIntConst(1, var_3: Unit)
-        movq $1, -32(%rbp)
-
-        # Copy(var_3: Unit, _return: Int)
-        movq -32(%rbp), %rax
-        # skip movq %rax, %rax
-
-        # Jump(.LXD_end)
-        jmp .LXD_end
-
-        # LoadIntConst(5, _return: Int)
-        movq $5, %rax
-
-        # Label(.LXD_end)
-        .LXD_end:
-        # Restore stack pointer
-        movq %rbp, %rsp
-        popq %rbp
-        ret
-    
-
-        
         # Function(main())
         .global main
         .type main, @function
@@ -114,6 +76,44 @@
 
         # LoadIntConst(0, _return: Unknown)
         movq $0, %rax
+        # Restore stack pointer
+        movq %rbp, %rsp
+        popq %rbp
+        ret
+    
+
+        
+        # Function(XD(p))
+        .global XD
+        .type XD, @function
+        XD:
+        pushq %rbp
+        movq %rsp, %rbp
+        subq $32, %rsp
+        # param backups (1)
+        movq %rdi, -8(%rbp)
+        movq $print_int, -16(%rbp) # Save address of module function 'print_int' to var 'print_int'
+
+        # Call(print_int: print_int[: Int] -> Unit, [p: Int], var_1: Unit)
+        movq -8(%rbp), %rdi
+        call print_int
+        movq %rax, -24(%rbp)
+
+        # LoadIntConst(1, var_3: Unit)
+        movq $1, -32(%rbp)
+
+        # Copy(var_3: Unit, _return: Int)
+        movq -32(%rbp), %rax
+        # skip movq %rax, %rax
+
+        # Jump(.LXD_end)
+        jmp .LXD_end
+
+        # LoadIntConst(5, _return: Int)
+        movq $5, %rax
+
+        # Label(.LXD_end)
+        .LXD_end:
         # Restore stack pointer
         movq %rbp, %rsp
         popq %rbp

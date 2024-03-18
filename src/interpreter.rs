@@ -24,7 +24,7 @@ impl PartialEq for Function {
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub enum Value {
-    Integer(i32),
+    Integer(i64),
     Boolean(bool),
     Function(Function),
     Pointer(Address),
@@ -51,12 +51,32 @@ impl From<Value> for bool {
     }
 }
 
-impl From<&Value> for i32 {
+impl From<&Value> for i64 {
     fn from(val: &Value) -> Self {
         if let Value::Integer(ival) = val {
             *ival
         } else {
-            panic!("Tried to convert non-integer value to i32")
+            panic!("Tried to convert non-integer value to i64")
+        }
+    }
+}
+
+impl From<Value> for i64 {
+    fn from(val: Value) -> Self {
+        if let Value::Integer(ival) = val {
+            ival
+        } else {
+            panic!("Tried to convert non-integer value to i64")
+        }
+    }
+}
+
+impl From<&Value> for i32 {
+    fn from(val: &Value) -> Self {
+        if let Value::Integer(ival) = val {
+            *ival as i32
+        } else {
+            panic!("Tried to convert non-integer value to i64")
         }
     }
 }
@@ -64,9 +84,9 @@ impl From<&Value> for i32 {
 impl From<Value> for i32 {
     fn from(val: Value) -> Self {
         if let Value::Integer(ival) = val {
-            ival
+            ival as i32
         } else {
-            panic!("Tried to convert non-integer value to i32")
+            panic!("Tried to convert non-integer value to i64")
         }
     }
 }

@@ -142,3 +142,5 @@ IR variables are quite different from normal variables, instead they should be s
 ## Bugs
 
 Call expression parsing is incorrect, only `<identifier>(<arg list>)` is parsed as a call expression. Expressions such as `get_function()()` are not parsed correctly.
+
+When reporting useless writes, an unused function return is reported as a useless write, which is not accurate. But I'll anyways call it a feature.

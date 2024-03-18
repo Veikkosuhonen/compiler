@@ -68,30 +68,11 @@ fn get_address_of_var<'a>(irvar: &'a IRVar, locals: &'a mut HashMap<String, (Add
 fn generate_function_asm(fun_name: &str, fun_ir: &Vec<IREntry>) -> String {
     let mut locals: HashMap<String, (Address, Type)> = HashMap::new();
     let mut stack_size: usize = 0;
-    let mut init_lines = vec![];
-
-    let mut add = |var| add_var(var, &mut locals, &mut stack_size, &mut init_lines);
+    let mut init_lines: Vec<String> = vec![];
 
     for entry in fun_ir {
-        match &entry.instruction {
-            Instr::LoadIntConst { dest, .. } => add(&dest),
-            Instr::LoadBoolConst { dest,.. } =>  add(&dest),
-            Instr::Copy { source, dest, .. } => {
-                add(&source);
-                add(&dest);
-            },
-            Instr::Call { args, dest, fun } => {
-                add(&fun);
-                for ir_var in args {
-                    add(&ir_var);
-                }
-                add(&dest);
-            },
-            Instr::Declare { var } => add(&var),
-            Instr::FunctionLabel { name: _, params } => {
-                for p in params { add(&p) };
-            },
-            _ => {},
+        for var in entry.variables() {
+            add_var(&var, &mut locals, &mut stack_size, &mut init_lines);
         }
     }
 

@@ -121,6 +121,31 @@ impl IREntry {
     fn copy(src: IRVar, dest: IRVar) -> IREntry {
         IREntry { instruction: Instr::Copy { source: Box::new(src), dest: Box::new(dest) } }
     }
+
+    pub fn variables(&self) -> Vec<IRVar> {
+        let mut vars = vec![];
+        match &self.instruction {
+            Instr::LoadIntConst { dest, .. } => vars.push(*dest.clone()),
+            Instr::LoadBoolConst { dest,.. } =>  vars.push(*dest.clone()),
+            Instr::Copy { source, dest, .. } => {
+                vars.push(*source.clone());
+                vars.push(*dest.clone());
+            },
+            Instr::Call { args, dest, fun } => {
+                vars.push(*fun.clone());
+                for ir_var in args {
+                    vars.push(*ir_var.clone());
+                }
+                vars.push(*dest.clone());
+            },
+            Instr::Declare { var } => vars.push(*var.clone()),
+            Instr::FunctionLabel { name: _, params } => {
+                for p in params { vars.push(p.clone()); };
+            },
+            _ => {},
+        };
+        vars
+    }
 }
 
 impl IREntry {
@@ -759,6 +784,6 @@ mod tests {
             call(consume, binary(constant(), constant()));
         ");
 
-        println!("{}", _ir.get("call").unwrap().iter().map(|i| i.to_string()).collect::<Vec<String>>().join("\n"))
+        // println!("{}", _ir.get("call").unwrap().iter().map(|i| i.to_string()).collect::<Vec<String>>().join("\n"))
     }
 }

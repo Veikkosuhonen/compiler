@@ -185,6 +185,8 @@ fn check_output(process: Child, expects: Vec<(usize, i64)>, source: &str) -> Res
         // println!("{}", v);
         if let Ok(v) = v.parse::<i64>() {
             Some(v)
+        } else if let Ok(v) = v.parse::<bool>() {
+            Some(if v { 1 } else { 0 })
         } else {
             None
         }

@@ -132,12 +132,17 @@ It is very slow, but I haven't benchmarked it against the implementation that ha
 
 The IR has some special features extending the basic IR of the course. I've added the following instructions:
 
-- `FunctionLabel(name, [arg1, arg2,...])`
-- `Declare(var)`
+- `FunctionLabel(name, [arg1, arg2,...])` tells the assembly generator which IR variables are arguments. It is always the first instruction in a function.
+- `Declare(var)` is used to ensure that an IR variable with a struct type is known by the assembly generator before introducing other IR variables that refer to its fields.
 
-IR variables are also more complex: they have a name, a type and an optional parent. 
+IR variables have a name, a type and an optional parent (an IR variable also).
 
 IR variables are quite different from normal variables, instead they should be seen as references to certain memory locations that the assembly generator can understand.
+
+- IR variable `U` has the value `unit`.
+- IR variable `_return` is the return value of the function.
+- IR variable `value` is a special value when the IR variable has a parent. If the parent of the IR variable is a pointer, `value` refers to the address it points to. It corresponds to the dereference operator. Otherwise, it simply maps to the address of the parent with offset 0.
+- IR variable with a parent maps to the address of the parent, offset by the parent's struct type definition's offset for the member indicated by the name of the variable.
 
 ## Bugs
 

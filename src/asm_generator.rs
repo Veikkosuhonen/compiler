@@ -104,7 +104,12 @@ fn generate_function_asm(fun_name: &str, fun_ir: &Vec<IREntry>) -> String {
             },
             Instr::LoadIntConst { value, dest } => {
                 let (dest_loc, mut lines) = get_var_address(&dest, &locals);
-                lines.push(format!("movq ${}, {}", value, dest_loc.to_string()));
+                if i32::MIN as i64 <= *value && *value <= i32::MAX as i64 {
+                    lines.push(format!("movq ${}, {}", value, dest_loc.to_string()));
+                } else {
+                    lines.push(format!("movabsq ${value}, %rax"));
+                    lines.push(mov("%rax", &dest_loc.to_string()));
+                }
                 lines
             },
             Instr::LoadBoolConst { value, dest } => {

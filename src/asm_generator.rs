@@ -407,7 +407,20 @@ fn add_stdlib_code(source: String) -> String {
 .extern malloc
 .extern free
 
-.section .text  # Begins code and data
+.section .rodata
+scan_format:
+.asciz \"%ld\"
+
+print_format:
+.asciz \"%ld\\n\"
+
+print_bool_format:
+.asciz \"%s\\n\"
+
+true_str:  .string \"true\\n\"
+false_str: .string \"false\\n\"
+
+.text
 
 {}
 
@@ -419,27 +432,44 @@ fn add_stdlib_code(source: String) -> String {
         popq %rbp
         ret
 
+.global print_int
+.type print_int, @function
 print_int:
     pushq %rbp
     movq %rsp, %rbp
-        movq %rdi, %rsi
-        movq $print_format, %rdi
-        call printf
+    movq %rdi, %rsi
+    movq $print_format, %rdi
+    call printf
     movq %rbp, %rsp
     popq %rbp
     ret
 
+.global print_bool
+.type print_bool, @function
 print_bool:
     pushq %rbp
     movq %rsp, %rbp
-        movq %rdi, %rsi
-        movq $print_format, %rdi
-        andq $0x1, %rsi
-        call printf
+    subq $16, %rsp
+
+    testq %rdi, %rdi
+    jz .Lprint_false
+.Lprint_true:
+    movq $true_str, %rdi
+    jmp .Lprint
+
+.Lprint_false:
+    movq $false_str, %rdi
+
+.Lprint:
+    xorl %eax, %eax
+    call printf
+
     movq %rbp, %rsp
     popq %rbp
     ret
 
+.global read_int
+.type read_int, @function
 read_int:
     pushq %rbp
     movq %rsp, %rbp
@@ -453,20 +483,7 @@ read_int:
     ret
 
 # String data that we pass to functions 'scanf' and 'printf'
-scan_format:
-.asciz \"%ld\"
 
-print_format:
-.asciz \"%ld\\n\"
-
-print_bool_format:
-.asciz \"%s\\n\"
-
-true_str:
-    .ascii \"true\\n\"
-
-false_str:
-    .ascii \"false\\n\"
 
 ", source)
 }

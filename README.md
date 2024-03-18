@@ -4,6 +4,42 @@ HY Compilers 2024 project. A simple toy-language that can be interpreted as well
 
 I also made a [vscode plugin](https://github.com/Veikkosuhonen/hy-compilers-language-support) for it to add syntax highlighting 
 
+## Usage
+
+Requirements:
+- latest stable version of cargo
+- gcc
+- x86_64 machine or suitable emulator/vm
+
+Optional:
+- graphviz (`dot`)
+
+Build dev build:
+
+`cargo build`
+
+output is `./target/debug/compiler`
+
+Run unit tests:
+
+`cargo test`
+
+
+Commands:
+
+- `help`: show available commands
+- `p <path-to-source>`: Parse the source and output the module definition (output is only for debugging).
+- `i <path-to-source>`: Interpret the source.
+- `t <path-to-source>`: Typecheck the source and output the module definition (output is only for debugging).
+- `ir <path-to-source>`: Output IR for the source (output is only for debugging).
+- `asm <path-to-source>`: Output assembly code for the source. Can be then compiled using gcc.
+- `dot <path-to-source>`: Output a DOT graph source file for the source based on the IR. Can be visualized with `dot`
+- `rd <path-to-source>`: Perform reaching definitions analysis on the IR and print it.
+- `lv <path-to-source>`
+- `e2e`: Run end-to-end tests, defined in `./test_programs/e2e`
+  - `-c`: only run native, no interpreter (useful for benchmarks)
+  - `-b`: run benchmarks defined in `./test_programs/benchmarks`. Don't run with the interpreter, its too slow.
+
 ## Current features
 
 - Handwritten parser

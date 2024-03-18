@@ -44,3 +44,20 @@ print_int(double(2));
 
 print_int(f(2));
 // expect 4
+
+//===
+
+// name "Function pointer returned from function"
+
+fun make_forty_two(): Int { 42 }
+
+fun ret_ptr(): (() => Int)* {
+  &make_forty_two
+}
+
+var ptr = ret_ptr();
+
+var func = *ptr;
+
+print_int(func());
+// expect 42

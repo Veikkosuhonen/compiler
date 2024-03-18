@@ -10,7 +10,11 @@ pub fn print_reaching_definitions(_ir: HashMap<String, Vec<IREntry>>) {
             format!("{idx} {}     {}", 
                 i.to_string(), 
                 i.get_reads().iter().map(|r| 
-                    format!("{} <- {:?}", r.to_short_string(), ins[idx].get(&r.to_short_string()).unwrap())
+                    format!("{} <- {:?}", 
+                        r.to_short_string(), 
+                        ins[idx].get(&r.to_short_string())
+                        .unwrap_or_else(|| ins[idx].get(&r.parent.clone().unwrap().to_short_string()).unwrap())
+                    )
                 ).collect::<Vec<String>>().join(", ")
             )
         ).collect::<Vec<String>>().join("\n"));

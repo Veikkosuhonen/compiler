@@ -1,6 +1,6 @@
 use clap::{Parser, Subcommand, Args};
 
-use compiler::{asm_generator::generate_asm, e2e::run_tests, ir_generator::{generate_ir, generate_ir_code}, *};
+use compiler::{asm_generator::generate_asm, e2e::run_tests, ir_generator::generate_ir_code, *};
 
 
 /// Simple program to greet a person
@@ -9,6 +9,9 @@ use compiler::{asm_generator::generate_asm, e2e::run_tests, ir_generator::{gener
 struct CliArgs {
     #[command(subcommand)]
     command: Commands,
+
+    #[arg(short, long)]
+    analyze: bool,
 }
 
 #[derive(Subcommand, Debug)]
@@ -55,31 +58,26 @@ fn main() {
             println!("{:#?}", module);
         },
         Commands::Ir { path } => {
-            let typed_ast = typecheck_file(&path);
-            let ir = generate_ir(typed_ast);
+            let ir = compile_to_ir(path, args.analyze);
             let code = generate_ir_code(ir);
             println!("{}", code);
         },
         Commands::Asm { path } => {
-            let typed_ast = typecheck_file(&path);
-            let ir = generate_ir(typed_ast);
+            let ir = compile_to_ir(path, args.analyze);
             let asm = generate_asm(ir);
             println!("{}", asm);
         },
         Commands::Dot { path } => {
-            let typed_ast = typecheck_file(&path);
-            let ir = generate_ir(typed_ast);
+            let ir = compile_to_ir(path, args.analyze);
             let dot = analyzer::ir_to_flowgraph(ir);
             println!("{}", dot);
         },
         Commands::Rd { path } => {
-            let typed_ast = typecheck_file(&path);
-            let ir = generate_ir(typed_ast);
+            let ir = compile_to_ir(path, args.analyze);
             analyzer::print_reaching_definitions(ir);
         },
         Commands::Lv { path } => {
-            let typed_ast = typecheck_file(&path);
-            let ir = generate_ir(typed_ast);
+            let ir = compile_to_ir(path, args.analyze);
             analyzer::print_live_vars(ir);
         },
         Commands::E2e(args) => {

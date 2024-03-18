@@ -1,12 +1,25 @@
 use std::collections::{HashMap, VecDeque};
 
-use crate::ir_generator::{IREntry, IRVar, Instr};
+use crate::{ir_generator::{IREntry, IRVar, Instr}, parser::Span};
+
+pub struct Warning {
+    pub span: Span,
+    pub message: String,
+}
+
+pub fn report_useless_writes(_ir: &HashMap<String, Vec<IREntry>>) -> Vec<Warning> {
+    let warnings = vec![];
+    warnings
+}
 
 pub fn print_reaching_definitions(_ir: HashMap<String, Vec<IREntry>>) {
     let predefined = get_predefined_vars(&_ir);
 
+    println!(">>> Reaching definitions analysis on IR <<<");
+    println!("How to read: <variable> <- [idx's where it was last written to]\n");
+
     for (f, ir) in _ir.iter() {
-        let (ins, outs) = get_forward_dataflow(ir, predefined.clone(), rd_transfer, merge);
+        let (ins, _) = get_forward_dataflow(ir, predefined.clone(), rd_transfer, merge);
         println!("\n*** {f} ***");
         println!("{}", ir.iter().enumerate().map(|(idx, i)| 
             format!("{idx} {}     {}", 
@@ -26,8 +39,11 @@ pub fn print_reaching_definitions(_ir: HashMap<String, Vec<IREntry>>) {
 pub fn print_live_vars(_ir: HashMap<String, Vec<IREntry>>) {
     let predefined = get_predefined_vars(&_ir);
 
+    println!(">>> Live variable analysis on IR <<<");
+    println!("How to read: <variable> <- [idx's where it is next read]\n");
+
     for (f, ir) in _ir.iter() {
-        let (ins, outs) = get_backward_dataflow(ir, predefined.clone(), lv_transfer, merge);
+        let (ins, _) = get_backward_dataflow(ir, predefined.clone(), lv_transfer, merge);
         println!("\n*** {f} ***");
         println!("{}", ir.iter().enumerate().map(|(idx, i)| 
             format!("{idx} {}     {}", 
@@ -78,7 +94,7 @@ impl IREntry {
 
 #[derive(Clone)]
 struct BasicBlock {
-    entries: Vec<(usize, IREntry)>,
+    // entries: Vec<(usize, IREntry)>,
     label: String,
     out: Vec<String>
 }
@@ -336,7 +352,7 @@ fn find_basic_blocks(ir: &Vec<IREntry>) -> Vec<BasicBlock> {
             Instr::CondJump { else_label, then_label,.. } => {
                 current_entries.push((idx, entry.clone()));
                 blocks.push(BasicBlock {
-                    entries: current_entries,
+                    // entries: current_entries,
                     label: current_label.clone(),
                     out: vec![then_label.to_string(), else_label.to_string()],
                 });
@@ -345,7 +361,7 @@ fn find_basic_blocks(ir: &Vec<IREntry>) -> Vec<BasicBlock> {
             Instr::Jump(label) => {
                 current_entries.push((idx, entry.clone()));
                 blocks.push(BasicBlock {
-                    entries: current_entries,
+                    // entries: current_entries,
                     label: current_label.clone(),
                     out: vec![label.to_string()],
                 });
@@ -354,7 +370,7 @@ fn find_basic_blocks(ir: &Vec<IREntry>) -> Vec<BasicBlock> {
             Instr::Label(name)|Instr::FunctionLabel { name,.. } => {
                 if current_entries.len() > 0 {
                     blocks.push(BasicBlock {
-                        entries: current_entries,
+                        // entries: current_entries,
                         label: current_label.clone(),
                         out: vec![name.to_string()],
                     });
@@ -371,7 +387,7 @@ fn find_basic_blocks(ir: &Vec<IREntry>) -> Vec<BasicBlock> {
 
     if current_entries.len() > 0 {
         blocks.push(BasicBlock {
-            entries: current_entries,
+            // entries: current_entries,
             label: current_label,
             out: vec![]
         });
@@ -428,11 +444,7 @@ mod tests {
             "{}", 
             bb
                 .iter()
-                .map(|i| format!("Block {:?} --> {:?}\n{}", i.label, i.out, i.entries.iter()
-                    .map(|i| i.1.to_string())
-                    .collect::<Vec<String>>()
-                    .join("\n")
-                ))
+                .map(|i| format!("Block {:?} --> {:?}", i.label, i.out))
                 .collect::<Vec<String>>()
                 .join("\n\n")
         )

@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use crate::builtin_functions::{get_builtin_function_and_operator_types, get_builtin_referrable_types};
 use crate::lang_type::{FunctionType, Type, TypedParam};
 use crate::sym_table::{SymTable, Symbol};
-use crate::parser::{ASTNode, Expr, Module, Struct, UserDefinedFunction};
+use crate::parser::{ASTNode, Expr, Module, Span, Struct, UserDefinedFunction};
 use crate::tokenizer::{Op, SourceLocation};
 
 
@@ -85,11 +85,12 @@ impl FunctionType {
 pub struct TypedASTNode {
     pub expr: Expr<TypedASTNode>,
     pub node_type: Type,
+    pub span: Span,
 }
 
 impl TypedASTNode {
-    pub fn new(expr: Expr<TypedASTNode>, node_type: Type, _start: SourceLocation, _end: SourceLocation) -> TypedASTNode {
-        TypedASTNode { expr, node_type }
+    pub fn new(expr: Expr<TypedASTNode>, node_type: Type, span: Span) -> TypedASTNode {
+        TypedASTNode { expr, node_type, span }
     }
 }
 
@@ -208,36 +209,36 @@ fn get_toplevel_sym_table() -> Box<SymTable<Symbol,Type>> {
 
 fn typecheck(node: ASTNode, sym_table: &mut Box<SymTable<Symbol,Type>>) -> TypedASTNode {
     match node.expr {
-        Expr::Unit => TypedASTNode { expr: Expr::Unit, node_type: Type::Unit },
-        Expr::IntegerLiteral { value } => TypedASTNode { expr: Expr::IntegerLiteral { value }, node_type: Type::Int },
-        Expr::BooleanLiteral { value } => TypedASTNode { expr: Expr::BooleanLiteral { value }, node_type: Type::Bool },
-        Expr::Identifier { value } => typecheck_identifier(value, sym_table),
+        Expr::Unit => TypedASTNode { expr: Expr::Unit, node_type: Type::Unit, span: node.span.clone() },
+        Expr::IntegerLiteral { value } =>  TypedASTNode { expr: Expr::IntegerLiteral { value }, node_type: Type::Int, span: node.span.clone() },
+        Expr::BooleanLiteral { value } => TypedASTNode { expr: Expr::BooleanLiteral { value }, node_type: Type::Bool, span: node.span.clone() },
+        Expr::Identifier { value } => typecheck_identifier(value, sym_table, node.span.clone()),
         Expr::Logical { left, operator, right } => {
-            typecheck_logical_op(left, right, operator, sym_table)
+            typecheck_logical_op(left, right, operator, sym_table, node.span.clone())
         },
         Expr::Binary { left, operator, right } => {
-            typecheck_binary_op(left, right, operator, sym_table)
+            typecheck_binary_op(left, right, operator, sym_table, node.span.clone())
         },
         Expr::Unary { operand, operator } => {
-            typecheck_unary_op(operand, operator, sym_table)
+            typecheck_unary_op(operand, operator, sym_table, node.span.clone())
         },
         Expr::If { condition, then_branch, else_branch } => {
-            typecheck_if_expression(condition, then_branch, else_branch, sym_table)
+            typecheck_if_expression(condition, then_branch, else_branch, sym_table, node.span.clone())
         },
         Expr::While { condition, body } => {
-            typecheck_while_expression(condition, body, sym_table)
+            typecheck_while_expression(condition, body, sym_table, node.span.clone())
         },
         Expr::Block { statements, result } => {
-            typecheck_block_expression(statements, result, sym_table)
+            typecheck_block_expression(statements, result, sym_table, node.span.clone())
         },
         Expr::Assignment { left, right } => {
-            typecheck_assignment_expression(left, right, sym_table)
+            typecheck_assignment_expression(left, right, sym_table, node.span.clone())
         },
         Expr::VariableDeclaration { id, init, type_annotation } => {
-            typecheck_variable_declaration(id, init, type_annotation, sym_table)
+            typecheck_variable_declaration(id, init, type_annotation, sym_table, node.span.clone())
         },
         Expr::Call { callee, arguments } => {
-            typecheck_call_expression(callee, arguments, sym_table)
+            typecheck_call_expression(callee, arguments, sym_table, node.span.clone())
         },
         Expr::Return { result } => {
             let result = typecheck(*result, sym_table);
@@ -245,10 +246,10 @@ fn typecheck(node: ASTNode, sym_table: &mut Box<SymTable<Symbol,Type>>) -> Typed
                 panic!("Wrong return type in return expression: annotated {:?} but found {:?}", sym_table.expected_returns, result.node_type)
             }
             sym_table.returns = Some(result.node_type.clone());
-            TypedASTNode { expr: Expr::Return { result: Box::new(result) }, node_type: Type::Unit }
+            TypedASTNode { expr: Expr::Return { result: Box::new(result) }, node_type: Type::Unit, span: node.span.clone() }
         },
         Expr::StructInstance { struct_name, fields } => {
-            typecheck_struct_instance(struct_name, fields, sym_table)
+            typecheck_struct_instance(struct_name, fields, sym_table, node.span.clone())
         },
         Expr::Member { parent, name } => {
             let parent = typecheck(*parent, sym_table);
@@ -269,6 +270,7 @@ fn typecheck(node: ASTNode, sym_table: &mut Box<SymTable<Symbol,Type>>) -> Typed
             TypedASTNode {
                 expr: Expr::Member { parent: Box::new(parent), name },
                 node_type: member_type,
+                span: node.span.clone()
             }
         },
         Expr::FunctionType { ref params, ref return_type } => TypedASTNode { 
@@ -277,9 +279,10 @@ fn typecheck(node: ASTNode, sym_table: &mut Box<SymTable<Symbol,Type>>) -> Typed
                 return_type: Box::new(typecheck(*return_type.clone(), sym_table))
             }, 
             node_type: typecheck_type_annotation_referred_type(&Box::new(node.clone()), sym_table),
+            span: node.span.clone()
         },
-        Expr::Break => TypedASTNode { expr: Expr::Break, node_type: Type::Unit },
-        Expr::Continue => TypedASTNode { expr: Expr::Continue, node_type: Type::Unit }
+        Expr::Break => TypedASTNode { expr: Expr::Break, node_type: Type::Unit, span: node.span.clone() },
+        Expr::Continue => TypedASTNode { expr: Expr::Continue, node_type: Type::Unit, span: node.span.clone() }
     }
 }
 
@@ -347,8 +350,9 @@ fn typecheck_function(
 fn typecheck_identifier(
     value: String,
     sym_table: &mut Box<SymTable<Symbol,Type>>,
+    span: Span,
 ) -> TypedASTNode {
-    TypedASTNode { expr: Expr::Identifier { value: value.clone() }, node_type: sym_table.get(&Symbol::Identifier(value)) }
+    TypedASTNode { expr: Expr::Identifier { value: value.clone() }, node_type: sym_table.get(&Symbol::Identifier(value)), span }
 }
 
 fn typecheck_assignable(
@@ -356,7 +360,7 @@ fn typecheck_assignable(
     sym_table: &mut Box<SymTable<Symbol,Type>>,
 ) -> TypedASTNode {
     match dest.expr {
-        Expr::Identifier { value } => typecheck_identifier(value, sym_table),
+        Expr::Identifier { value } => typecheck_identifier(value, sym_table, dest.span.clone()),
         Expr::Unary { operand, operator: Op::Deref } => {
             if let Type::Function { func_type, id: None } = sym_table.get(&mut Symbol::Operator(Op::Deref)) {
                 let operand = Box::new(typecheck_assignable(operand, sym_table));
@@ -364,6 +368,7 @@ fn typecheck_assignable(
                 TypedASTNode {
                     expr: Expr::Unary { operand, operator: Op::Deref },
                     node_type,
+                    span: dest.span.clone()
                 }
             } else {
                 unreachable!()
@@ -377,7 +382,8 @@ fn typecheck_assignable(
 fn typecheck_assignment_expression(
     left: Box<ASTNode>, 
     right: Box<ASTNode>, 
-    sym_table: &mut Box<SymTable<Symbol,Type>>
+    sym_table: &mut Box<SymTable<Symbol,Type>>,
+    span: Span,
 )   -> TypedASTNode {
     let left = typecheck_assignable(left, sym_table);
     let expected_type = left.node_type.clone();
@@ -391,7 +397,8 @@ fn typecheck_assignment_expression(
             left: Box::new(left),
             right 
         }, 
-        node_type: expected_type
+        node_type: expected_type,
+        span,
     }
 }
 
@@ -399,7 +406,8 @@ fn typecheck_if_expression(
     condition: Box<ASTNode>, 
     then_branch: Box<ASTNode>, 
     else_branch: Option<Box<ASTNode>>, 
-    sym_table: &mut Box<SymTable<Symbol,Type>>
+    sym_table: &mut Box<SymTable<Symbol,Type>>,
+    span: Span,
 ) -> TypedASTNode {
     let condition = Box::new(typecheck(*condition, sym_table));
     if condition.node_type != Type::Bool {
@@ -421,13 +429,15 @@ fn typecheck_if_expression(
     TypedASTNode {
         expr: Expr::If { condition, then_branch, else_branch: else_branch_opt },
         node_type,
+        span
     }
 }
 
 fn typecheck_while_expression(
     condition: Box<ASTNode>, 
     body: Box<ASTNode>, 
-    sym_table: &mut Box<SymTable<Symbol,Type>>
+    sym_table: &mut Box<SymTable<Symbol,Type>>,
+    span: Span,
 ) -> TypedASTNode {
     let condition = Box::new(typecheck(*condition, sym_table));
     if condition.node_type != Type::Bool {
@@ -439,13 +449,15 @@ fn typecheck_while_expression(
     TypedASTNode {
         expr: Expr::While { condition, body },
         node_type: Type::Unit,
+        span
     }
 }
 
 fn typecheck_block_expression(
     statements: Vec<Box<ASTNode>>,
     result: Box<ASTNode>,
-    sym_table: &mut Box<SymTable<Symbol,Type>>
+    sym_table: &mut Box<SymTable<Symbol,Type>>,
+    span: Span
 ) -> TypedASTNode {
     sym_table.block_scope(|inner_sym_table| {
         let mut typed_statements: Vec<Box<TypedASTNode>> = vec![];
@@ -454,7 +466,7 @@ fn typecheck_block_expression(
         }
         let result = Box::new(typecheck(*result, inner_sym_table));
         let node_type = result.node_type.clone();
-        TypedASTNode { expr: Expr::Block { statements: typed_statements, result }, node_type }
+        TypedASTNode { expr: Expr::Block { statements: typed_statements, result }, node_type, span }
     })
 }
 
@@ -497,7 +509,8 @@ fn typecheck_variable_declaration(
     id: Box<ASTNode>, 
     init: Box<ASTNode>,
     type_annotation: Option<Box<ASTNode>>,
-    sym_table: &mut Box<SymTable<Symbol,Type>>
+    sym_table: &mut Box<SymTable<Symbol,Type>>,
+    span: Span
 )   -> TypedASTNode {
     if let Expr::Identifier { value } = id.expr {
         let init = typecheck(*init, sym_table);
@@ -510,11 +523,12 @@ fn typecheck_variable_declaration(
         sym_table.symbols.insert(Symbol::Identifier(value.clone()), init.node_type.clone());
         TypedASTNode { 
             expr: Expr::VariableDeclaration { 
-                id: Box::new(TypedASTNode { expr: Expr::Identifier { value }, node_type: init.node_type.clone() }), 
+                id: Box::new(TypedASTNode { expr: Expr::Identifier { value }, node_type: init.node_type.clone(), span: id.span.clone() }), 
                 init: Box::new(init),
                 type_annotation: None,
             }, 
-            node_type: Type::Unit
+            node_type: Type::Unit,
+            span,
         }
     } else {
         panic!("Id of a variable declaration must be an identifier");
@@ -525,13 +539,14 @@ fn typecheck_logical_op(
     left_expr: Box<ASTNode>, 
     right_expr: Box<ASTNode>, 
     operator: Op, 
-    sym_table: &mut Box<SymTable<Symbol,Type>>
+    sym_table: &mut Box<SymTable<Symbol,Type>>,
+    span: Span
 ) -> TypedASTNode {
     if let Type::Function { func_type, id: None }  = sym_table.get(&mut Symbol::Operator(operator)) {
         let left  = Box::new(typecheck(*left_expr, sym_table));
         let right = Box::new(typecheck(*right_expr, sym_table));
         let node_type = func_type.typecheck_unnamed_args_call(&vec![&left, &right]);
-        TypedASTNode { expr: Expr::Logical { left, operator, right }, node_type }
+        TypedASTNode { expr: Expr::Logical { left, operator, right }, node_type, span }
     } else {
         panic!("Undefined operator {:?}", operator)
     }
@@ -542,13 +557,14 @@ fn typecheck_binary_op(
     left_expr: Box<ASTNode>, 
     right_expr: Box<ASTNode>, 
     operator: Op, 
-    sym_table: &mut Box<SymTable<Symbol,Type>>
+    sym_table: &mut Box<SymTable<Symbol,Type>>,
+    span: Span
 ) -> TypedASTNode {
     if let Type::Function { func_type, id: None }  = sym_table.get(&mut Symbol::Operator(operator)) {
         let left  = Box::new(typecheck(*left_expr, sym_table));
         let right = Box::new(typecheck(*right_expr, sym_table));
         let node_type = func_type.typecheck_unnamed_args_call(&vec![&left, &right]);
-        TypedASTNode { expr: Expr::Binary { left, operator, right }, node_type }
+        TypedASTNode { expr: Expr::Binary { left, operator, right }, node_type, span }
     } else {
         panic!("Undefined operator {:?}", operator)
     }
@@ -557,12 +573,13 @@ fn typecheck_binary_op(
 fn typecheck_unary_op(
     operand: Box<ASTNode>,
     operator: Op,
-    sym_table: &mut Box<SymTable<Symbol,Type>>
+    sym_table: &mut Box<SymTable<Symbol,Type>>,
+    span: Span
 ) -> TypedASTNode {
     if let Type::Function { func_type, id: None } = sym_table.get(&mut Symbol::Operator(operator)) {
         let operand = Box::new(typecheck(*operand, sym_table));
         let node_type = func_type.typecheck_unnamed_args_call(&vec![&operand]);
-        TypedASTNode { expr: Expr::Unary { operand, operator }, node_type }
+        TypedASTNode { expr: Expr::Unary { operand, operator }, node_type, span }
     } else {
         panic!("Undefined operator {:?}", operator)
     }
@@ -571,7 +588,8 @@ fn typecheck_unary_op(
 fn typecheck_call_expression(
     callee: Box<ASTNode>,
     argument_expr: Vec<Box<ASTNode>>,
-    sym_table: &mut Box<SymTable<Symbol,Type>>
+    sym_table: &mut Box<SymTable<Symbol,Type>>,
+    span: Span
 ) -> TypedASTNode {
     let callee = typecheck(*callee, sym_table);
     let call_type = callee.node_type.get_callable_type();
@@ -588,13 +606,15 @@ fn typecheck_call_expression(
             arguments: typed_argument_expr, 
         },
         node_type,
+        span
     }
 }
 
 fn typecheck_struct_instance(
     id: String,
     fields: Vec<(String, Box<ASTNode>)>,
-    sym_table: &mut Box<SymTable<Symbol,Type>>
+    sym_table: &mut Box<SymTable<Symbol,Type>>,
+    span: Span
 ) -> TypedASTNode {
     let struct_type = sym_table.get(&Symbol::Identifier(id.clone()));
     let constructor_type = struct_type.get_callable_type();
@@ -610,6 +630,7 @@ fn typecheck_struct_instance(
     TypedASTNode {
         expr: Expr::StructInstance { struct_name: id, fields: typed_named_argument_expr },
         node_type,
+        span
     }
     
 }

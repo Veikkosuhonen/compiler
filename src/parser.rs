@@ -31,19 +31,29 @@ pub struct SyntaxError {
 }
 
 #[derive(Debug, Clone)]
+pub struct Span { pub start: SourceLocation, pub end: SourceLocation }
+impl Span {
+    pub fn zero() -> Span {
+        Span {
+            start: SourceLocation::at(0, 0),
+            end: SourceLocation::at(0, 0)
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct ASTNode {
     pub expr: Expr<ASTNode>,
-    pub start: SourceLocation,
-    pub end: SourceLocation,
+    pub span: Span,
 }
 
 impl ASTNode {
     pub fn new(expr: Expr<ASTNode>, start: SourceLocation, end: SourceLocation) -> ASTNode {
-        ASTNode { expr, start, end }
+        ASTNode { expr, span: Span { start, end }}
     }
 
     pub fn implicit_type_annotation(id: &str) -> ASTNode {
-        ASTNode { expr: Expr::Identifier { value: String::from(id) }, start: SourceLocation::at(0, 0), end: SourceLocation::at(0, 0) }
+        ASTNode { expr: Expr::Identifier { value: String::from(id) }, span: Span::zero() }
     }
 }
 
@@ -344,13 +354,13 @@ impl Parser {
         }
 
         let return_type = Box::new(self.parse_type_annotation()?);
-        let end = return_type.end.clone();
+        let end = return_type.span.end.clone();
         Ok(ASTNode::new(Expr::FunctionType { params, return_type }, start, end))
     }
 
     fn parse_type_annotation(&mut self) -> Result<ASTNode, SyntaxError> {
         let mut identifer = self.parse_type_factor()?;
-        let start = identifer.start.clone();
+        let start = identifer.span.start.clone();
         while let Ok(operator) = Op::unary_from_str(&self.peek()?.value) {
             self.consume(TokenType::Operator)?;
             let end = self.current_start().clone();
@@ -370,7 +380,7 @@ impl Parser {
 
     fn parse_call_expression(&mut self) -> Result<ASTNode, SyntaxError> {
         let callee = self.parse_identifier()?;
-        let start = callee.start.clone();
+        let start = callee.span.start.clone();
         self.consume_left_paren()?;
 
         let mut arguments: Vec<Box<ASTNode>> = vec![];
@@ -402,14 +412,14 @@ impl Parser {
 
         if self.consume_keyword("else").is_ok() {
             let else_branch = self.parse_expression()?;
-            let end = else_branch.end.clone();
+            let end = else_branch.span.end.clone();
             Ok(ASTNode::new(Expr::If {
                 condition: Box::new(condition),
                 then_branch: Box::new(then_branch),
                 else_branch: Some(Box::new(else_branch)),
             }, start, end))
         } else {
-            let end = then_branch.end.clone();
+            let end = then_branch.span.end.clone();
             Ok(ASTNode::new(Expr::If {
                 condition: Box::new(condition),
                 then_branch: Box::new(then_branch),
@@ -429,7 +439,7 @@ impl Parser {
         let body = self.parse_expression()?;
         self.is_loop = is_outer_loop;
 
-        let end = body.end.clone();
+        let end = body.span.end.clone();
 
         Ok(ASTNode::new(Expr::While {
             condition: Box::new(condition),
@@ -517,7 +527,7 @@ impl Parser {
             }
             self.consume(TokenType::Operator)?;
             let member_token = self.consume(TokenType::Identifier)?;
-            let start = parent.start.clone();
+            let start = parent.span.start.clone();
             let end = member_token.end.clone();
             let name = member_token.value;
             parent = ASTNode::new(Expr::Member { parent: Box::new(parent), name }, start, end);
@@ -540,7 +550,7 @@ impl Parser {
                 let start = self.current_start().clone();
                 self.consume(TokenType::Operator)?;
                 let operand = self.parse_unary_precedence_level(level)?;
-                let end = operand.end.clone();
+                let end = operand.span.end.clone();
                 Ok(ASTNode::new(Expr::Unary {
                     operator,
                     operand: Box::new(operand),
@@ -569,8 +579,8 @@ impl Parser {
                 if ops.contains(&operator) {
                     self.consume(TokenType::Operator)?;
                     let right = self.parse_binary_precedence_level(level + 1)?;
-                    let start = left.start.clone();
-                    let end = right.end.clone();
+                    let start = left.span.start.clone();
+                    let end = right.span.end.clone();
                     left = ASTNode::new(Expr::Binary {
                         left: Box::new(left),
                         operator,
@@ -603,8 +613,8 @@ impl Parser {
                 if ops.contains(&operator) {
                     self.consume(TokenType::Operator)?;
                     let right = self.parse_logical_precedence_level(level + 1)?;
-                    let start = left.start.clone();
-                    let end = right.end.clone();
+                    let start = left.span.start.clone();
+                    let end = right.span.end.clone();
                     left = ASTNode::new(Expr::Logical {
                         left: Box::new(left),
                         operator,
@@ -623,12 +633,12 @@ impl Parser {
 
     fn parse_assignment_expression(&mut self) -> Result<ASTNode, SyntaxError> {
         let left = self.parse_logical_precedence_level(0)?;
-        let start = left.start.clone();
+        let start = left.span.start.clone();
         if let Ok(op) = Op::from_str(&self.peek()?.value) {
             if let Op::Assign = op {
                 self.consume(TokenType::Operator)?;
                 let right = self.parse_assignment_expression()?;
-                let end = right.end.clone();
+                let end = right.span.end.clone();
                 Ok(ASTNode::new(Expr::Assignment {
                     left: Box::new(left),
                     right: Box::new(right),
@@ -655,7 +665,7 @@ impl Parser {
         }
         self.consume_with_value(TokenType::Operator, "=")?;
         let init = self.parse_expression()?;
-        let end = init.end.clone();
+        let end = init.span.end.clone();
         Ok(ASTNode::new(Expr::VariableDeclaration {
             id: Box::new(id),
             type_annotation: type_annotation.map(Box::new),
@@ -667,7 +677,7 @@ impl Parser {
         let start = self.current_start().clone();
         self.consume_with_value(TokenType::Keyword, "return")?;
         let result = self.parse_expression()?;
-        let end = result.end.clone();
+        let end = result.span.end.clone();
         Ok(ASTNode::new(Expr::Return { result: Box::new(result) }, start, end))
     }
 

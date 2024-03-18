@@ -1,7 +1,9 @@
-use std::{fs, time::Instant};
+use std::{collections::HashMap, fs, time::Instant};
 
+use analyzer::report_useless_writes;
+use ir_generator::IREntry;
 use parser::{Module, Struct, UserDefinedFunction};
-use report_error::{report_syntax_error, report_tokenisation_error};
+use report_error::{report_syntax_error, report_tokenisation_error, report_warning};
 use type_checker::{TypedStruct, TypedUserDefinedFunction};
 pub mod tokenizer;
 pub mod parser;
@@ -56,4 +58,19 @@ pub fn interpret_file(path: &String) -> interpreter::Value {
     // eprintln!("Interpret in {} ms", _start.elapsed().as_millis());
 
     result
+}
+
+pub fn compile_to_ir(path: &String, analyze: bool) -> HashMap<String, Vec<IREntry>> {
+    let source = read_file(path);
+
+    let module = parse_source(source.clone());
+    let result = type_checker::typecheck_program(module);
+    let ir = ir_generator::generate_ir(result);
+    if analyze {
+        let warnings = report_useless_writes(&ir);
+        warnings.iter().for_each(|w| {
+            report_warning(&source, w)
+        })
+    }
+    ir
 }

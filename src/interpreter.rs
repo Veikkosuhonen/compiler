@@ -4,7 +4,7 @@ use std::vec;
 
 use crate::lang_type::{FunctionType, Type};
 use crate::sym_table::{SymTable, Symbol};
-use crate::parser::{Expr, Module};
+use crate::parser::{Expr, Module, Span};
 use crate::tokenizer::{Op, SourceLocation};
 use crate::builtin_functions::*;
 use crate::type_checker::{TypedASTNode, TypedStruct, TypedUserDefinedFunction};
@@ -525,8 +525,7 @@ pub fn interpret_program(module: &Module<TypedUserDefinedFunction, TypedStruct>)
     let main_ref = TypedASTNode::new(
         Expr::Identifier { value: String::from("main") },
         module.main().func_type.return_type.clone(),
-        SourceLocation::at(0, 0),
-        SourceLocation::at(0, 0)
+        Span::zero()
     );
 
     let return_value = eval_call_expression(&Box::new(main_ref), &vec![], &mut memory);

@@ -5,7 +5,7 @@ use crate::builtin_functions::{get_builtin_function_and_operator_types, get_buil
 use crate::lang_type::{FunctionType, Type, TypedParam};
 use crate::sym_table::{SymTable, Symbol};
 use crate::parser::{ASTNode, Expr, Module, Span, Struct, UserDefinedFunction};
-use crate::tokenizer::{Op, SourceLocation};
+use crate::tokenizer::Op;
 
 
 impl FunctionType {

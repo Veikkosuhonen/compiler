@@ -5,7 +5,7 @@ use std::vec;
 use crate::lang_type::{FunctionType, Type};
 use crate::sym_table::{SymTable, Symbol};
 use crate::parser::{Expr, Module, Span};
-use crate::tokenizer::{Op, SourceLocation};
+use crate::tokenizer::Op;
 use crate::builtin_functions::*;
 use crate::type_checker::{TypedASTNode, TypedStruct, TypedUserDefinedFunction};
 

@@ -1,0 +1,4 @@
+
+print_bool(true);
+print_bool(false);
+print_bool(true);

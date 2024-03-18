@@ -481,6 +481,7 @@ mod tests {
 
     use super::*;
 
+    #[allow(dead_code)]
     fn i(src: &str) -> HashMap<String, Vec<IREntry>> {
         let a = parse_source(src.to_string());
         let t = typecheck_program(a);

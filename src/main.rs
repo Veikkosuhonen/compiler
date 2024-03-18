@@ -80,7 +80,7 @@ fn main() {
         Commands::Lv { path } => {
             let typed_ast = typecheck_file(&path);
             let ir = generate_ir(typed_ast);
-            analyzer::print_reaching_definitions(ir);
+            analyzer::print_live_vars(ir);
         },
         Commands::E2e(args) => {
             run_tests(args.compiled_only, args.benchmark)

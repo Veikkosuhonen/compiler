@@ -4,7 +4,7 @@ use crate::ir_generator::{IREntry, IRVar, Instr};
 
 pub fn print_reaching_definitions(_ir: HashMap<String, Vec<IREntry>>) {
     for (f, ir) in _ir.iter() {
-        let (ins, outs) = get_forward_dataflow(ir, vec![], rd_transfer, rd_merge);
+        let (ins, outs) = get_forward_dataflow(ir, vec![], rd_transfer, merge);
         println!("\n*** {f} ***");
         println!("{}", ir.iter().enumerate().map(|(idx, i)| 
             format!("{idx} {}     {}", 
@@ -14,6 +14,24 @@ pub fn print_reaching_definitions(_ir: HashMap<String, Vec<IREntry>>) {
                         r.to_short_string(), 
                         ins[idx].get(&r.to_short_string())
                         .unwrap_or_else(|| ins[idx].get(&r.parent.clone().unwrap().to_short_string()).unwrap())
+                    )
+                ).collect::<Vec<String>>().join(", ")
+            )
+        ).collect::<Vec<String>>().join("\n"));
+    }
+}
+
+pub fn print_live_vars(_ir: HashMap<String, Vec<IREntry>>) {
+    for (f, ir) in _ir.iter() {
+        let (ins, outs) = get_backward_dataflow(ir, vec![], lv_transfer, merge);
+        println!("\n*** {f} ***");
+        println!("{}", ir.iter().enumerate().map(|(idx, i)| 
+            format!("{idx} {}     {}", 
+                i.to_string(), 
+                i.get_reads().iter().map(|r| 
+                    format!("{} <- {:?}", 
+                        r.to_short_string(), 
+                        ins[idx]
                     )
                 ).collect::<Vec<String>>().join(", ")
             )
@@ -157,8 +175,11 @@ fn get_forward_dataflow(ir: &Vec<IREntry>, predefined: Vec<String>,
     (ins, outs)
 }
 
-/* 
-fn get_backward_dataflow(ir: &Vec<IREntry>, predefined: Vec<String>) -> (Vec<State>, Vec<State>) {
+
+fn get_backward_dataflow(ir: &Vec<IREntry>, predefined: Vec<String>, 
+    transfer: fn(&State, usize, &Vec<IREntry>) -> State,
+    merge: fn(&Vec<State>) -> State,
+) -> (Vec<State>, Vec<State>) {
     // 2.
     let mut ins: Vec<State> = vec![];
     let mut outs: Vec<State> = vec![];
@@ -234,21 +255,21 @@ fn get_backward_dataflow(ir: &Vec<IREntry>, predefined: Vec<String>) -> (Vec<Sta
     outs[0] = zero_out_state;
 
     // 7.
-    while let Some(idx) = work_queue.pop_front() {
-        let current_predecessors = predecessors[idx].iter().map(|j| outs[*j].clone()).collect::<Vec<State>>();
-        ins[idx] = merge(current_predecessors);
-        let prev_out = outs[idx].clone();
-        outs[idx] = transfer(&ins[idx], idx, &ir);
+    while let Some(idx) = work_queue.pop_back() {
+        let current_successors = successors[idx].iter().map(|j| ins[*j].clone()).collect::<Vec<State>>();
+        outs[idx] = merge(&current_successors);
+        let prev_in = ins[idx].clone();
+        ins[idx] = transfer(&outs[idx], idx, &ir);
         // Changed?
-        if prev_out != outs[idx] {
-            for jdx in &successors[idx] {
-                work_queue.push_back(*jdx);
+        if prev_in != ins[idx] {
+            for jdx in &predecessors[idx] {
+                work_queue.push_front(*jdx);
             }
         }
     }
 
     (ins, outs)
-}*/
+}
 
 
 // 5.
@@ -261,7 +282,7 @@ fn rd_transfer(input: &State, i: usize, ir: &Vec<IREntry>) -> State {
 }
 
 // 7.
-fn rd_merge(states: &Vec<State>) -> State {
+fn merge(states: &Vec<State>) -> State {
     let mut res = State::new();
     for s in states {
         for (k, v) in s.iter() {
@@ -276,6 +297,14 @@ fn rd_merge(states: &Vec<State>) -> State {
         }
     }
     res
+}
+
+fn lv_transfer(input: &State, i: usize, ir: &Vec<IREntry>) -> State {
+    let mut output = input.clone();
+    for var in ir[i].get_reads() {
+        output.insert(var.to_short_string(), vec![i as i32]);
+    }
+    output
 }
 
 pub fn ir_to_flowgraph(ir: HashMap<String, Vec<IREntry>>) -> String {

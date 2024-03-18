@@ -180,11 +180,30 @@ pub fn generate_ir(module: Module<TypedUserDefinedFunction, TypedStruct>) -> Has
             let ir_var = var_table.create(param_name.clone(), param.param_type.clone());
             params.push(ir_var);
         }
-        let function_ir = generate_function_ir(function, params, var_table);
+        let mut function_ir = generate_function_ir(function, params, var_table);
+        remove_useless_copies(&mut function_ir);
         module_functions_ir.insert(function.id.to_string(), function_ir);
     }
     
     module_functions_ir
+}
+
+fn remove_useless_copies(ir: &mut Vec<IREntry>) {
+    let mut idx_to_remove = vec![];
+    // Ascending order
+    for (idx, entry) in ir.iter().enumerate() {
+        if let Instr::Copy { source, dest } = &entry.instruction {
+            if source == dest {
+                idx_to_remove.push(idx);
+            }
+        }
+    }
+
+    // Iterate in desc order so idx's stay valid
+    idx_to_remove.reverse();
+    for idx in idx_to_remove {
+        ir.remove(idx);
+    }
 }
 
 fn generate_function_ir(func: &TypedUserDefinedFunction, params: Vec<IRVar>, mut var_table: IRVarTable) -> Vec<IREntry> {

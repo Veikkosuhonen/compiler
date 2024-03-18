@@ -141,6 +141,9 @@ impl IREntry {
             Instr::Label(name) => if name.ends_with("_end") { vec![IRVar::_return()] } else { vec![] }
             _ => vec![],
         }
+        .iter()
+        .map(|var| var.clone().parent.map_or(var.clone(), |v| *v))
+        .collect::<Vec<IRVar>>()
     }
 
     fn get_jumps(&self) -> Vec<String> {

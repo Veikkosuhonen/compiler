@@ -1,11 +1,13 @@
-fun make_one(): Int { 1 }
+var x = 1;
 
-fun ret_ptr(): (() => Int)* {
-  &make_one
-}
+print_int(x);
 
-var ptr = ret_ptr();
+var y = 2;
 
-var func = *ptr;
+print_int(y);
 
-print_int(func());
+var z = 3;
+
+print_int(z);
+
+print_int(x);

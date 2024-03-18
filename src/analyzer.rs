@@ -3,8 +3,10 @@ use std::collections::{HashMap, VecDeque};
 use crate::ir_generator::{IREntry, IRVar, Instr};
 
 pub fn print_reaching_definitions(_ir: HashMap<String, Vec<IREntry>>) {
+    let predefined = get_predefined_vars(&_ir);
+
     for (f, ir) in _ir.iter() {
-        let (ins, outs) = get_forward_dataflow(ir, vec![], rd_transfer, merge);
+        let (ins, outs) = get_forward_dataflow(ir, predefined.clone(), rd_transfer, merge);
         println!("\n*** {f} ***");
         println!("{}", ir.iter().enumerate().map(|(idx, i)| 
             format!("{idx} {}     {}", 
@@ -22,16 +24,21 @@ pub fn print_reaching_definitions(_ir: HashMap<String, Vec<IREntry>>) {
 }
 
 pub fn print_live_vars(_ir: HashMap<String, Vec<IREntry>>) {
+    let predefined = get_predefined_vars(&_ir);
+
     for (f, ir) in _ir.iter() {
-        let (ins, outs) = get_backward_dataflow(ir, vec![], lv_transfer, merge);
+        let (ins, outs) = get_backward_dataflow(ir, predefined.clone(), lv_transfer, merge);
         println!("\n*** {f} ***");
         println!("{}", ir.iter().enumerate().map(|(idx, i)| 
             format!("{idx} {}     {}", 
                 i.to_string(), 
-                i.get_reads().iter().map(|r| 
+                // "Which variables may still be read after this instruction?"
+                ins[idx].iter()
+                .filter(|(_, lines)| lines.iter().any(|l| *l > idx as i32))
+                .map(|(var, lines)| 
                     format!("{} <- {:?}", 
-                        r.to_short_string(), 
-                        ins[idx]
+                        var, 
+                        lines,
                     )
                 ).collect::<Vec<String>>().join(", ")
             )
@@ -384,6 +391,14 @@ fn create_dot_flowgraph(blocks: Vec<BasicBlock>) -> String {
             .join("\n")
         )
         .collect::<Vec<String>>().join("\n")
+}
+
+fn get_predefined_vars(ir: &HashMap<String, Vec<IREntry>>) -> Vec<String> {
+    let mut predefined = vec![];
+    for f in ir.keys() {
+        predefined.push(f.clone());
+    }
+    predefined
 }
 
 mod tests {

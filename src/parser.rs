@@ -332,14 +332,24 @@ impl Parser {
             }
         }
         self.consume_right_paren()?;
-        self.consume_with_value(TokenType::Operator, "=>")?;
+        let func_parse = self.consume_with_value(TokenType::Operator, "=>");
+    
+        if let Err(e) = func_parse {
+            // This aint a func type, it may be parenthesised
+            if params.len() == 1 {
+                // Ok its parenthesised, return only the one "param"
+                return Ok(*params.first().unwrap().clone())
+            }
+            return Err(e)
+        }
+
         let return_type = Box::new(self.parse_type_annotation()?);
         let end = return_type.end.clone();
         Ok(ASTNode::new(Expr::FunctionType { params, return_type }, start, end))
     }
 
-    fn parse_type_variable(&mut self) -> Result<ASTNode, SyntaxError> {
-        let mut identifer = self.parse_identifier()?;
+    fn parse_type_annotation(&mut self) -> Result<ASTNode, SyntaxError> {
+        let mut identifer = self.parse_type_factor()?;
         let start = identifer.start.clone();
         while let Ok(operator) = Op::unary_from_str(&self.peek()?.value) {
             self.consume(TokenType::Operator)?;
@@ -349,12 +359,12 @@ impl Parser {
 
         Ok(identifer)
     }
-
-    fn parse_type_annotation(&mut self) -> Result<ASTNode, SyntaxError> {
+ 
+    fn parse_type_factor(&mut self) -> Result<ASTNode, SyntaxError> {
         if self.current_is("(") {
             self.parse_function_type()
         } else {
-            self.parse_type_variable()
+            self.parse_identifier()
         }
     }
 
@@ -1593,6 +1603,14 @@ fn new_and_delete() {
             var addition: (Int, Int) => Int = 0;
         ").unwrap());
         assert!(r.is_ok())
+    }
+
+    #[test]
+    fn function_ptr_type_annot() {
+        let r = parse(tokenize("
+            var addition: ((Int, Int) => Int)* = 0;
+        ").unwrap());
+        assert!(r.is_ok());
     }
 
 

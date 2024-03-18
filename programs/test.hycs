@@ -1,6 +1,6 @@
 fun make_one(): Int { 1 }
 
-fun ret_ptr(): () => Int* {
+fun ret_ptr(): (() => Int)* {
   &make_one
 }
 

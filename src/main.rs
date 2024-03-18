@@ -19,7 +19,8 @@ enum Commands {
     Ir { path: String },
     Asm { path: String },
     Dot { path: String },
-    Analyze { path: String },
+    Rd { path: String },
+    Lv { path: String },
     E2e(E2EArgs),
 }
 
@@ -71,11 +72,15 @@ fn main() {
             let dot = analyzer::ir_to_flowgraph(ir);
             println!("{}", dot);
         },
-        Commands::Analyze { path } => {
+        Commands::Rd { path } => {
             let typed_ast = typecheck_file(&path);
             let ir = generate_ir(typed_ast);
-            analyzer::analyze(ir);
-            // println!("{}", dot);
+            analyzer::print_reaching_definitions(ir);
+        },
+        Commands::Lv { path } => {
+            let typed_ast = typecheck_file(&path);
+            let ir = generate_ir(typed_ast);
+            analyzer::print_reaching_definitions(ir);
         },
         Commands::E2e(args) => {
             run_tests(args.compiled_only, args.benchmark)

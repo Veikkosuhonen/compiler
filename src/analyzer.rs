@@ -2,12 +2,17 @@ use std::collections::{HashMap, VecDeque};
 
 use crate::ir_generator::{IREntry, IRVar, Instr};
 
-pub fn analyze(_ir: HashMap<String, Vec<IREntry>>) {
+pub fn print_reaching_definitions(_ir: HashMap<String, Vec<IREntry>>) {
     for (f, ir) in _ir.iter() {
-        let (ins, outs) = reaching_definitions(ir, vec![]);
+        let (ins, outs) = get_forward_dataflow(ir, vec![], rd_transfer, rd_merge);
         println!("\n*** {f} ***");
         println!("{}", ir.iter().enumerate().map(|(idx, i)| 
-            format!("{idx} {} <- {:?}", i.to_string(), ins[idx])
+            format!("{idx} {}     {}", 
+                i.to_string(), 
+                i.get_reads().iter().map(|r| 
+                    format!("{} <- {:?}", r.to_short_string(), ins[idx].get(&r.to_short_string()).unwrap())
+                ).collect::<Vec<String>>().join(", ")
+            )
         ).collect::<Vec<String>>().join("\n"));
     }
 }
@@ -17,6 +22,19 @@ impl IREntry {
         match &self.instruction {
             Instr::Call { dest,.. }|Instr::Copy { dest,.. }|Instr::LoadBoolConst { dest,.. }|Instr::LoadIntConst { dest,.. } => Some(*dest.clone()),
             _ => None,
+        }
+    }
+
+    fn get_reads(&self) -> Vec<IRVar> {
+        match &self.instruction {
+            Instr::Call { fun, args, .. } => {
+                let mut reads = args.iter().map(|a| *a.clone()).collect::<Vec<IRVar>>();
+                reads.push(*fun.clone());
+                reads
+            },
+            Instr::CondJump { cond, .. } => vec![*cond.clone()],
+            Instr::Copy { source, .. } => vec![*source.clone()],
+            _ => vec![],
         }
     }
 
@@ -40,7 +58,103 @@ struct BasicBlock {
 type Set = Vec<i32>;
 type State = HashMap<String, Set>;
 
-fn reaching_definitions(ir: &Vec<IREntry>, predefined: Vec<String>) -> (Vec<State>, Vec<State>) {
+fn get_forward_dataflow(ir: &Vec<IREntry>, predefined: Vec<String>, 
+    transfer: fn(&State, usize, &Vec<IREntry>) -> State,
+    merge: fn(&Vec<State>) -> State,
+) -> (Vec<State>, Vec<State>) {
+    // 2.
+    let mut ins: Vec<State> = vec![];
+    let mut outs: Vec<State> = vec![];
+    // 6.
+    let mut predecessors: Vec<Vec<usize>> = vec![];
+    let mut successors: Vec<Vec<usize>> = vec![];
+    // 7.
+    let mut work_queue = VecDeque::new();
+
+    for (idx, entry) in ir.iter().enumerate() {
+        // 4.
+        ins.push(State::new());
+        outs.push(State::new());
+        // 7.
+        if idx > 0 {
+            work_queue.push_back(idx);
+        }
+
+        // 6.
+        let mut current_predecessors = vec![];
+
+        if let Instr::Label(label) = &entry.instruction {
+            ir.iter().enumerate()
+            .flat_map(|(jdx, e)| e.get_jumps().iter().map(|jmp| (jdx, jmp.clone())).collect::<Vec<(usize, String)>>())
+            .filter(|(_, lbl)| lbl == label)
+            .for_each(|(jdx, _)| current_predecessors.push(jdx))
+        }
+        if idx > 0 {
+            current_predecessors.push(idx - 1)
+        }
+        
+        predecessors.push(current_predecessors);
+
+        let mut current_successors = vec![];
+        let jumps = entry.get_jumps();
+        if jumps.is_empty() && idx < ir.len() - 1 {
+            current_successors.push(idx + 1);
+        } else {
+            for jmp in jumps {
+                for (jdx, other) in ir.iter().enumerate() {
+                    if let Instr::Label(lbl) = &other.instruction {
+                        if *lbl == jmp {
+                            current_successors.push(jdx);
+                        }
+                    }
+                }
+            }
+        }
+        successors.push(current_successors);
+    }
+
+    let mut zero_out_state = State::new();
+
+    // 3.
+    for p in predefined {
+        zero_out_state.insert(p, vec![-2]);
+    }
+
+    for entry in ir {
+        if let Instr::FunctionLabel { params,.. } = &entry.instruction {
+            for param in params {
+                zero_out_state.insert(param.name.clone(), vec![-2]);
+            }
+        }
+
+        for var in entry.variables() {
+            if !zero_out_state.contains_key(&var.name) {
+                zero_out_state.insert(var.name.clone(), vec![-1]);
+            }
+        }
+    };
+    
+    outs[0] = zero_out_state;
+
+    // 7.
+    while let Some(idx) = work_queue.pop_front() {
+        let current_predecessors = predecessors[idx].iter().map(|j| outs[*j].clone()).collect::<Vec<State>>();
+        ins[idx] = merge(&current_predecessors);
+        let prev_out = outs[idx].clone();
+        outs[idx] = transfer(&ins[idx], idx, &ir);
+        // Changed?
+        if prev_out != outs[idx] {
+            for jdx in &successors[idx] {
+                work_queue.push_back(*jdx);
+            }
+        }
+    }
+
+    (ins, outs)
+}
+
+/* 
+fn get_backward_dataflow(ir: &Vec<IREntry>, predefined: Vec<String>) -> (Vec<State>, Vec<State>) {
     // 2.
     let mut ins: Vec<State> = vec![];
     let mut outs: Vec<State> = vec![];
@@ -130,10 +244,11 @@ fn reaching_definitions(ir: &Vec<IREntry>, predefined: Vec<String>) -> (Vec<Stat
     }
 
     (ins, outs)
-}
+}*/
+
 
 // 5.
-fn transfer(input: &State, i: usize, ir: &Vec<IREntry>) -> State {
+fn rd_transfer(input: &State, i: usize, ir: &Vec<IREntry>) -> State {
     let mut output = input.clone();
     if let Some(var) = ir[i].get_write() {
         output.insert(var.to_short_string(), vec![i as i32]);
@@ -142,7 +257,7 @@ fn transfer(input: &State, i: usize, ir: &Vec<IREntry>) -> State {
 }
 
 // 7.
-fn merge(states: Vec<State>) -> State {
+fn rd_merge(states: &Vec<State>) -> State {
     let mut res = State::new();
     for s in states {
         for (k, v) in s.iter() {

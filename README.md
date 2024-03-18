@@ -80,6 +80,7 @@ $ ./c.sh <path>
 - Pointers
 - Heap allocation
 - Heap allocated structs
+- Analyze IR dataflow
 - Warn about unused writes
 - Lots of unit- and E2E tests, run in Github Actions CI
   - Every feature is *quite* thoroughly tested, except analysis and error reporting

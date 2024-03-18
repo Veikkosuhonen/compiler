@@ -57,7 +57,5 @@ fun ret_ptr(): (() => Int)* {
 
 var ptr = ret_ptr();
 
-var func = *ptr;
-
-print_int(func());
+print_int((*ptr)());
 // expect 42

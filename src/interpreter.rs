@@ -272,21 +272,17 @@ fn eval_call_expression(
     argument_expr: &Vec<Box<TypedASTNode>>,
     memory: &mut Memory
 ) -> EvalRes {
-    if let Expr::Identifier { value: function_id } = &callee.expr {
-        // This is horribly inefficient, we might be cloning a massive function.
-        let called_function = memory.get(Symbol::Identifier(function_id.to_string())).clone();
-        if let Value::Function(called_function) = called_function {
-            let mut args = vec![];
-            for node in argument_expr {
-                let v = interpret(node, memory).0;
-                args.push((String::new(), node.node_type.clone(), v));
-            }
-            eval_call(called_function, args, memory)
-        } else {
-            panic!("Calling undefined function {:?}", function_id);
+    // This is horribly inefficient, we might be cloning a massive function.
+    let (called_function, _) = interpret(callee, memory);
+    if let Value::Function(called_function) = called_function {
+        let mut args = vec![];
+        for node in argument_expr {
+            let v = interpret(node, memory).0;
+            args.push((String::new(), node.node_type.clone(), v));
         }
+        eval_call(called_function, args, memory)
     } else {
-        panic!("Callee of a call expression must be an identifier");
+        panic!("{:?} is not a function", called_function);
     }
 }
 

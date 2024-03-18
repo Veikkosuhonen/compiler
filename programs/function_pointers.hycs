@@ -11,3 +11,7 @@ fun call(f: (Int) => Unit, x: Int) {
     f(x);
 }
 call(print_int, binary(constant(), constant()));
+
+var x = &call;
+
+(*x)(print_int, binary(constant() + 1, constant() + 1));

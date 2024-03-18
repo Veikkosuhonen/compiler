@@ -500,18 +500,16 @@ fn generate_assignment_left_side(node: &Box<TypedASTNode>, instructions: &mut Ve
 }
 
 fn generate_call(callee: &Box<TypedASTNode>, arguments: &Vec<Box<TypedASTNode>>, instructions: &mut Vec<IREntry>, var_table: &mut IRVarTable, span: Span) -> IRVar {
-    if let Expr::Identifier { value } = &callee.expr {
-        let fun = var_table.get(value);
-        let fun_type = fun.var_type.get_callable_type();
+    
+    let fun = generate(callee, instructions, var_table, None);
+    let fun_type = fun.var_type.get_callable_type();
 
-        if let Type::Constructor(ctype) = fun_type.return_type {
-            generate_constructor_call(*ctype, arguments, instructions, var_table, span)
-        } else {
-            generate_function_call(fun, fun_type.return_type, arguments, instructions, var_table, span)
-        }
+    if let Type::Constructor(ctype) = fun_type.return_type {
+        generate_constructor_call(*ctype, arguments, instructions, var_table, span)
     } else {
-        panic!("Callee must be an identifier");
+        generate_function_call(fun, fun_type.return_type, arguments, instructions, var_table, span)
     }
+    
 }
 
 fn generate_named_params_constructor_call(constructor_type: Type, arguments: &Vec<(String, Box<TypedASTNode>)>, instructions: &mut Vec<IREntry>, var_table: &mut IRVarTable, span: Span) -> IRVar {

@@ -9,9 +9,6 @@ use compiler::{asm_generator::generate_asm, e2e::run_tests, ir_generator::genera
 struct CliArgs {
     #[command(subcommand)]
     command: Commands,
-
-    #[arg(short, long)]
-    analyze: bool,
 }
 
 #[derive(Subcommand, Debug)]
@@ -58,26 +55,26 @@ fn main() {
             println!("{:#?}", module);
         },
         Commands::Ir { path } => {
-            let ir = compile_to_ir(path, args.analyze);
+            let ir = compile_to_ir(path, true);
             let code = generate_ir_code(ir);
             println!("{}", code);
         },
         Commands::Asm { path } => {
-            let ir = compile_to_ir(path, args.analyze);
+            let ir = compile_to_ir(path, true);
             let asm = generate_asm(ir);
             println!("{}", asm);
         },
         Commands::Dot { path } => {
-            let ir = compile_to_ir(path, args.analyze);
+            let ir = compile_to_ir(path, true);
             let dot = analyzer::ir_to_flowgraph(ir);
             println!("{}", dot);
         },
         Commands::Rd { path } => {
-            let ir = compile_to_ir(path, args.analyze);
+            let ir = compile_to_ir(path, true);
             analyzer::print_reaching_definitions(ir);
         },
         Commands::Lv { path } => {
-            let ir = compile_to_ir(path, args.analyze);
+            let ir = compile_to_ir(path, true);
             analyzer::print_live_vars(ir);
         },
         Commands::E2e(args) => {

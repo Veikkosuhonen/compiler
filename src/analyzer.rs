@@ -1,6 +1,6 @@
 use std::collections::{HashMap, VecDeque};
 
-use crate::{ir_generator::{IREntry, IRVar, Instr}, parser::Span};
+use crate::{ir_generator::{IREntry, IRVar, Instr}, lang_type::Type, parser::Span};
 
 pub struct Warning {
     pub span: Span,
@@ -8,7 +8,61 @@ pub struct Warning {
 }
 
 pub fn report_useless_writes(_ir: &HashMap<String, Vec<IREntry>>) -> Vec<Warning> {
-    let warnings = vec![];
+    let mut warnings = vec![];
+
+    let predefined = get_predefined_vars(&_ir);
+
+    eprintln!(">>> Reaching definitions analysis on IR <<<");
+    eprintln!("How to read: <variable> <- [idx's where it was last written to]\n");
+
+    for (f, ir) in _ir.iter() {
+        let (ins, _) = get_forward_dataflow(ir, predefined.clone(), rd_transfer, merge);
+        eprintln!("\n*** {f} ***");
+        eprintln!("{}", ir.iter().enumerate().map(|(idx, i)| 
+            format!("{idx} {}     {}", 
+                i.to_string(), 
+                i.get_reads().iter().map(|r| 
+                    format!("{} <- {:?}", 
+                        r.to_short_string(), 
+                        ins[idx].get(&r.to_short_string())
+                        .unwrap_or_else(|| ins[idx].get(&r.parent.clone().unwrap().to_short_string()).unwrap())
+                    )
+                ).collect::<Vec<String>>().join(", ")
+            )
+        ).collect::<Vec<String>>().join("\n"));
+
+        // Iterate all writes, and check whether they are read-
+        for (idx, entry) in ir.iter().enumerate() {
+            if let Some(write) = entry.get_write() {
+                // If the type of the write is Unit or Unknown, do not report it in any case. Unknown type is used for main return, and reporting it is buggy and incorrect anyways.
+                if write.var_type == Type::Unit || write.var_type == Type::Unknown {
+                    continue;
+                }
+
+                let mut is_read = false;
+                // Where is it read?
+                for (jdx, other_entry) in ir.iter().enumerate() {
+                    for read in other_entry.get_reads() {
+                        let written_to_at = ins[jdx].get(&read.to_short_string())
+                            .unwrap_or_else(|| ins[idx].get(&read.parent.clone().unwrap().to_short_string()).unwrap());
+
+                        if written_to_at.contains(&(idx as i32)) {
+                            is_read = true;
+                        }
+                    }
+                }
+
+                if !is_read {
+                    eprintln!("{:?}", entry);
+                    warnings.push(Warning { 
+                        span: entry.span.clone(), 
+                        message: format!("This write is never read."), 
+                    })
+                }
+            }
+        }
+    }
+
     warnings
 }
 

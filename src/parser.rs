@@ -30,7 +30,7 @@ pub struct SyntaxError {
     pub end: SourceLocation,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Span { pub start: SourceLocation, pub end: SourceLocation }
 impl Span {
     pub fn zero() -> Span {

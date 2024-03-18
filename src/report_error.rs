@@ -42,6 +42,6 @@ pub fn report_warning(source: &String, warning: &Warning) {
     for _ in start_col - 1..end_col - 1 {
         caret.push('^');
     }
-    eprintln!("Warning: {}:\n{}\n{}\n{}", start_line, line, caret, warning.message);
+    eprintln!("Warning, line {}: \n{}\n{}\n{}\n", start_line, line, caret, warning.message);
 }
 

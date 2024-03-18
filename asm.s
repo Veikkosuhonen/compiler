@@ -8,51 +8,27 @@
 .section .text  # Begins code and data
 
 
-        # Function(make_one())
-        .global make_one
-        .type make_one, @function
-        make_one:
+        # Function(XD(p))
+        .global XD
+        .type XD, @function
+        XD:
         pushq %rbp
         movq %rsp, %rbp
-        subq $0, %rsp
-        # param backups (0)
+        subq $32, %rsp
+        # param backups (1)
+        movq %rdi, -8(%rbp)
+        movq $print_int, -16(%rbp) # Save address of module function 'print_int' to var 'print_int'
 
-        # LoadIntConst(1, _return: Int)
-        movq $1, %rax
+        # Call(print_int: print_int[: Int] -> Unit, [p: Int], var_1: Unit)
+        movq -8(%rbp), %rdi
+        call print_int
+        movq %rax, -24(%rbp)
 
-        # Copy(_return: Int, _return: Int)
-        # skip movq %rax, %rax
-        # skip movq %rax, %rax
+        # LoadIntConst(5, _return: Int)
+        movq $5, %rax
 
-        # Label(.Lmake_one_end)
-        .Lmake_one_end:
-        # Restore stack pointer
-        movq %rbp, %rsp
-        popq %rbp
-        ret
-    
-
-        
-        # Function(ret_ptr())
-        .global ret_ptr
-        .type ret_ptr, @function
-        ret_ptr:
-        pushq %rbp
-        movq %rsp, %rbp
-        subq $16, %rsp
-        # param backups (0)
-        movq $make_one, -16(%rbp) # Save address of module function 'make_one' to var 'make_one'
-
-        # Call(&: [: T] -> Pointer<T>, [make_one: make_one[] -> Int], _return: Pointer<[] -> Int>)
-        leaq -16(%rbp), %rax
-        # skip movq %rax, %rax
-
-        # Copy(_return: Pointer<[] -> Int>, _return: Pointer<[] -> Int>)
-        # skip movq %rax, %rax
-        # skip movq %rax, %rax
-
-        # Label(.Lret_ptr_end)
-        .Lret_ptr_end:
+        # Label(.LXD_end)
+        .LXD_end:
         # Restore stack pointer
         movq %rbp, %rsp
         popq %rbp
@@ -66,29 +42,61 @@
         main:
         pushq %rbp
         movq %rsp, %rbp
-        subq $48, %rsp
+        subq $112, %rsp
         # param backups (0)
-        movq $ret_ptr, -8(%rbp) # Save address of module function 'ret_ptr' to var 'ret_ptr'
-        movq $print_int, -32(%rbp) # Save address of module function 'print_int' to var 'print_int'
+        movq $print_int, -16(%rbp) # Save address of module function 'print_int' to var 'print_int'
+        movq $XD, -88(%rbp) # Save address of module function 'XD' to var 'XD'
 
-        # Call(ret_ptr: ret_ptr[] -> Pointer<[] -> Int>, [], var_2: Pointer<[] -> Int>)
-        call ret_ptr
-        movq %rax, -16(%rbp)
+        # LoadIntConst(1, var_1: Int)
+        movq $1, -8(%rbp)
 
-        # Call(var_2.value: [] -> Int, [], var_8: Int)
-        movq -16(%rbp), %rax # Put pointer address 'var_2' in %rax
-        movq 0(%rax), %rax
-        # skip movq %rax, %rax
-        call *%rax
+        # Call(print_int: print_int[: Int] -> Unit, [var_1: Int], var_3: Unit)
+        movq -8(%rbp), %rdi
+        call print_int
         movq %rax, -24(%rbp)
 
-        # Call(print_int: print_int[: Int] -> Unit, [var_8: Int], var_6: Unit)
-        movq -24(%rbp), %rdi
+        # LoadIntConst(2, var_6: Int)
+        movq $2, -32(%rbp)
+
+        # Call(print_int: print_int[: Int] -> Unit, [var_6: Int], var_8: Unit)
+        movq -32(%rbp), %rdi
         call print_int
         movq %rax, -40(%rbp)
 
+        # LoadIntConst(3, var_11: Int)
+        movq $3, -48(%rbp)
+
+        # LoadIntConst(4, var_13: Int)
+        movq $4, -56(%rbp)
+
+        # Copy(var_13: Int, var_11: Int)
+        movq -56(%rbp), %rax
+        movq %rax, -48(%rbp)
+
+        # LoadIntConst(5, var_15: Int)
+        movq $5, -64(%rbp)
+
+        # Copy(var_15: Int, var_11: Int)
+        movq -64(%rbp), %rax
+        movq %rax, -48(%rbp)
+
+        # Call(print_int: print_int[: Int] -> Unit, [var_11: Int], var_17: Unit)
+        movq -48(%rbp), %rdi
+        call print_int
+        movq %rax, -72(%rbp)
+
+        # Call(print_int: print_int[: Int] -> Unit, [var_1: Int], var_20: Unit)
+        movq -8(%rbp), %rdi
+        call print_int
+        movq %rax, -80(%rbp)
+
+        # Call(XD: XD[p: Int] -> Int, [var_6: Int], var_23: Int)
+        movq -32(%rbp), %rdi
+        call XD
+        movq %rax, -96(%rbp)
+
         # Copy(U: Unit, _return: Unknown)
-        movq -48(%rbp), %rax
+        movq -104(%rbp), %rax
         # skip movq %rax, %rax
 
         # Label(.Lmain_end)
